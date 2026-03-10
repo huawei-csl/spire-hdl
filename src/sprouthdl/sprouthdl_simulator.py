@@ -38,7 +38,7 @@ class Simulator(SimulatorBase):
 
         # logging
         self.trace_enabled = False
-        self.traced_expressions = self.m.all_exprs()
+        self.traced_expressions = []  # populated lazily; set before enabling trace
         self.trace_history = []
 
         # Use ids instead of Signal objects
@@ -210,24 +210,20 @@ class Simulator(SimulatorBase):
         if eid in self._cache_expr:
             return self._cache_expr[eid]
 
-        def is_expr_instance(obj, instance_type):
-            # return _clsname(obj) == instance_type.__name__
-            return isinstance(obj, instance_type)
-
-        if is_expr_instance(e, Const):
+        if isinstance(e, Const):
             bits = _to_bits(e.value, e.typ.width)
 
-        elif is_expr_instance(e, Signal):
+        elif isinstance(e,Signal):
             bits = self._eval_signal_bits(e, _visiting)
 
-        elif is_expr_instance(e, Op1):
+        elif isinstance(e,Op1):
             a = self._eval_expr_bits(e.a, _visiting)
             if e.op == "~":
                 bits = _to_bits(~a, e.typ.width)
             else:
                 raise NotImplementedError(f"Unary op '{e.op}' not implemented.")
 
-        elif is_expr_instance(e, Op2):
+        elif isinstance(e,Op2):
             op = e.op
             tw = e.typ.width
 
@@ -311,7 +307,7 @@ class Simulator(SimulatorBase):
             else:
                 raise NotImplementedError(f"Binary op '{op}' not implemented.")
 
-        elif is_expr_instance(e, Ternary):
+        elif isinstance(e,Ternary):
             sel = self._eval_expr_bits(e.sel, _visiting)
             # Evaluate chosen branch and resize to the ternary's result type
             chosen = e.a if sel != 0 else e.b
@@ -319,7 +315,7 @@ class Simulator(SimulatorBase):
             from_w = chosen.typ.width
             bits = _resize_bits(cbits, from_w, e.typ.width, chosen.typ.signed)
 
-        elif is_expr_instance(e, Concat):
+        elif isinstance(e,Concat):
             acc = 0
             shift = 0
             for p in e.parts:
@@ -329,14 +325,14 @@ class Simulator(SimulatorBase):
                 shift += width
             bits = _to_bits(acc, e.typ.width)
 
-        elif is_expr_instance(e, Slice):
+        elif isinstance(e,Slice):
             av = self._eval_expr_bits(e.a, _visiting)
             # Use the full source width, then slice
             shifted = av >> e.lsb
             width = e.typ.width
             bits = _to_bits(shifted, width)
 
-        elif is_expr_instance(e, Resize):
+        elif isinstance(e,Resize):
             av = self._eval_expr_bits(e.a, _visiting)
             bits = _resize_bits(av, e.a.typ.width, e.to_width, e.a.typ.signed)
 

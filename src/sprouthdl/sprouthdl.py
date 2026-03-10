@@ -118,6 +118,10 @@ def SInt(w: int) -> HDLType:
 class Expr:
     typ: HDLType
 
+    # Restore identity-based hashing since __eq__ is overridden to return an Expr.
+    def __hash__(self):
+        return id(self)
+
     # Prevent accidental use in Python control flow.
     def __bool__(self):
         raise TypeError("HDL expressions cannot be used as Python booleans. Use mux()/comparators/etc.")
@@ -315,11 +319,11 @@ def cast(expr: ExprLike, to_type: HDLType) -> Signal:
 # explicit register
 class Register(Signal):
     def __init__(self, typ: HDLType, init: Optional[ExprLike] = None, name: Optional[str]=None):
+        if name is None:
+            name = f"reg_{id(self)}"
+        super().__init__(name, typ, kind="reg")
         if init is not None:
             self.set_init(init)
-        if name is None:
-            name = f"reg_{id(self)}"            
-        super().__init__(name, typ, kind="reg")
 
 # explicit wire
 class Wire(Signal):

@@ -146,7 +146,7 @@ def refactor_module_to_aig(module: Module, optimize=True, n_iter_optimizations: 
     m_aig = AigerImporter(aag).get_sprout_module()
     try:
         spec = module.component.get_spec()
-    except:
+    except (AttributeError, TypeError):
         spec = module.get_spec()
     IOCollector().group(m_aig, spec) # regroup I/Os to match original port widths
     return m_aig

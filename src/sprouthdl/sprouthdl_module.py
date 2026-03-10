@@ -212,8 +212,6 @@ class Module:
         """
         self._collect_signals_from_outputs(self._ports_of("output"))
 
-    from typing import Dict, List
-
     # fast version
     def _collect_signals_from_outputs(self, outputs: List["Signal"]) -> None:
         """
@@ -317,7 +315,8 @@ class Module:
 
                 if sid not in port_ids:
                     if node.kind in ("input", "output"):
-                        raise Warning(
+                        import warnings
+                        warnings.warn(
                             f"Internal signal '{node.name}' has port kind '{node.kind}'. "
                             "Use wire/reg for internals. For internal components use make_internal()"
                         )

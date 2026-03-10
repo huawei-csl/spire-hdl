@@ -535,24 +535,19 @@ class AigerExporter:
         if eid in self._expr_cache:
             return self._expr_cache[eid]
 
-        # k = e.__class__.__name__
-        def is_expr_instance(obj, instance_type):
-            # return _clsname(obj) == instance_type.__name__
-            return isinstance(obj, instance_type)
-
-        if is_expr_instance(e, Const):
+        if isinstance(e, Const):
             w = e.typ.width
             bits = self.aig.bv_from_int(getattr(e, "value", 0), w)
 
-        elif is_expr_instance(e, Signal):
+        elif isinstance(e,Signal):
             bits = self._bits_of_signal(e)
 
-        elif is_expr_instance(e, Op1):
+        elif isinstance(e,Op1):
             assert e.op == "~", f"Unsupported unary op {e.op}"
             a = self._eval_expr_bits(e.a)
             bits = self.aig.bv_not(a)
 
-        elif is_expr_instance(e, Op2):
+        elif isinstance(e,Op2):
             op = e.op
             a = self._eval_expr_bits(e.a)
             b = self._eval_expr_bits(e.b)
@@ -609,7 +604,7 @@ class AigerExporter:
             # fit result vector
             bits = self._fit_bits(bits, w_out, signed=signed if op not in ("==", "!=", "<", "<=", ">", ">=") else False)
 
-        elif is_expr_instance(e, Ternary):
+        elif isinstance(e,Ternary):
             sel = self._eval_expr_bits(e.sel)[0]
             a = self._eval_expr_bits(e.a)
             b = self._eval_expr_bits(e.b)
@@ -618,7 +613,7 @@ class AigerExporter:
             b = self._fit_bits(b, w_out, signed=getattr(e.b.typ, "signed", False))
             bits = self.aig.bv_mux(sel, a, b)
 
-        elif is_expr_instance(e, Concat):
+        elif isinstance(e,Concat):
             # parts are provided [LSB ... MSB]; our vectors are LSB-first
             vec: List[int] = []
             for part in e.parts:
@@ -626,12 +621,12 @@ class AigerExporter:
                 vec.extend(pb)
             bits = vec
 
-        elif is_expr_instance(e, Slice):
+        elif isinstance(e,Slice):
             base = self._eval_expr_bits(e.a)
             # our vectors LSB-first
             bits = base[e.lsb : e.msb + 1]
 
-        elif is_expr_instance(e, Resize):
+        elif isinstance(e,Resize):
             a = self._eval_expr_bits(e.a)
             bits = self._fit_bits(a, e.to_width, signed=getattr(e.a.typ, "signed", False))
 
@@ -647,7 +642,7 @@ class AigerExporter:
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
 
-    def _get_aag_lines(self) -> None:
+    def _get_aag_lines(self) -> List[str]:
         I = len(self.aig.inputs)
         L = len(self.aig.latches)
         O = len(self.aig.outputs)
