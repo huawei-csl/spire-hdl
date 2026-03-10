@@ -9,6 +9,7 @@ from typing import Dict, List, Tuple, Optional, Any, Iterable
 from sprouthdl.sprouthdl_module import Module
 from sprouthdl.aig.aig_aigerverse import AbstractAdapter, conv_aag_into_graph
 from sprouthdl.sprouthdl import Concat, Resize, SInt, Signal, Ternary, UInt, Bool, Const, Op1, Op2, cat, mux, Slice
+from sprouthdl.sprouthdl_visitor import ExprVisitor
 
 # ---- AIGER literals helpers -------------------------------------------------
 
@@ -398,6 +399,106 @@ class _AIG:
         return v + [sign] * (w - len(v))
 
 
+# ---- Expression bit-blasting visitor -----------------------------------------
+
+
+class _AigerExprEval(ExprVisitor[List[int]]):
+    """Bit-blasts an Expr tree into a list of AIG literals (LSB-first)."""
+
+    def __init__(self, exporter: "AigerExporter") -> None:
+        super().__init__()
+        self._exp = exporter
+        self._visiting: set = set()
+
+    def visit_const(self, e: Const) -> List[int]:
+        return self._exp.aig.bv_from_int(getattr(e, "value", 0), e.typ.width)
+
+    def visit_signal(self, e: Signal) -> List[int]:
+        return self._exp._bits_of_signal(e)
+
+    def visit_op1(self, e: Op1) -> List[int]:
+        assert e.op == "~", f"Unsupported unary op {e.op}"
+        a = self.visit(e.a)
+        return self._exp.aig.bv_not(a)
+
+    def visit_op2(self, e: Op2) -> List[int]:
+        aig = self._exp.aig
+        op = e.op
+        a = self.visit(e.a)
+        b = self.visit(e.b)
+        w_out = e.typ.width
+        signed = getattr(e.a.typ, "signed", False) or getattr(e.b.typ, "signed", False)
+
+        if op == "&":
+            bits = aig.bv_and(a, b)
+        elif op == "|":
+            bits = aig.bv_or(a, b)
+        elif op == "^":
+            bits = aig.bv_xor(a, b)
+        elif op == "nand":
+            bits = aig.bv_not(aig.bv_and(a, b))
+        elif op == "+":
+            bits, _ = aig.bv_add(a, b, w_out=w_out)
+        elif op == "-":
+            bits, _ = aig.bv_sub(a, b, w_out=w_out)
+        elif op == "*":
+            signed_a = getattr(e.a.typ, "signed", False)
+            signed_b = getattr(e.b.typ, "signed", False)
+            if signed_a or signed_b:
+                bits = aig.bv_mul_baugh_wooley(a, b, w_out=w_out)
+            elif not signed_a and not signed_b:
+                bits = aig.bv_mul_unsigned_pp(a, b, w_out=w_out)
+            else:
+                bits = aig.bv_mul_signed(a, b, w_out=w_out, signed_a=signed_a, signed_b=signed_b)
+        elif op == "<<":
+            bits = aig.bv_shift_left(a, b, w_out=w_out)
+        elif op == ">>":
+            bits = aig.bv_shift_right(a, b, w_out=w_out)
+        elif op in ("==", "!=", "<", "<=", ">", ">="):
+            if op in ("==", "!="):
+                eq = aig.bv_eq(a, b)
+                lit = eq if op == "==" else lit_not(eq)
+            else:
+                lt = aig.bv_slt(a, b) if signed else aig.bv_ult(a, b)
+                if op == "<":
+                    lit = lt
+                elif op == "<=":
+                    lit = lit_not(aig.bv_ult(b, a) if not signed else aig.bv_slt(b, a))
+                elif op == ">":
+                    lit = aig.bv_ult(b, a) if not signed else aig.bv_slt(b, a)
+                else:
+                    lit = lit_not(lt)
+            bits = [lit]
+        else:
+            raise NotImplementedError(f"Unsupported binary op '{op}'")
+
+        # fit result vector
+        return self._exp._fit_bits(bits, w_out, signed=signed if op not in ("==", "!=", "<", "<=", ">", ">=") else False)
+
+    def visit_ternary(self, e: Ternary) -> List[int]:
+        sel = self.visit(e.sel)[0]
+        a = self.visit(e.a)
+        b = self.visit(e.b)
+        w_out = e.typ.width
+        a = self._exp._fit_bits(a, w_out, signed=getattr(e.a.typ, "signed", False))
+        b = self._exp._fit_bits(b, w_out, signed=getattr(e.b.typ, "signed", False))
+        return self._exp.aig.bv_mux(sel, a, b)
+
+    def visit_concat(self, e: Concat) -> List[int]:
+        vec: List[int] = []
+        for part in e.parts:
+            vec.extend(self.visit(part))
+        return vec
+
+    def visit_slice(self, e: Slice) -> List[int]:
+        base = self.visit(e.a)
+        return base[e.lsb : e.msb + 1]
+
+    def visit_resize(self, e: Resize) -> List[int]:
+        a = self.visit(e.a)
+        return self._exp._fit_bits(a, e.to_width, signed=getattr(e.a.typ, "signed", False))
+
+
 # ---- Exporter: SproutHDL Module -> AIGER -------------------------------------
 
 
@@ -416,11 +517,10 @@ class AigerExporter:
 
         # id-based maps so we never invoke __eq__
         self._sig_bits: Dict[int, List[int]] = {}  # id(signal) -> bits (LSB-first)
-        self._visiting: set = set()  # detect comb loops in wires
         self._reg_list: List[Any] = []  # actual Signal objects of kind 'reg' in allocation order
 
-        # cache expressions to bits (by id)
-        self._expr_cache: Dict[int, List[int]] = {}
+        # expression evaluator (visitor-based)
+        self._expr_eval = _AigerExprEval(self)
 
     # ---- public API
 
@@ -507,13 +607,14 @@ class AigerExporter:
         # inputs & regs are pre-allocated; wires/outputs are computed from drivers
         if s.kind in ("wire", "output"):
             # protect against comb loops
+            visiting = self._expr_eval._visiting
             vk = ("sig", key)
-            if vk in self._visiting:
+            if vk in visiting:
                 raise RuntimeError(f"Combinational loop involving '{s.name}'.")
-            self._visiting.add(vk)
-            bits = self._eval_expr_bits(s._driver)
+            visiting.add(vk)
+            bits = self._expr_eval.visit(s._driver) if s._driver is not None else [lit_const0()]
             bits = self._fit_bits(bits, s.typ.width, signed=getattr(s.typ, "signed", False))
-            self._visiting.remove(vk)
+            visiting.remove(vk)
             self._sig_bits[key] = bits
             return bits
         raise TypeError(f"Unknown signal kind: {s.kind}")
@@ -529,112 +630,10 @@ class AigerExporter:
         return self.aig._sext(bits, w) if signed else self.aig._zext(bits, w)
 
     def _eval_expr_bits(self, e: Any) -> List[int]:
+        """Bit-blast expression *e* into a list of AIG literals (LSB-first)."""
         if e is None:
             return [lit_const0()]
-        eid = id(e)
-        if eid in self._expr_cache:
-            return self._expr_cache[eid]
-
-        if isinstance(e, Const):
-            w = e.typ.width
-            bits = self.aig.bv_from_int(getattr(e, "value", 0), w)
-
-        elif isinstance(e,Signal):
-            bits = self._bits_of_signal(e)
-
-        elif isinstance(e,Op1):
-            assert e.op == "~", f"Unsupported unary op {e.op}"
-            a = self._eval_expr_bits(e.a)
-            bits = self.aig.bv_not(a)
-
-        elif isinstance(e,Op2):
-            op = e.op
-            a = self._eval_expr_bits(e.a)
-            b = self._eval_expr_bits(e.b)
-            w_out = e.typ.width
-            signed = getattr(e.a.typ, "signed", False) or getattr(e.b.typ, "signed", False)
-
-            if op == "&":
-                bits = self.aig.bv_and(a, b)
-            elif op == "|":
-                bits = self.aig.bv_or(a, b)
-            elif op == "^":
-                bits = self.aig.bv_xor(a, b)
-            elif op == "nand":  # experimental feature
-                # Bitwise NAND: inputs are already Resize'd by op_bit() to match widths
-                bits = self.aig.bv_not(self.aig.bv_and(a, b))
-            elif op == "+":
-                bits, _ = self.aig.bv_add(a, b, w_out=w_out)
-            elif op == "-":
-                bits, _ = self.aig.bv_sub(a, b, w_out=w_out)
-            elif op == "*":
-                signed_a = getattr(e.a.typ, "signed", False)
-                signed_b = getattr(e.b.typ, "signed", False)
-                if signed_a or signed_b:
-                    bits = self.aig.bv_mul_baugh_wooley(a, b, w_out=w_out)
-                elif not signed_a and not signed_b:
-                    bits = self.aig.bv_mul_unsigned_pp(a, b, w_out=w_out)
-                else:
-                    bits = self.aig.bv_mul_signed(a, b, w_out=w_out, signed_a=signed_a, signed_b=signed_b)
-            elif op == "<<":
-                sh = b  # variable shift
-                bits = self.aig.bv_shift_left(a, sh, w_out=w_out)
-            elif op == ">>":
-                sh = b
-                bits = self.aig.bv_shift_right(a, sh, w_out=w_out)
-            elif op in ("==", "!=", "<", "<=", ">", ">="):
-                # produce Bool(1) -> single literal as 1-bit vector
-                if op in ("==", "!="):
-                    eq = self.aig.bv_eq(a, b)
-                    lit = eq if op == "==" else lit_not(eq)
-                else:
-                    lt = self.aig.bv_slt(a, b) if signed else self.aig.bv_ult(a, b)
-                    if op == "<":
-                        lit = lt
-                    elif op == "<=":
-                        lit = lit_not(self.aig.bv_ult(b, a) if not signed else self.aig.bv_slt(b, a))
-                    elif op == ">":
-                        lit = self.aig.bv_ult(b, a) if not signed else self.aig.bv_slt(b, a)
-                    else:
-                        lit = lit_not(lt)
-                bits = [lit]
-            else:
-                raise NotImplementedError(f"Unsupported binary op '{op}'")
-
-            # fit result vector
-            bits = self._fit_bits(bits, w_out, signed=signed if op not in ("==", "!=", "<", "<=", ">", ">=") else False)
-
-        elif isinstance(e,Ternary):
-            sel = self._eval_expr_bits(e.sel)[0]
-            a = self._eval_expr_bits(e.a)
-            b = self._eval_expr_bits(e.b)
-            w_out = e.typ.width
-            a = self._fit_bits(a, w_out, signed=getattr(e.a.typ, "signed", False))
-            b = self._fit_bits(b, w_out, signed=getattr(e.b.typ, "signed", False))
-            bits = self.aig.bv_mux(sel, a, b)
-
-        elif isinstance(e,Concat):
-            # parts are provided [LSB ... MSB]; our vectors are LSB-first
-            vec: List[int] = []
-            for part in e.parts:
-                pb = self._eval_expr_bits(part)
-                vec.extend(pb)
-            bits = vec
-
-        elif isinstance(e,Slice):
-            base = self._eval_expr_bits(e.a)
-            # our vectors LSB-first
-            bits = base[e.lsb : e.msb + 1]
-
-        elif isinstance(e,Resize):
-            a = self._eval_expr_bits(e.a)
-            bits = self._fit_bits(a, e.to_width, signed=getattr(e.a.typ, "signed", False))
-
-        else:
-            raise TypeError(f"Unsupported Expr subclass: {type(e)}")
-
-        self._expr_cache[eid] = bits
-        return bits
+        return self._expr_eval.visit(e)
 
     # ---- file I/O
     def _write_aag_file(self, path: str) -> None:
