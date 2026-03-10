@@ -7,6 +7,8 @@ import random
 import time
 from typing import Optional, Union, Sequence
 
+from sprouthdl.build_context import BuildContext, current_build_context
+
 
 # -----------------------------
 # Shared sub-expression (CSE) support
@@ -17,33 +19,47 @@ class _SharedCache:
     Tracks how many times an Expr *instance* is wrapped via as_expr(...).
     On the 2nd time, we create a Verilog wire (sig_{index}) with a driver = original expr.
     Further uses return that wire to shrink emitted Verilog.
-    """
-    def __init__(self):
-        self.counts: dict[int, int] = {}        # node_id -> count
-        self.expr2sig: dict[int, "Signal"] = {} # node_id -> created Signal
-        self.wires: list["Signal"] = []         # all created wires in encounter order
-        self.index: int = 0                     # for naming sig_{index}
 
-global _SHARED
+    .. deprecated::
+        Retained for backward compatibility.  Delegates to the active BuildContext.
+    """
+    @property
+    def counts(self) -> dict[int, int]:
+        return current_build_context().cse_counts
+
+    @property
+    def expr2sig(self) -> dict[int, "Signal"]:
+        return current_build_context().cse_expr2sig
+
+    @property
+    def wires(self) -> list["Signal"]:
+        return current_build_context().cse_wires
+
+    @property
+    def index(self) -> int:
+        return current_build_context().cse_index
+
+    @index.setter
+    def index(self, value: int) -> None:
+        current_build_context().cse_index = value
+
 _SHARED = _SharedCache()
 
 def reset_shared_cache():
     """Call this before emitting each Verilog module to avoid cross-module bleed."""
-    _SHARED.counts.clear()
-    _SHARED.expr2sig.clear()
-    _SHARED.wires.clear()
-    _SHARED.index = 0
+    current_build_context().reset_cse()
 
 def get_shared_wires() -> list["Signal"]:
     """Access the created wires (for inclusion in module's declarations/assigns)."""
-    return list(_SHARED.wires)
+    return list(current_build_context().cse_wires)
 
 def _create_new_shared_wire(typ: HDLType) -> "Signal":
-    name = f"sig_{_SHARED.index}"
-    _SHARED.index += 1
+    ctx = current_build_context()
+    name = f"sig_{ctx.cse_index}"
+    ctx.cse_index += 1
     sig = Signal(name, typ, "wire")
     sig._auto_generated = True
-    _SHARED.wires.append(sig)
+    ctx.cse_wires.append(sig)
     return sig
 
 def _maybe_share(e: "Expr", force_share=False) -> "Expr":
@@ -56,17 +72,18 @@ def _maybe_share(e: "Expr", force_share=False) -> "Expr":
     if isinstance(e, (Signal, Const)):
         return e
 
+    ctx = current_build_context()
     nid = id(e)
-    cnt = _SHARED.counts.get(nid, 0) + 1
-    _SHARED.counts[nid] = cnt
+    cnt = ctx.cse_counts.get(nid, 0) + 1
+    ctx.cse_counts[nid] = cnt
     cnt_share = 1 # at what count start sharing
     if cnt == cnt_share or (force_share and cnt <= 1):
         sig = _create_new_shared_wire(e.typ)
         sig._driver = e  # continuous assignment: assign sig = <original expr>;
-        _SHARED.expr2sig[nid] = sig
+        ctx.cse_expr2sig[nid] = sig
         return sig
     elif cnt > cnt_share:
-        return _SHARED.expr2sig[nid]
+        return ctx.cse_expr2sig[nid]
     else:
         # 1st sighting: return original expr
         return e
