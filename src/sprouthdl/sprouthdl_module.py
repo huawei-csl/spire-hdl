@@ -6,7 +6,6 @@ import time
 
 
 from sprouthdl.sprouthdl import Bool, Expr, ExprLike, HDLType, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
-from sprouthdl.build_context import current_build_context
 
 
 from typing import Any, Dict, Iterable, List, Optional

@@ -8,28 +8,35 @@ import random
 import time
 from typing import Optional, Union, Sequence
 
-from sprouthdl.build_context import BuildContext, current_build_context
-
-
 # -----------------------------
 # Shared sub-expression (CSE) support
 # -----------------------------
 
+_cse_counts: dict[int, int] = {}
+_cse_expr2sig: dict[int, "Signal"] = {}
+_cse_wires: list["Signal"] = []
+_cse_index: int = 0
+
+
 def reset_shared_cache():
     """Call this before emitting each Verilog module to avoid cross-module bleed."""
-    current_build_context().reset_cse()
+    global _cse_index
+    _cse_counts.clear()
+    _cse_expr2sig.clear()
+    _cse_wires.clear()
+    _cse_index = 0
 
 def get_shared_wires() -> list["Signal"]:
     """Access the created wires (for inclusion in module's declarations/assigns)."""
-    return list(current_build_context().cse_wires)
+    return list(_cse_wires)
 
 def _create_new_shared_wire(typ: HDLType) -> "Signal":
-    ctx = current_build_context()
-    name = f"sig_{ctx.cse_index}"
-    ctx.cse_index += 1
+    global _cse_index
+    name = f"sig_{_cse_index}"
+    _cse_index += 1
     sig = Signal(name, typ, "wire")
     sig._auto_generated = True
-    ctx.cse_wires.append(sig)
+    _cse_wires.append(sig)
     return sig
 
 _expr_uid = itertools.count(1)
@@ -49,21 +56,20 @@ def _maybe_share(e: "Expr", force_share=False) -> "Expr":
     if isinstance(e, (Signal, Const)):
         return e
 
-    ctx = current_build_context()
     uid = getattr(e, '_cse_uid', None)
     if uid is None:
         uid = next(_expr_uid)
         e._cse_uid = uid
-    cnt = ctx.cse_counts.get(uid, 0) + 1
-    ctx.cse_counts[uid] = cnt
+    cnt = _cse_counts.get(uid, 0) + 1
+    _cse_counts[uid] = cnt
     cnt_share = 1 # at what count start sharing
     if cnt == cnt_share or (force_share and cnt <= 1):
         sig = _create_new_shared_wire(e.typ)
         sig._driver = e  # continuous assignment: assign sig = <original expr>;
-        ctx.cse_expr2sig[uid] = sig
+        _cse_expr2sig[uid] = sig
         return sig
     elif cnt > cnt_share:
-        return ctx.cse_expr2sig[uid]
+        return _cse_expr2sig[uid]
     else:
         # 1st sighting: return original expr
         return e
