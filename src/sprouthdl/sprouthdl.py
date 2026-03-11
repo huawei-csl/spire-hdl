@@ -135,10 +135,6 @@ def SInt(w: int) -> HDLType:
 class Expr:
     typ: HDLType
 
-    # Restore identity-based hashing since __eq__ is overridden to return an Expr.
-    def __hash__(self):
-        return id(self)
-
     # Prevent accidental use in Python control flow.
     def __bool__(self):
         raise TypeError("HDL expressions cannot be used as Python booleans. Use mux()/comparators/etc.")

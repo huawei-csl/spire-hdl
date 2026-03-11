@@ -163,7 +163,7 @@ class Simulator(SimulatorBase):
 
         # logging
         self.trace_enabled = False
-        self.traced_expressions = []  # populated lazily; set before enabling trace
+        self.traced_expressions = self.m.all_exprs()
         self.trace_history = []
 
         # Use ids instead of Signal objects
