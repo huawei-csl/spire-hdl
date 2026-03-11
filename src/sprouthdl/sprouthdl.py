@@ -12,34 +12,36 @@ from typing import Optional, Union, Sequence
 # Shared sub-expression (CSE) support
 # -----------------------------
 
-_cse_counts: dict[int, int] = {}
-_cse_expr2sig: dict[int, "Signal"] = {}
-_cse_wires: list["Signal"] = []
-_cse_index: int = 0
+class _SharedCache:
+    counts: dict[int, int] = {}
+    expr2sig: dict[int, "Signal"] = {}
+    wires: list["Signal"] = []
+    index: int = 0
+    uid = itertools.count(1)
+
+    @classmethod
+    def reset(cls):
+        cls.counts.clear()
+        cls.expr2sig.clear()
+        cls.wires.clear()
+        cls.index = 0
 
 
 def reset_shared_cache():
     """Call this before emitting each Verilog module to avoid cross-module bleed."""
-    global _cse_index
-    _cse_counts.clear()
-    _cse_expr2sig.clear()
-    _cse_wires.clear()
-    _cse_index = 0
+    _SharedCache.reset()
 
 def get_shared_wires() -> list["Signal"]:
     """Access the created wires (for inclusion in module's declarations/assigns)."""
-    return list(_cse_wires)
+    return list(_SharedCache.wires)
 
 def _create_new_shared_wire(typ: HDLType) -> "Signal":
-    global _cse_index
-    name = f"sig_{_cse_index}"
-    _cse_index += 1
+    name = f"sig_{_SharedCache.index}"
+    _SharedCache.index += 1
     sig = Signal(name, typ, "wire")
     sig._auto_generated = True
-    _cse_wires.append(sig)
+    _SharedCache.wires.append(sig)
     return sig
-
-_expr_uid = itertools.count(1)
 
 
 def _maybe_share(e: "Expr", force_share=False) -> "Expr":
@@ -58,18 +60,18 @@ def _maybe_share(e: "Expr", force_share=False) -> "Expr":
 
     uid = getattr(e, '_cse_uid', None)
     if uid is None:
-        uid = next(_expr_uid)
+        uid = next(_SharedCache.uid)
         e._cse_uid = uid
-    cnt = _cse_counts.get(uid, 0) + 1
-    _cse_counts[uid] = cnt
+    cnt = _SharedCache.counts.get(uid, 0) + 1
+    _SharedCache.counts[uid] = cnt
     cnt_share = 1 # at what count start sharing
     if cnt == cnt_share or (force_share and cnt <= 1):
         sig = _create_new_shared_wire(e.typ)
         sig._driver = e  # continuous assignment: assign sig = <original expr>;
-        _cse_expr2sig[uid] = sig
+        _SharedCache.expr2sig[uid] = sig
         return sig
     elif cnt > cnt_share:
-        return _cse_expr2sig[uid]
+        return _SharedCache.expr2sig[uid]
     else:
         # 1st sighting: return original expr
         return e
