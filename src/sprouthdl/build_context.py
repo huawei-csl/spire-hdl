@@ -1,7 +1,7 @@
 """Thread-safe build context for Sprout-HDL.
 
 All mutable state that was previously stored in module-level globals
-(_SHARED, _active_conditions, _pending_if_chain, _switch_stack) now lives
+(_active_conditions, _pending_if_chain, _switch_stack, CSE state) now lives
 inside a ``BuildContext`` instance.  A thread-local default context is
 created lazily so that existing single-threaded code keeps working without
 any changes.  Multi-threaded or concurrent builds can create isolated

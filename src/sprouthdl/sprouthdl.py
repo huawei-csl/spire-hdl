@@ -15,37 +15,6 @@ from sprouthdl.build_context import BuildContext, current_build_context
 # Shared sub-expression (CSE) support
 # -----------------------------
 
-class _SharedCache:
-    """
-    Tracks how many times an Expr *instance* is wrapped via as_expr(...).
-    On the 2nd time, we create a Verilog wire (sig_{index}) with a driver = original expr.
-    Further uses return that wire to shrink emitted Verilog.
-
-    .. deprecated::
-        Retained for backward compatibility.  Delegates to the active BuildContext.
-    """
-    @property
-    def counts(self) -> dict[int, int]:
-        return current_build_context().cse_counts
-
-    @property
-    def expr2sig(self) -> dict[int, "Signal"]:
-        return current_build_context().cse_expr2sig
-
-    @property
-    def wires(self) -> list["Signal"]:
-        return current_build_context().cse_wires
-
-    @property
-    def index(self) -> int:
-        return current_build_context().cse_index
-
-    @index.setter
-    def index(self, value: int) -> None:
-        current_build_context().cse_index = value
-
-_SHARED = _SharedCache()
-
 def reset_shared_cache():
     """Call this before emitting each Verilog module to avoid cross-module bleed."""
     current_build_context().reset_cse()

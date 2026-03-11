@@ -5,7 +5,7 @@ import random
 import time
 
 
-from sprouthdl.sprouthdl import Bool, Expr, ExprLike, HDLType, Signal, UInt, cat, fit_width, _SHARED, reset_shared_cache
+from sprouthdl.sprouthdl import Bool, Expr, ExprLike, HDLType, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
 from sprouthdl.build_context import current_build_context
 
 
@@ -417,11 +417,11 @@ class Module:
             lines.append(f"  {dir_} {sign}{rng} {p.name};")
 
         # Internals
-        # wires = self._internals_of("wire") + _SHARED.wires
+        # wires = self._internals_of("wire") + get_shared_wires()
         # instead of the above merge to avoid duplication if called multiple times
         wires = self._internals_of("wire")
         if not collect_signals:
-            wires += [s for s in _SHARED.wires if not any(s is w for w in wires)]
+            wires += [s for s in get_shared_wires() if not any(s is w for w in wires)]
 
         regs = self._internals_of("reg")
         lines.append('// Wires')
