@@ -3,6 +3,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 import hashlib
+import itertools
 import random
 import time
 from typing import Optional, Union, Sequence
@@ -62,28 +63,38 @@ def _create_new_shared_wire(typ: HDLType) -> "Signal":
     ctx.cse_wires.append(sig)
     return sig
 
+_expr_uid = itertools.count(1)
+
+
 def _maybe_share(e: "Expr", force_share=False) -> "Expr":
     """
     If this exact Expr instance is seen the 2nd time via as_expr(...),
     create a 'wire sig_{index}' that drives from the original expression.
     On 3rd+ times, reuse the same wire.
     Leaf Signals/Consts are skipped (they're already "named"/literal).
+
+    Each Expr is keyed by a monotonically increasing UID (assigned lazily)
+    rather than ``id(e)``, so that Python's address recycling after GC
+    cannot cause false cache hits.
     """
     if isinstance(e, (Signal, Const)):
         return e
 
     ctx = current_build_context()
-    nid = id(e)
-    cnt = ctx.cse_counts.get(nid, 0) + 1
-    ctx.cse_counts[nid] = cnt
+    uid = getattr(e, '_cse_uid', None)
+    if uid is None:
+        uid = next(_expr_uid)
+        e._cse_uid = uid
+    cnt = ctx.cse_counts.get(uid, 0) + 1
+    ctx.cse_counts[uid] = cnt
     cnt_share = 1 # at what count start sharing
     if cnt == cnt_share or (force_share and cnt <= 1):
         sig = _create_new_shared_wire(e.typ)
         sig._driver = e  # continuous assignment: assign sig = <original expr>;
-        ctx.cse_expr2sig[nid] = sig
+        ctx.cse_expr2sig[uid] = sig
         return sig
     elif cnt > cnt_share:
-        return ctx.cse_expr2sig[nid]
+        return ctx.cse_expr2sig[uid]
     else:
         # 1st sighting: return original expr
         return e
