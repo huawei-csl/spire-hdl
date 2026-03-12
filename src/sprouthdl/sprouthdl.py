@@ -403,6 +403,9 @@ class Slice(Expr):
         self.typ = HDLType(width, signed=False, is_bool=(width == 1))
 
     def to_verilog(self) -> str:
+        # Full-width slice is a no-op — avoids illegal bit-select on 1-bit signals
+        if self.start == 0 and self.msb + 1 == self.a.typ.width:
+            return self.a.to_verilog()
         if self.typ.width == 1:
             return f"{self.a.to_verilog()}[{self.lsb}]"
         return f"{self.a.to_verilog()}[{self.msb}:{self.lsb}]"
@@ -433,7 +436,10 @@ class Resize(Expr):
         ext_bits = tw - aw
         if self.a.typ.signed:
             # Sign-extend: { ext_bits copies of MSB, src }
-            signbit = f"{self.a.to_verilog()}[{aw-1}]"
+            if aw == 1:
+                signbit = self.a.to_verilog()
+            else:
+                signbit = f"{self.a.to_verilog()}[{aw-1}]"
             return f"{{{{{ext_bits}{{{signbit}}}}}, {self.a.to_verilog()}}}"
         else:
             return f"{{{{{ext_bits}{{1'b0}}}}, {self.a.to_verilog()}}}"
