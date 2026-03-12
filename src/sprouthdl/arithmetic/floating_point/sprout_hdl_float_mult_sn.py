@@ -20,7 +20,9 @@ from sprouthdl.sprouthdl_module import Component, Module
 from sprouthdl.sprouthdl import *
 from sprouthdl.sprouthdl_simulator import Simulator
 from sprouthdl.arithmetic.int_arithmetic_config import (
+    AdderConfig,
     MultiplierConfig,
+    build_adder,
     build_multiplier,
 )
 
@@ -59,7 +61,7 @@ class FpMulSN(Component):
         b: Signal  # input
         y: Signal  # output
 
-    def __init__(self, EW: int, FW: int, *, subnormals: bool = True, always_subnormal_rounding: bool = False, mult_cfg: Optional[MultiplierConfig] = None) -> None:
+    def __init__(self, EW: int, FW: int, *, subnormals: bool = True, always_subnormal_rounding: bool = False, mult_cfg: Optional[MultiplierConfig] = None, adder_cfg: Optional[AdderConfig] = None) -> None:
         self.EW = EW
         self.FW = FW
         self.W = 1 + EW + FW
@@ -69,6 +71,7 @@ class FpMulSN(Component):
         self.MAX_E = (1 << EW) - 1
         self.MAX_FINITE_E = self.MAX_E - 1
         self.mult_cfg = mult_cfg
+        self.adder_cfg = adder_cfg
 
         self.io = self.IO(
             a=Signal(name="a", typ=UInt(self.W), kind="input"),
@@ -194,7 +197,7 @@ class FpMulSN(Component):
 
     def _exponent_path(self, eA_eff: Expr, eB_eff: Expr, carry: Expr, lz: Expr) -> Tuple[Expr, Expr, Expr, Expr]:
         EW = self.EW
-        exp_sum = eA_eff + eB_eff
+        exp_sum = build_adder(eA_eff, eB_eff, self.adder_cfg) if self.adder_cfg is not None else eA_eff + eB_eff
         lhs = (exp_sum + 1) + mux(carry, 1, 0)
 
         limit_under = self.BIAS + lz

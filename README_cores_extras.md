@@ -237,7 +237,5 @@ For some scripts you might need to add `PYTHONPATH=$(pwd)` before running the co
 Contributions are welcome—feel free to open issues or submit pull requests with improvements or new hardware components.
 
 ## References
-HiFloat8 implementation according to:
-[1] Luo, Y., Zhang, Z., Wu, R., Liu, H., Jin, Y., Zheng, K., ... & Huang, Z. (2024). Ascend hifloat8 format for deep learning. arXiv preprint arXiv:2409.16626.
-Winograd inner product:
-[2] S. Winograd. A new algorithm for inner product. IEEE Trans. Comput., C-18: 693–694, 1968.
+- HiFloat8 specification: [1] Luo, Y., Zhang, Z., Wu, R., Liu, H., Jin, Y., Zheng, K., ... & Huang, Z. (2024). Ascend hifloat8 format for deep learning. arXiv preprint arXiv:2409.16626.
+- Winograd inner product: [2] S. Winograd. A new algorithm for inner product. IEEE Trans. Comput., C-18: 693–694, 1968.
