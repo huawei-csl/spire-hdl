@@ -21,3 +21,5 @@ data/*
 *.dat
 *.json
 *.zip
+.devcontainer/*
+.claude

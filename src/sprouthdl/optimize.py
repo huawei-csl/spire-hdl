@@ -1,0 +1,387 @@
+"""
+Decorator and utilities for automated Flowy circuit optimization.
+
+Usage:
+    from sprouthdl.optimize import flowy_optimized
+
+    @flowy_optimized
+    def my_adder(a, b):
+        return a + b
+
+    result = my_adder(signal_x, signal_y)
+"""
+from __future__ import annotations
+
+import functools
+import inspect
+import os
+import tempfile
+import time
+from dataclasses import make_dataclass
+from typing import Any, Callable, Dict, List, Tuple, Union
+
+from sprouthdl.sprouthdl import Expr, HDLType, Signal
+from sprouthdl.sprouthdl_module import Component, Module
+
+
+# ---------------------------------------------------------------------------
+# Cache: maps (func_id, cache_key) -> (aag_lines, spec)
+# ---------------------------------------------------------------------------
+_cache: Dict[Tuple, Tuple[List[str], Dict[str, HDLType]]] = {}
+
+
+def clear_optimization_cache() -> None:
+    """Clear all cached optimized circuits."""
+    _cache.clear()
+
+
+# ---------------------------------------------------------------------------
+# flowy_optimize  (moved from synthesise_fp2.py)
+# ---------------------------------------------------------------------------
+
+def flowy_optimize(m: Module | Component,
+                   nb_runs: int = 50,
+                   nb_workers: int = 10,
+                   iterations: int = 1,
+                   mockturtle_chains: int = 1,
+                   mockturtle_chain_len: int = 10,
+                   mockturtle_chain_workers: int = 1,
+                   selection_metric: str | None = None,
+                   verbose: bool = False) -> Module | Component:
+    """Run Flowy optimization on a Module or Component and return the optimized design."""
+    from flowy.flows.reinforce.data_collection.lib.definitions import (
+        RecipeSelection, SelectionMetric,
+    )
+    import flowy.flows.reinforce.run.statistical.run_flows_in_docker as run_flows_in_docker
+    from flowy.data_structures.database import RunDatabase, RunIdentifier
+    from flowy.flows.sim.extract_best_design import extract_and_store_best_design
+
+    if selection_metric is None:
+        selection_metric = SelectionMetric.aig_count.value
+
+    if isinstance(m, Component):
+        m = m.to_module("mydesign_comb")
+    name_initial: str = m.name
+    m.name = "mydesign_comb"
+    verilog_code: str = m.to_verilog()
+
+    random_hash = os.urandom(8).hex()
+    filename = f"my_logical_design_{random_hash}.v"
+    tempdir = tempfile.gettempdir()
+    verilog_path: str = os.path.join(tempdir, filename)
+
+    with open(verilog_path, "w") as f:
+        f.write(verilog_code)
+
+    datecode = time.strftime("%Y%m%d_%H%M%S")
+
+    args = run_flows_in_docker.build_parser().parse_args([])
+
+    selection_metric = SelectionMetric.aig_count.value
+    experiment: str = f"exp_{name_initial}_{datecode}"
+
+    args.experiment = experiment
+    args.nb_runs = nb_runs
+    args.nb_workers = nb_workers
+    args.iterations = iterations
+    args.mockturtle_chains = mockturtle_chains
+    args.mockturtle_chain_len = mockturtle_chain_len
+    args.mockturtle_chain_workers = mockturtle_chain_workers
+    args.recipe_selection = RecipeSelection.PERFORMANCE_SAMPLING.value
+    args.strategy_name = "equal"
+    args.debug = False
+    args.selection_metric = selection_metric
+    args.verilog_file = verilog_path
+    args.compression_scripts_per_step = 3
+    args.scripts_per_step = 2
+    args.simulation_tb = False
+    args.extra_files = ""
+    args.verbose = verbose
+
+    results = run_flows_in_docker.run_with_args(args, commit_hash="e30da590ef15a869b1095d3b8baf5058b3e650d5")
+    extract_and_store_best_design(
+        experiment=experiment, target_metrics=[SelectionMetric.aig_count]
+    )
+    # visualize_histograms(experiment=experiment)
+    # visualize_main(
+    #     ExperimentIdentifier(
+    #         root_database=DatabaseConfig.default_path, experiment=experiment
+    #     )
+    # )
+
+    os.remove(verilog_path)
+
+    best_design = RunIdentifier(
+        root_database="output/db", experiment=experiment,
+        stage="analysis", run="best_designs",
+    )
+    best_design_item = RunDatabase(best_design).load(
+        "final_mockturtle_design_best_design_aig_count"
+    )
+    aig_count = best_design_item.get("aig_count").value
+    aig_file_path: str = best_design_item.get("aiger_filepath").path
+    aiger_map_file_path: str = best_design_item.get("aiger_map_filepath").path
+
+    c_out: Component = m.to_component().from_aig_file(
+        aig_file_path, aiger_map_file_path, make_internal=False
+    )
+    module: Module = c_out.to_module("optimized_design")
+
+    if isinstance(m, Module):
+        return module
+    else:
+        return c_out
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers for the decorator
+# ---------------------------------------------------------------------------
+
+def _build_component(
+    fn: Callable[..., Any],
+    logic_args: Dict[str, Tuple[int, bool]],
+    other_args: Dict[str, Any],
+) -> Tuple[Component, List[str]]:
+    """Build a Component from the decorated function using placeholder signals.
+
+    Parameters
+    ----------
+    fn : callable
+        The original decorated function.
+    logic_args : dict
+        {param_name: (width, signed)} for each Expr argument.
+    other_args : dict
+        {param_name: value} for each non-Expr argument.
+
+    Returns
+    -------
+    tuple[Component, list[str]]
+        The built Component and the list of output names.
+    """
+    # Create placeholder input signals
+    input_sigs: Dict[str, Signal] = {}
+    for name, (width, signed) in logic_args.items():
+        typ: HDLType = HDLType(width, signed=signed)
+        input_sigs[name] = Signal(name=name, typ=typ, kind="input")
+
+    # Build kwargs for the function call: logic args get placeholder signals,
+    # non-logic args get their actual values
+    call_kwargs: Dict[str, Any] = {}
+    call_kwargs.update(input_sigs)
+    call_kwargs.update(other_args)
+
+    # Call function with placeholders in the right parameter order
+    fn_sig: inspect.Signature = inspect.signature(fn)
+    call_args: List[Any] = []
+    for param_name in fn_sig.parameters:
+        call_args.append(call_kwargs[param_name])
+
+    result: Any = fn(*call_args)
+
+    # Normalize result to list of (name, expr)
+    outputs: List[Tuple[str, Expr]]
+    if isinstance(result, tuple):
+        outputs = [(f"y{i}", expr) for i, expr in enumerate(result)]
+    else:
+        outputs = [("y", result)]
+
+    # Create output signals and connect
+    output_sigs: Dict[str, Signal] = {}
+    for out_name, expr in outputs:
+        out_sig: Signal = Signal(name=out_name, typ=expr.typ, kind="output")
+        out_sig <<= expr
+        output_sigs[out_name] = out_sig
+
+    # Build a concrete Component using make_dataclass so iter_values works
+    all_sigs: Dict[str, Signal] = {}
+    all_sigs.update(input_sigs)
+    all_sigs.update(output_sigs)
+
+    IO: type = make_dataclass("IO", [(name, Signal) for name in all_sigs])
+    io: Any = IO(**all_sigs)
+
+    class _GeneratedComponent(Component):
+        def __init__(self, io_obj: Any) -> None:
+            self.io = io_obj
+
+        def elaborate(self) -> None:
+            pass
+
+    comp: Component = _GeneratedComponent(io)
+    return comp, [name for name, _ in outputs]
+
+
+def _optimize_and_cache(
+    fn: Callable[..., Any],
+    logic_args: Dict[str, Tuple[int, bool]],
+    other_args: Dict[str, Any],
+    cache_key: Tuple,
+    optimize_kwargs: Dict[str, Any],
+) -> Tuple[List[str], Dict[str, HDLType], List[str]]:
+    """Build component, optimize it, cache the AAG lines.
+
+    Returns
+    -------
+    tuple[list[str], dict[str, HDLType], list[str]]
+        (aag_lines, spec, output_names)
+    """
+    from sprouthdl.sprouthdl_aiger import AigerExporter
+
+    comp, output_names = _build_component(fn, logic_args, other_args)
+    module: Module = comp.to_module("mydesign_comb")
+
+    optimized: Module | Component = flowy_optimize(module, **optimize_kwargs)
+
+    # Get AAG from the optimized module
+    optimized_module: Module
+    if isinstance(optimized, Component):
+        optimized_module = optimized.to_module("optimized_comb")
+    else:
+        optimized_module = optimized
+
+    aag_lines: List[str] = AigerExporter(optimized_module).get_aag()
+    spec: Dict[str, HDLType] = optimized_module.get_spec()
+
+    func_key: Tuple = (id(fn), cache_key)
+    _cache[func_key] = (aag_lines, spec, output_names)
+    return aag_lines, spec, output_names
+
+
+def _instantiate_from_cache(
+    aag_lines: List[str],
+    spec: Dict[str, HDLType],
+    output_names: List[str],
+    actual_logic_args: Dict[str, Expr],
+) -> Union[Expr, Tuple[Expr, ...]]:
+    """Create a fresh Component from cached AAG and wire actual Expr args.
+
+    Parameters
+    ----------
+    aag_lines : list[str]
+        Cached AIGER ASCII lines.
+    spec : dict
+        Port spec from the optimized module.
+    output_names : list[str]
+        Names of outputs (e.g. ["y"] or ["y0", "y1"]).
+    actual_logic_args : dict
+        {param_name: Expr} — the actual runtime Expr arguments.
+
+    Returns
+    -------
+    Expr or tuple[Expr, ...]
+    """
+    # Build a Component with the right spec to use from_aag_lines
+    io_sigs: Dict[str, Signal] = {}
+    for name, typ in spec.items():
+        if name in actual_logic_args:
+            io_sigs[name] = Signal(name=name, typ=typ, kind="input")
+        else:
+            io_sigs[name] = Signal(name=name, typ=typ, kind="output")
+
+    IO: type = make_dataclass("IO", [(name, Signal) for name in io_sigs])
+    io: Any = IO(**io_sigs)
+
+    class _CachedComponent(Component):
+        def __init__(self, io_obj: Any) -> None:
+            self.io = io_obj
+
+        def elaborate(self) -> None:
+            pass
+
+    comp: Component = _CachedComponent(io)
+    comp.from_aag_lines(aag_lines, group=True, make_internal=True)
+
+    # Wire actual Expr args to the (now internal wire) inputs
+    for name, expr in actual_logic_args.items():
+        sig: Signal = getattr(comp.io, name)
+        sig <<= expr
+
+    # Return output(s)
+    if len(output_names) == 1:
+        return getattr(comp.io, output_names[0])
+    else:
+        return tuple(getattr(comp.io, oname) for oname in output_names)
+
+
+# ---------------------------------------------------------------------------
+# The decorator
+# ---------------------------------------------------------------------------
+
+def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callable[..., Any]:
+    """Decorator that automatically optimizes a function's logic through Flowy.
+
+    Can be used with or without arguments::
+
+        @flowy_optimized
+        def my_adder(a, b):
+            return a + b
+
+        @flowy_optimized(nb_runs=100)
+        def my_adder(a, b):
+            return a + b
+
+    At call time, Expr arguments are detected via ``isinstance(arg, Expr)``.
+    The function is converted to a Component, optimized via ``flowy_optimize``,
+    and the result is cached. Subsequent calls with the same argument types
+    (same widths/signedness for logic args, same values for non-logic args)
+    reuse the cached optimized circuit.
+    """
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # Bind arguments to parameter names
+            fn_sig: inspect.Signature = inspect.signature(fn)
+            bound: inspect.BoundArguments = fn_sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+
+            # Separate logic (Expr) vs non-logic args
+            logic_args: Dict[str, Tuple[int, bool]] = {}
+            other_args: Dict[str, Any] = {}
+            actual_logic_args: Dict[str, Expr] = {}
+
+            for param_name, value in bound.arguments.items():
+                if isinstance(value, Expr):
+                    logic_args[param_name] = (value.typ.width, value.typ.signed)
+                    actual_logic_args[param_name] = value
+                else:
+                    other_args[param_name] = value
+
+            # If no logic args, just call the original function
+            if not logic_args:
+                return fn(*args, **kwargs)
+
+            # Build cache key
+            logic_key: Tuple = tuple(
+                (name, width, signed)
+                for name, (width, signed) in sorted(logic_args.items())
+            )
+            other_key: Tuple = tuple(
+                (name, value)
+                for name, value in sorted(other_args.items())
+            )
+            cache_key: Tuple = (logic_key, other_key)
+            func_key: Tuple = (id(fn), cache_key)
+
+            # Check cache
+            aag_lines: List[str]
+            spec: Dict[str, HDLType]
+            output_names: List[str]
+            if func_key in _cache:
+                aag_lines, spec, output_names = _cache[func_key]
+            else:
+                aag_lines, spec, output_names = _optimize_and_cache(
+                    fn, logic_args, other_args, cache_key, kw
+                )
+
+            return _instantiate_from_cache(
+                aag_lines, spec, output_names, actual_logic_args
+            )
+
+        return wrapper
+
+    if _fn is not None:
+        # Called as @flowy_optimized without parentheses
+        return decorator(_fn)
+    else:
+        # Called as @flowy_optimized(...) with arguments
+        return decorator
