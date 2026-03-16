@@ -318,10 +318,17 @@ class Module:
 
                 if sid not in port_ids:
                     if node.kind in ("input", "output"):
-                        raise Warning(
-                            f"Internal signal '{node.name}' has port kind '{node.kind}'. "
-                            "Use wire/reg for internals. For internal components use make_internal()"
-                        )
+                        # After AIG reimport + grouping, the graph may contain
+                        # original bit-level or ungrouped signals that have been
+                        # superseded by aggregate ports with the same name.
+                        # Demote them to wires so traversal can continue.
+                        if node.name in name_to_sig:
+                            node.kind = "wire"
+                        else:
+                            raise Warning(
+                                f"Internal signal '{node.name}' has port kind '{node.kind}'. "
+                                "Use wire/reg for internals. For internal components use make_internal()"
+                            )
                     uniquify_internal(node)
 
                     if sid not in s_in:
@@ -596,10 +603,15 @@ class IOCollector:
         name_to_sig = {p.name: p for p in m._ports}
         bits = []
         for i in range(width):
+            # Try underscore notation first (abc style: prod_0_),
+            # then bracket notation (yosys/cleaned style: prod[0])
             nm = f"{base}_{i}_"
             s = name_to_sig.get(nm)
+            if s is None: # try bracket notation
+                nm = f"{base}[{i}]"
+                s = name_to_sig.get(nm)
             if s is None:
-                raise ValueError(f"Missing bit-port '{nm}'")
+                raise ValueError(f"Missing bit-port '{base}_{i}_' or '{base}[{i}]'")
             # sanity: 1-bit?
             if s.typ.width != 1:
                 raise ValueError(f"Expected 1-bit for '{nm}', got {s.typ}")

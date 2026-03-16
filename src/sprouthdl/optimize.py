@@ -47,12 +47,19 @@ def flowy_optimize(m: Module | Component,
                    mockturtle_chain_len: int = 10,
                    mockturtle_chain_workers: int = 1,
                    selection_metric: str | None = None,
-                   verbose: bool = False) -> Module | Component:
-    """Run Flowy optimization on a Module or Component and return the optimized design."""
+                   verbose: bool = False,
+                   direct: bool = False) -> Module | Component:
+    """Run Flowy optimization on a Module or Component and return the optimized design.
+
+    Parameters
+    ----------
+    direct : bool
+        If True, call the statistical run_flow directly (single process, no Docker).
+        If False (default), use the Docker-based run_flows_in_docker launcher.
+    """
     from flowy.flows.reinforce.data_collection.lib.definitions import (
         RecipeSelection, SelectionMetric,
     )
-    import flowy.flows.reinforce.run.statistical.run_flows_in_docker as run_flows_in_docker
     from flowy.data_structures.database import RunDatabase, RunIdentifier
     from flowy.flows.sim.extract_best_design import extract_and_store_best_design
 
@@ -74,40 +81,58 @@ def flowy_optimize(m: Module | Component,
         f.write(verilog_code)
 
     datecode = time.strftime("%Y%m%d_%H%M%S")
-
-    args = run_flows_in_docker.build_parser().parse_args([])
-
-    selection_metric = SelectionMetric.aig_count.value
     experiment: str = f"exp_{name_initial}_{datecode}"
 
-    args.experiment = experiment
-    args.nb_runs = nb_runs
-    args.nb_workers = nb_workers
-    args.iterations = iterations
-    args.mockturtle_chains = mockturtle_chains
-    args.mockturtle_chain_len = mockturtle_chain_len
-    args.mockturtle_chain_workers = mockturtle_chain_workers
-    args.recipe_selection = RecipeSelection.PERFORMANCE_SAMPLING.value
-    args.strategy_name = "equal"
-    args.debug = False
-    args.selection_metric = selection_metric
-    args.verilog_file = verilog_path
-    args.compression_scripts_per_step = 3
-    args.scripts_per_step = 2
-    args.simulation_tb = False
-    args.extra_files = ""
-    args.verbose = verbose
+    if direct:
+        # Call the statistical run_flow directly — single process, no Docker
+        from flowy.flows.reinforce.run.statistical.run_flow import (
+            run_flow as statistical_run_flow,
+        )
+        statistical_run_flow(
+            use_mockturtle=True,
+            iterations=iterations,
+            chains=mockturtle_chains,
+            chain_len=mockturtle_chain_len,
+            chain_workers=mockturtle_chain_workers,
+            env_option="auto",
+            experiment=experiment,
+            recipe_selection=RecipeSelection.PERFORMANCE_SAMPLING,
+            strategy_name="equal",
+            selection_metric=SelectionMetric.aig_count,
+            verilog_file=verilog_path,
+            compression_scripts_per_step=3,
+            scripts_per_step=2,
+            simulation_tb=False,
+            verbose=verbose,
+        )
+    else:
+        # Docker-based multi-run launcher (original path)
+        import flowy.flows.reinforce.run.statistical.run_flows_in_docker as run_flows_in_docker
+        args = run_flows_in_docker.build_parser().parse_args([])
 
-    results = run_flows_in_docker.run_with_args(args, commit_hash="e30da590ef15a869b1095d3b8baf5058b3e650d5")
+        args.experiment = experiment
+        args.nb_runs = nb_runs
+        args.nb_workers = nb_workers
+        args.iterations = iterations
+        args.mockturtle_chains = mockturtle_chains
+        args.mockturtle_chain_len = mockturtle_chain_len
+        args.mockturtle_chain_workers = mockturtle_chain_workers
+        args.recipe_selection = RecipeSelection.PERFORMANCE_SAMPLING.value
+        args.strategy_name = "equal"
+        args.debug = False
+        args.selection_metric = selection_metric
+        args.verilog_file = verilog_path
+        args.compression_scripts_per_step = 3
+        args.scripts_per_step = 2
+        args.simulation_tb = False
+        args.extra_files = ""
+        args.verbose = verbose
+
+        run_flows_in_docker.run_with_args(args, commit_hash="e30da590ef15a869b1095d3b8baf5058b3e650d5")
+
     extract_and_store_best_design(
         experiment=experiment, target_metrics=[SelectionMetric.aig_count]
     )
-    # visualize_histograms(experiment=experiment)
-    # visualize_main(
-    #     ExperimentIdentifier(
-    #         root_database=DatabaseConfig.default_path, experiment=experiment
-    #     )
-    # )
 
     os.remove(verilog_path)
 
