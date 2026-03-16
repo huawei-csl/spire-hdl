@@ -88,11 +88,12 @@ def aig_file_to_aag_lines_via_yosys(aag_path: str, map_file: str|None = None) ->
     aag_lines = file_to_lines(aag_out_path)
 
     # clean up, in case of [<index>] appearing twice in a line
-    aag_lines_clean = []
+    # e.g. "o1 y[10][10]" -> "o1 y[10]"
+    aag_lines_clean: List[str] = []
     for line in aag_lines:
-        # if twice [  in line remove the last 3 characters
         if line.count('[') == 2:
-            line = line[:-3]
+            second_bracket: int = line.index('[', line.index('[') + 1)
+            line = line[:second_bracket]
         aag_lines_clean.append(line)
 
     return aag_lines_clean
