@@ -43,7 +43,7 @@ def main():
   
 
 
-    m_optimized = flowy_optimize(m)
+    m_optimized = flowy_optimize(m, nb_runs=2)
 
     # c = module.to_component()
     

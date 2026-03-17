@@ -53,14 +53,14 @@ class Component(abc.ABC):
                 if module.clk is None:
                     module.clk = sig
                 else:
-                    #raise(ValueError("Module already has a clock signal"))
+                    # module already has a clock signal
                     pass
                 continue
             if sig.name == "rst":
                 if module.rst is None:
                     module.rst = sig
                 else:
-                    #raise(ValueError("Module already has a reset signal"))
+                    # module already has a reset signal
                     pass
                 continue
 
@@ -71,7 +71,7 @@ class Component(abc.ABC):
             else:
                 raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
         module.component = self # can be used for debugging
-        reset_shared_cache() # no longer needed as we collect signals
+        #reset_shared_cache() # no longer needed as we collect signals
         module._collect_signals_from_outputs([s for s in iter_values(self.io) if s.kind == "output"])
         return module 
 
@@ -79,18 +79,14 @@ class Component(abc.ABC):
         if group:
             IOCollector().group(module, self.get_spec())
 
-        # find signals in module and assign to io
-        io_fields = {}
-        for sig in module._signals:
+        # Map the AIG module's ports to this component's IO fields.
+        # Use _ports (which have canonical grouped names after group())
+        # rather than _signals (which may contain renamed duplicates).
+        for sig in module._ports:
             if sig.kind in ('input', 'output'):
-                io_fields[sig.name] = sig
-        # instance.io = dataclass(type('IO', (), io_fields))()  # type: ignore
-        # instance.io = make_dataclass("IO", io_fields)
-        # instance.io = io_fields
-        for io_name, io_sig in io_fields.items():
-            setattr(self.io, io_name, io_sig)
-            # or self.io.__dict__[io_name] <<= io_sig
-            # io_sig.kind = 'wire'  # change to wire in module
+                setattr(self.io, sig.name, sig)
+            else:
+                raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
         self.elaborate()  # re-elaborate to rebuild internal structure
         if make_internal:
             self.make_internal()
@@ -318,13 +314,6 @@ class Module:
 
                 if sid not in port_ids:
                     if node.kind in ("input", "output"):
-                        # After AIG reimport + grouping, the graph may contain
-                        # original bit-level or ungrouped signals that have been
-                        # superseded by aggregate ports with the same name.
-                        # Demote them to wires so traversal can continue.
-                        if node.name in name_to_sig:
-                            node.kind = "wire"
-                        else:
                             raise Warning(
                                 f"Internal signal '{node.name}' has port kind '{node.kind}'. "
                                 "Use wire/reg for internals. For internal components use make_internal()"
@@ -607,7 +596,7 @@ class IOCollector:
             # then bracket notation (yosys/cleaned style: prod[0])
             nm = f"{base}_{i}_"
             s = name_to_sig.get(nm)
-            if s is None: # try bracket notation
+            if s is None: # try bracket notation, might be able to remove this fallback
                 nm = f"{base}[{i}]"
                 s = name_to_sig.get(nm)
             if s is None:

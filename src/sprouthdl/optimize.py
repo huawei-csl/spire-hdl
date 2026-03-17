@@ -204,9 +204,15 @@ def _build_component(
     result: Any = fn(*call_args)
 
     # Normalize result to list of (name, expr)
+    # Names must not share a common prefix+digit pattern (e.g. y0,y1 or out_0,out_1)
+    # because yosys merges such ports into a single flattened bus.
+    # Use letter suffixes (res_a, res_b, ...) to keep them distinct.
     outputs: List[Tuple[str, Expr]]
     if isinstance(result, tuple):
-        outputs = [(f"y{i}", expr) for i, expr in enumerate(result)]
+        outputs = [
+            (f"res_{chr(ord('a') + i)}", expr)
+            for i, expr in enumerate(result)
+        ]
     else:
         outputs = [("y", result)]
 

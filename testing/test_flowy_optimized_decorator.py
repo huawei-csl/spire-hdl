@@ -139,7 +139,7 @@ def test_tuple_output_roundtrip() -> None:
 
     logic_args: Dict[str, Tuple[int, bool]] = {"a": (8, False), "b": (8, False)}
     comp, out_names = _build_component(sum_and_carry, logic_args, {})
-    assert out_names == ["y0", "y1"]
+    assert out_names == ["res_a", "res_b"]
 
     module: Module = comp.to_module("test_tuple")
     aag_lines: List[str] = AigerExporter(module).get_aag()
