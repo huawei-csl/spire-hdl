@@ -207,7 +207,9 @@ def flowy_optimize(m: Module | Component,
     from flowy.flows.sim.extract_best_design import extract_and_store_best_design
 
     if selection_metric is None:
-        selection_metric = SelectionMetric.aig_count.value
+        selection_metric = SelectionMetric.aig_count
+    elif isinstance(selection_metric, str):
+        selection_metric = SelectionMetric(selection_metric)
 
     if isinstance(m, Component):
         m = m.to_module("mydesign_comb")
@@ -241,7 +243,7 @@ def flowy_optimize(m: Module | Component,
             experiment=experiment,
             recipe_selection=RecipeSelection.PERFORMANCE_SAMPLING,
             strategy_name="equal",
-            selection_metric=SelectionMetric.aig_count,
+            selection_metric=selection_metric,
             verilog_file=verilog_path,
             compression_scripts_per_step=3,
             scripts_per_step=2,
@@ -263,7 +265,7 @@ def flowy_optimize(m: Module | Component,
         args.recipe_selection = RecipeSelection.PERFORMANCE_SAMPLING.value
         args.strategy_name = "equal"
         args.debug = False
-        args.selection_metric = selection_metric
+        args.selection_metric = selection_metric.value
         args.verilog_file = verilog_path
         args.compression_scripts_per_step = 3
         args.scripts_per_step = 2
@@ -274,7 +276,7 @@ def flowy_optimize(m: Module | Component,
         run_flows_in_docker.run_with_args(args, commit_hash="e30da590ef15a869b1095d3b8baf5058b3e650d5")
 
     extract_and_store_best_design(
-        experiment=experiment, target_metrics=[SelectionMetric.aig_count]
+        experiment=experiment, target_metrics=[selection_metric]
     )
 
     if visualize:
@@ -292,9 +294,8 @@ def flowy_optimize(m: Module | Component,
         stage="analysis", run="best_designs",
     )
     best_design_item = RunDatabase(best_design).load(
-        "final_mockturtle_design_best_design_aig_count"
+        f"final_mockturtle_design_best_design_{selection_metric.value}"
     )
-    aig_count = best_design_item.get("aig_count").value
     aig_file_path: str = best_design_item.get("aiger_filepath").path
     aiger_map_file_path: str = best_design_item.get("aiger_map_filepath").path
 
