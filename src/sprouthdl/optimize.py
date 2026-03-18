@@ -35,6 +35,7 @@ _cache: Dict[Tuple, Tuple[List[str], Dict[str, HDLType], List[str]]] = {}
 
 # Persistent disk cache directory. Set to None to disable disk caching.
 _DISK_CACHE_DIR: Path | None = Path(".sprouthdl_cache")
+_DISK_CACHE_VERSION: str = "v1"
 
 # Default kwargs for flowy_optimize, used by the @flowy_optimized decorator.
 # User-supplied kwargs override these.  A flowy_config.json in cwd (or any
@@ -87,7 +88,7 @@ def clear_optimization_cache(*, disk: bool = True) -> None:
     """
     _cache.clear()
     if disk and _DISK_CACHE_DIR is not None:
-        cache_dir = _DISK_CACHE_DIR / "v1"
+        cache_dir = _DISK_CACHE_DIR / _DISK_CACHE_VERSION
         if cache_dir.is_dir():
             shutil.rmtree(cache_dir)
 
@@ -140,7 +141,7 @@ def _write_cache_entry(
     """Write a cache entry to disk as JSON."""
     if _DISK_CACHE_DIR is None:
         return
-    cache_dir = _DISK_CACHE_DIR / "v1"
+    cache_dir = _DISK_CACHE_DIR / _DISK_CACHE_VERSION
     cache_dir.mkdir(parents=True, exist_ok=True)
     entry = {
         "version": 1,
@@ -161,7 +162,7 @@ def _read_cache_entry(
     """Read a cache entry from disk. Returns None on miss or corruption."""
     if _DISK_CACHE_DIR is None:
         return None
-    cache_file = _DISK_CACHE_DIR / "v1" / f"{cache_key_hex}.json"
+    cache_file = _DISK_CACHE_DIR / _DISK_CACHE_VERSION / f"{cache_key_hex}.json"
     if not cache_file.is_file():
         return None
     try:
@@ -392,12 +393,51 @@ def _build_component(
     return comp, [name for name, _ in outputs]
 
 
+def _cache_lookup(
+    inmem_key: Tuple,
+    disk_cache_key_hex: str | None,
+    use_mem_cache: bool = True,
+    use_disk_cache: bool = True,
+) -> Optional[Tuple[List[str], Dict[str, HDLType], List[str]]]:
+    """Check in-memory cache, then disk cache. Returns None on miss."""
+    if use_mem_cache and inmem_key in _cache:
+        print(f"[sprouthdl] In-memory cache hit for key: {inmem_key}")
+        return _cache[inmem_key]
+    if use_disk_cache and disk_cache_key_hex is not None:
+        disk_result = _read_cache_entry(disk_cache_key_hex)
+        if disk_result is not None:
+            print(f"[sprouthdl] Disk cache hit: {disk_cache_key_hex[:12]}...")
+            if use_mem_cache:
+                _cache[inmem_key] = disk_result
+            return disk_result
+    return None
+
+
+def _store_cache(
+    inmem_key: Tuple,
+    disk_cache_key_hex: str,
+    aag_lines: List[str],
+    spec: Dict[str, HDLType],
+    output_names: List[str],
+    use_mem_cache: bool = True,
+    use_disk_cache: bool = True,
+) -> None:
+    """Store result in in-memory and/or disk caches."""
+    if use_mem_cache:
+        _cache[inmem_key] = (aag_lines, spec, output_names)
+    if use_disk_cache:
+        _write_cache_entry(disk_cache_key_hex, aag_lines, spec, output_names)
+        print(f"[sprouthdl] Cached optimization result: {disk_cache_key_hex[:12]}...")
+
+
 def _optimize_and_cache(
     fn: Callable[..., Any],
     logic_args: Dict[str, Tuple[int, bool]],
     other_args: Dict[str, Any],
     inmem_key: Tuple,
     optimize_kwargs: Dict[str, Any],
+    use_mem_cache: bool = True,
+    use_disk_cache: bool = True,
 ) -> Tuple[List[str], Dict[str, HDLType], List[str]]:
     """Build component, check disk cache, optimize if needed, cache the AAG lines.
 
@@ -413,16 +453,18 @@ def _optimize_and_cache(
 
     merged_kwargs = {**_DEFAULT_OPTIMIZE_KWARGS, **optimize_kwargs}
 
-    # Check disk cache before running expensive optimization
-    verilog_content: str = module.to_verilog()
-    cache_key_hex: str = _compute_disk_cache_key(verilog_content, other_args, merged_kwargs)
-    disk_result = _read_cache_entry(cache_key_hex)
-    if disk_result is not None:
-        print(f"[sprouthdl] Disk cache hit: {cache_key_hex[:12]}...")
-        _cache[inmem_key] = disk_result
-        return disk_result
+    # Compute disk cache key from verilog content (only if disk cache is enabled)
+    cache_key_hex: str | None = None
+    if use_disk_cache:
+        verilog_content: str = module.to_verilog()
+        cache_key_hex = _compute_disk_cache_key(verilog_content, other_args, merged_kwargs)
 
-    # Disk cache miss — run optimization
+    # Check disk cache before running expensive optimization
+    cached = _cache_lookup(inmem_key, cache_key_hex, use_mem_cache, use_disk_cache)
+    if cached is not None:
+        return cached
+
+    # Cache miss — run optimization
     optimized: Module | Component = flowy_optimize(module, **merged_kwargs)
 
     # Get AAG from the optimized module
@@ -435,10 +477,11 @@ def _optimize_and_cache(
     aag_lines: List[str] = AigerExporter(optimized_module).get_aag()
     spec: Dict[str, HDLType] = optimized_module.get_spec()
 
-    # Store in memory and on disk
-    _cache[inmem_key] = (aag_lines, spec, output_names)
-    _write_cache_entry(cache_key_hex, aag_lines, spec, output_names)
-    print(f"[sprouthdl] Cached optimization result: {cache_key_hex[:12]}...")
+    if cache_key_hex is None and use_disk_cache:
+        verilog_content = module.to_verilog()
+        cache_key_hex = _compute_disk_cache_key(verilog_content, other_args, merged_kwargs)
+    _store_cache(inmem_key, cache_key_hex or "", aag_lines, spec, output_names,
+                 use_mem_cache, use_disk_cache)
     return aag_lines, spec, output_names
 
 
@@ -521,6 +564,9 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
     (same widths/signedness for logic args, same values for non-logic args)
     reuse the cached optimized circuit.
     """
+    use_mem_cache: bool = kw.pop("use_mem_cache", True)
+    use_disk_cache: bool = kw.pop("use_disk_cache", True)
+
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -557,15 +603,15 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
             cache_key: Tuple = (logic_key, other_key)
             inmem_key: Tuple = (id(fn), cache_key)
 
-            # Check in-memory cache first, then disk cache via _optimize_and_cache
-            aag_lines: List[str]
-            spec: Dict[str, HDLType]
-            output_names: List[str]
-            if inmem_key in _cache:
-                aag_lines, spec, output_names = _cache[inmem_key]
+            # Check caches (in-memory, then disk), optimize on miss
+            cached = _cache_lookup(inmem_key, disk_cache_key_hex=None,
+                                   use_mem_cache=use_mem_cache, use_disk_cache=False)
+            if cached is not None:
+                aag_lines, spec, output_names = cached
             else:
                 aag_lines, spec, output_names = _optimize_and_cache(
-                    fn, logic_args, other_args, inmem_key, kw
+                    fn, logic_args, other_args, inmem_key, kw,
+                    use_mem_cache=use_mem_cache, use_disk_cache=use_disk_cache,
                 )
 
             return _instantiate_from_cache(
