@@ -14,10 +14,12 @@ from __future__ import annotations
 
 import functools
 import inspect
+import json
 import os
 import tempfile
 import time
 from dataclasses import make_dataclass
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple, Union
 
 from sprouthdl.sprouthdl import Expr, HDLType, Signal
@@ -28,6 +30,32 @@ from sprouthdl.sprouthdl_module import Component, Module
 # Cache: maps (func_id, cache_key) -> (aag_lines, spec)
 # ---------------------------------------------------------------------------
 _cache: Dict[Tuple, Tuple[List[str], Dict[str, HDLType]]] = {}
+
+# Default kwargs for flowy_optimize, used by the @flowy_optimized decorator.
+# User-supplied kwargs override these.  A flowy_config.json in cwd (or any
+# parent) is loaded on top of the hardcoded defaults at import time.
+_DEFAULT_OPTIMIZE_KWARGS: Dict[str, Any] = {
+    "direct": True,
+    "iterations": 1,
+    "mockturtle_chains": 10,
+    "mockturtle_chain_len": 10,
+    "mockturtle_chain_workers": 10,
+}
+
+
+def _load_config_defaults() -> None:
+    """Search cwd and its parents for flowy_config.json and merge into defaults."""
+    path = Path.cwd()
+    for directory in [path, *path.parents]:
+        cfg = directory / "flowy_config.json"
+        if cfg.is_file():
+            with open(cfg) as f:
+                _DEFAULT_OPTIMIZE_KWARGS.update(json.load(f))
+            print(f"[sprouthdl] Loaded flowy config from {cfg}")
+            break
+
+
+_load_config_defaults()
 
 
 def clear_optimization_cache() -> None:
@@ -48,7 +76,8 @@ def flowy_optimize(m: Module | Component,
                    mockturtle_chain_workers: int = 1,
                    selection_metric: str | None = None,
                    verbose: bool = False,
-                   direct: bool = False) -> Module | Component:
+                   direct: bool = False,
+                   visualize: bool = False) -> Module | Component:
     """Run Flowy optimization on a Module or Component and return the optimized design.
 
     Parameters
@@ -56,6 +85,8 @@ def flowy_optimize(m: Module | Component,
     direct : bool
         If True, call the statistical run_flow directly (single process, no Docker).
         If False (default), use the Docker-based run_flows_in_docker launcher.
+    visualize : bool
+        If True, visualize the optimization results after completion.
     """
     from flowy.flows.reinforce.data_collection.lib.definitions import (
         RecipeSelection, SelectionMetric,
@@ -133,6 +164,14 @@ def flowy_optimize(m: Module | Component,
     extract_and_store_best_design(
         experiment=experiment, target_metrics=[SelectionMetric.aig_count]
     )
+
+    if visualize:
+        from flowy.flows.reinforce.analysis.visualize_runs import visualize_main
+        from flowy.data_structures.database import ExperimentIdentifier
+        from flowy.definitions import DatabaseConfig
+        visualize_main(ExperimentIdentifier(
+            root_database=DatabaseConfig.default_path, experiment=experiment
+        ))
 
     os.remove(verilog_path)
 
@@ -261,7 +300,8 @@ def _optimize_and_cache(
     comp, output_names = _build_component(fn, logic_args, other_args)
     module: Module = comp.to_module("mydesign_comb")
 
-    optimized: Module | Component = flowy_optimize(module, **optimize_kwargs)
+    merged_kwargs = {**_DEFAULT_OPTIMIZE_KWARGS, **optimize_kwargs}
+    optimized: Module | Component = flowy_optimize(module, **merged_kwargs)
 
     # Get AAG from the optimized module
     optimized_module: Module
