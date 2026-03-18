@@ -349,8 +349,15 @@ def _build_component(
     # Call function with placeholders in the right parameter order
     fn_sig: inspect.Signature = inspect.signature(fn)
     call_args: List[Any] = []
-    for param_name in fn_sig.parameters:
-        call_args.append(call_kwargs[param_name])
+    for param_name, param in fn_sig.parameters.items():
+        if param.kind == inspect.Parameter.VAR_POSITIONAL:
+            # Special Case - Handle *args (VAR_POSITIONAL): Collect all expanded varargs (e.g. pref_vals_a, pref_vals_b, ...)
+            i = 0
+            while f"{param_name}_{chr(ord('a') + i)}" in call_kwargs:
+                call_args.append(call_kwargs[f"{param_name}_{chr(ord('a') + i)}"])
+                i += 1
+        else:
+            call_args.append(call_kwargs[param_name])
 
     result: Any = fn(*call_args)
 
@@ -572,7 +579,19 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
             actual_logic_args: Dict[str, Expr] = {}
 
             for param_name, value in bound.arguments.items():
-                if isinstance(value, Expr):
+                param = fn_sig.parameters[param_name]
+                if param.kind == inspect.Parameter.VAR_POSITIONAL:
+                    # Special Case - Handle *args (VAR_POSITIONAL): expand tuple into individual entries.
+                    # Use letter suffixes (e.g. pref_vals_a, pref_vals_b) to avoid
+                    # yosys merging numeric-suffixed ports into a single bus.
+                    for i, v in enumerate(value):
+                        varg_name = f"{param_name}_{chr(ord('a') + i)}"
+                        if isinstance(v, Expr):
+                            logic_args[varg_name] = (v.typ.width, v.typ.signed)
+                            actual_logic_args[varg_name] = v
+                        else:
+                            other_args[varg_name] = v
+                elif isinstance(value, Expr):
                     logic_args[param_name] = (value.typ.width, value.typ.signed)
                     actual_logic_args[param_name] = value
                 else:
