@@ -349,6 +349,37 @@ def flowy_optimize(m: Module | Component,
 # Internal helpers for the decorator
 # ---------------------------------------------------------------------------
 
+def _push_shared_state() -> dict:
+    """Snapshot and reset the global shared-wire state.
+
+    Returns a snapshot dict to pass to :func:`_pop_shared_state`.
+    """
+    from sprouthdl.sprouthdl import _SHARED
+    snapshot = {
+        "counts":   dict(_SHARED.counts),
+        "expr2sig": dict(_SHARED.expr2sig),
+        "wires":    list(_SHARED.wires),
+        "index":    _SHARED.index,
+    }
+    _SHARED.counts.clear()
+    _SHARED.expr2sig.clear()
+    _SHARED.wires.clear()
+    _SHARED.index = 0
+    return snapshot
+
+
+def _pop_shared_state(snapshot: dict) -> None:
+    """Restore the global shared-wire state from a previous snapshot."""
+    from sprouthdl.sprouthdl import _SHARED
+    _SHARED.counts.clear()
+    _SHARED.counts.update(snapshot["counts"])
+    _SHARED.expr2sig.clear()
+    _SHARED.expr2sig.update(snapshot["expr2sig"])
+    _SHARED.wires.clear()
+    _SHARED.wires.extend(snapshot["wires"])
+    _SHARED.index = snapshot["index"]
+
+
 def _build_component(
     fn: Callable[..., Any],
     logic_args: Dict[str, Tuple[int, bool]],
@@ -370,21 +401,13 @@ def _build_component(
     tuple[Component, list[str]]
         The built Component and the list of output names.
     """
-    # Save and reset the shared wire state so the sub-circuit gets
+    # Push a clean shared-wire context so the sub-circuit gets
     # deterministic signal names (sig_0, sig_1, …) regardless of what
     # signals the caller has already created.  This makes the Verilog
     # content — and therefore the disk-cache key — independent of
     # context, which is critical for cache hits across different
     # multiplier / adder configurations.
-    from sprouthdl.sprouthdl import _SHARED
-    saved_counts  = dict(_SHARED.counts)
-    saved_e2s     = dict(_SHARED.expr2sig)
-    saved_wires   = list(_SHARED.wires)
-    saved_index   = _SHARED.index
-    _SHARED.counts.clear()
-    _SHARED.expr2sig.clear()
-    _SHARED.wires.clear()
-    _SHARED.index = 0
+    snapshot = _push_shared_state()
 
     # Create placeholder input signals
     input_sigs: Dict[str, Signal] = {}
@@ -451,15 +474,9 @@ def _build_component(
     comp: Component = _GeneratedComponent(io)
     output_names = [name for name, _ in outputs]
 
-    # Restore the caller's shared wire state so the outer circuit is
-    # unaffected by the temporary sub-circuit we just built.
-    _SHARED.counts.clear()
-    _SHARED.counts.update(saved_counts)
-    _SHARED.expr2sig.clear()
-    _SHARED.expr2sig.update(saved_e2s)
-    _SHARED.wires.clear()
-    _SHARED.wires.extend(saved_wires)
-    _SHARED.index = saved_index
+    # Pop back to the caller's shared-wire context so the outer circuit
+    # is unaffected by the temporary sub-circuit we just built.
+    _pop_shared_state(snapshot)
 
     return comp, output_names
 
