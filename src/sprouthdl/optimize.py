@@ -370,6 +370,22 @@ def _build_component(
     tuple[Component, list[str]]
         The built Component and the list of output names.
     """
+    # Save and reset the shared wire state so the sub-circuit gets
+    # deterministic signal names (sig_0, sig_1, …) regardless of what
+    # signals the caller has already created.  This makes the Verilog
+    # content — and therefore the disk-cache key — independent of
+    # context, which is critical for cache hits across different
+    # multiplier / adder configurations.
+    from sprouthdl.sprouthdl import _SHARED
+    saved_counts  = dict(_SHARED.counts)
+    saved_e2s     = dict(_SHARED.expr2sig)
+    saved_wires   = list(_SHARED.wires)
+    saved_index   = _SHARED.index
+    _SHARED.counts.clear()
+    _SHARED.expr2sig.clear()
+    _SHARED.wires.clear()
+    _SHARED.index = 0
+
     # Create placeholder input signals
     input_sigs: Dict[str, Signal] = {}
     for name, (width, signed) in logic_args.items():
@@ -433,7 +449,19 @@ def _build_component(
             pass
 
     comp: Component = _GeneratedComponent(io)
-    return comp, [name for name, _ in outputs]
+    output_names = [name for name, _ in outputs]
+
+    # Restore the caller's shared wire state so the outer circuit is
+    # unaffected by the temporary sub-circuit we just built.
+    _SHARED.counts.clear()
+    _SHARED.counts.update(saved_counts)
+    _SHARED.expr2sig.clear()
+    _SHARED.expr2sig.update(saved_e2s)
+    _SHARED.wires.clear()
+    _SHARED.wires.extend(saved_wires)
+    _SHARED.index = saved_index
+
+    return comp, output_names
 
 
 def _cache_lookup(
