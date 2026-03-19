@@ -132,24 +132,56 @@ def _compute_disk_cache_key(
     return h.hexdigest()
 
 
+def _resolve_cache_dir(
+    fn: Callable[..., Any] | None = None,
+    explicit_dir: str | Path | None = None,
+) -> Path | None:
+    """Resolve the effective disk cache directory.
+
+    Priority (highest to lowest):
+      1. *explicit_dir* — set via ``@flowy_optimized(cache_dir=...)``
+      2. Local cache folder next to the script that defines *fn*
+         (only if the folder already exists)
+      3. Global ``_DISK_CACHE_DIR`` (set via ``set_cache_dir()`` or
+         ``flowy_config.json``; defaults to ``".sprouthdl_cache"``)
+    """
+    # 1. Explicit override from decorator
+    if explicit_dir is not None:
+        return Path(explicit_dir)
+    # 2. Cache folder next to the script defining fn
+    if fn is not None:
+        try:
+            script_dir = Path(inspect.getfile(fn)).resolve().parent
+            local_cache = script_dir / (_DISK_CACHE_DIR.name if _DISK_CACHE_DIR else ".sprouthdl_cache")
+            if local_cache.is_dir():
+                return local_cache
+        except (TypeError, OSError):
+            pass
+    # 3. Global default
+    return _DISK_CACHE_DIR
+
+
 def _write_cache_entry(
     cache_key_hex: str,
     aag_lines: List[str],
     spec: Dict[str, HDLType],
     output_names: List[str],
+    cache_dir: Path | None = None,
 ) -> None:
     """Write a cache entry to disk as JSON."""
-    if _DISK_CACHE_DIR is None:
+    if cache_dir is None:
+        cache_dir = _DISK_CACHE_DIR
+    if cache_dir is None:
         return
-    cache_dir = _DISK_CACHE_DIR / _DISK_CACHE_VERSION
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    versioned = cache_dir / _DISK_CACHE_VERSION
+    versioned.mkdir(parents=True, exist_ok=True)
     entry = {
         "version": 1,
         "output_names": output_names,
         "spec": _spec_to_dict(spec),
         "aag_lines": aag_lines,
     }
-    target = cache_dir / f"{cache_key_hex}.json"
+    target = versioned / f"{cache_key_hex}.json"
     tmp_path = target.with_suffix(".tmp")
     with open(tmp_path, "w") as f:
         json.dump(entry, f, indent=2)
@@ -158,11 +190,14 @@ def _write_cache_entry(
 
 def _read_cache_entry(
     cache_key_hex: str,
+    cache_dir: Path | None = None,
 ) -> Optional[Tuple[List[str], Dict[str, HDLType], List[str]]]:
     """Read a cache entry from disk. Returns None on miss or corruption."""
-    if _DISK_CACHE_DIR is None:
+    if cache_dir is None:
+        cache_dir = _DISK_CACHE_DIR
+    if cache_dir is None:
         return None
-    cache_file = _DISK_CACHE_DIR / _DISK_CACHE_VERSION / f"{cache_key_hex}.json"
+    cache_file = cache_dir / _DISK_CACHE_VERSION / f"{cache_key_hex}.json"
     if not cache_file.is_file():
         return None
     try:
@@ -405,12 +440,13 @@ def _cache_lookup(
     cache_key_hex: str,
     use_mem_cache: bool = True,
     use_disk_cache: bool = True,
+    cache_dir: Path | None = None,
 ) -> Optional[Tuple[List[str], Dict[str, HDLType], List[str]]]:
     """Check in-memory cache, then disk cache. Returns None on miss."""
     if use_mem_cache and cache_key_hex in _cache:
         return _cache[cache_key_hex]
     if use_disk_cache:
-        disk_result = _read_cache_entry(cache_key_hex)
+        disk_result = _read_cache_entry(cache_key_hex, cache_dir)
         if disk_result is not None:
             print(f"[sprouthdl] Disk cache hit: {cache_key_hex[:12]}...")
             if use_mem_cache:
@@ -426,12 +462,13 @@ def _store_cache(
     output_names: List[str],
     use_mem_cache: bool = True,
     use_disk_cache: bool = True,
+    cache_dir: Path | None = None,
 ) -> None:
     """Store result in in-memory and/or disk caches."""
     if use_mem_cache:
         _cache[cache_key_hex] = (aag_lines, spec, output_names)
     if use_disk_cache:
-        _write_cache_entry(cache_key_hex, aag_lines, spec, output_names)
+        _write_cache_entry(cache_key_hex, aag_lines, spec, output_names, cache_dir)
         print(f"[sprouthdl] Cached optimization result: {cache_key_hex[:12]}...")
 
 
@@ -442,6 +479,7 @@ def _optimize_and_cache(
     optimize_kwargs: Dict[str, Any],
     use_mem_cache: bool = True,
     use_disk_cache: bool = True,
+    explicit_cache_dir: str | Path | None = None,
 ) -> Tuple[List[str], Dict[str, HDLType], List[str]]:
     """Build component, check caches, optimize if needed, cache the AAG lines.
 
@@ -457,12 +495,15 @@ def _optimize_and_cache(
 
     merged_kwargs = {**_DEFAULT_OPTIMIZE_KWARGS, **optimize_kwargs}
 
+    # Resolve cache directory (see _resolve_cache_dir for priority)
+    cache_dir: Path | None = _resolve_cache_dir(fn, explicit_cache_dir) if use_disk_cache else None
+
     # Compute cache key from verilog content
     verilog_content: str = module.to_verilog()
     cache_key_hex: str = _compute_disk_cache_key(verilog_content, other_args, merged_kwargs)
 
     # Check caches before running expensive optimization
-    cached = _cache_lookup(cache_key_hex, use_mem_cache, use_disk_cache)
+    cached = _cache_lookup(cache_key_hex, use_mem_cache, use_disk_cache, cache_dir)
     if cached is not None:
         return cached
 
@@ -480,7 +521,7 @@ def _optimize_and_cache(
     spec: Dict[str, HDLType] = optimized_module.get_spec()
 
     _store_cache(cache_key_hex, aag_lines, spec, output_names,
-                 use_mem_cache, use_disk_cache)
+                 use_mem_cache, use_disk_cache, cache_dir)
     return aag_lines, spec, output_names
 
 
@@ -562,9 +603,17 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
     and the result is cached. Subsequent calls with the same argument types
     (same widths/signedness for logic args, same values for non-logic args)
     reuse the cached optimized circuit.
+
+    Disk cache directory resolution (highest priority first):
+      1. ``cache_dir`` argument to this decorator
+      2. A cache folder next to the script defining the decorated function
+         (only if it already exists)
+      3. Global setting via ``set_cache_dir()`` or ``"cache_dir"`` in
+         ``flowy_config.json`` (default: ``".sprouthdl_cache"``)
     """
     use_mem_cache: bool = kw.pop("use_mem_cache", True)
     use_disk_cache: bool = kw.pop("use_disk_cache", True)
+    cache_dir: str | Path | None = kw.pop("cache_dir", None)
 
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
@@ -606,6 +655,7 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
             aag_lines, spec, output_names = _optimize_and_cache(
                 fn, logic_args, other_args, kw,
                 use_mem_cache=use_mem_cache, use_disk_cache=use_disk_cache,
+                explicit_cache_dir=cache_dir,
             )
 
             return _instantiate_from_cache(
