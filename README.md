@@ -24,7 +24,7 @@ cd sprout-hdl
 pip install -e .
 ```
 
-The library relies on Python 3.10+ and the packages listed in `requirements.txt`.  Optional regression tests require Yosys/Pyosys and aigverse if you plan to exercise the external tooling integration flows.
+The library relies on the packages listed in `requirements.txt`.  Optional regression tests require Yosys/Pyosys and aigverse if you plan to exercise the external tooling integration flows.
 
 ## Quick start
 
