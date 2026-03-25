@@ -46,6 +46,8 @@ _DEFAULT_OPTIMIZE_KWARGS: Dict[str, Any] = {
     "mockturtle_chains": 10,
     "mockturtle_chain_len": 10,
     "mockturtle_chain_workers": 10,
+    "nb_runs": 1,
+    "nb_workers": 10,
 }
 
 
@@ -167,6 +169,7 @@ def _write_cache_entry(
     spec: Dict[str, HDLType],
     output_names: List[str],
     cache_dir: Path | None = None,
+    metadata: Dict[str, Any] | None = None,
 ) -> None:
     """Write a cache entry to disk as JSON."""
     if cache_dir is None:
@@ -181,6 +184,8 @@ def _write_cache_entry(
         "spec": _spec_to_dict(spec),
         "aag_lines": aag_lines,
     }
+    if metadata:
+        entry["metadata"] = metadata
     target = versioned / f"{cache_key_hex}.json"
     tmp_path = target.with_suffix(".tmp")
     with open(tmp_path, "w") as f:
@@ -215,7 +220,7 @@ def _read_cache_entry(
 # ---------------------------------------------------------------------------
 
 def flowy_optimize(m: Module | Component,
-                   nb_runs: int = 50,
+                   nb_runs: int = 1,
                    nb_workers: int = 10,
                    iterations: int = 1,
                    mockturtle_chains: int = 1,
@@ -224,7 +229,8 @@ def flowy_optimize(m: Module | Component,
                    selection_metric: str | None = None,
                    verbose: bool = False,
                    direct: bool = False,
-                   visualize: bool = False) -> Module | Component:
+                   visualize: bool = False,
+                   pareto_point: int | None = None) -> Module | Component:
     """Run Flowy optimization on a Module or Component and return the optimized design.
 
     Parameters
@@ -264,11 +270,13 @@ def flowy_optimize(m: Module | Component,
     experiment: str = f"exp_{name_initial}_{datecode}"
 
     if direct:
-        # Call the statistical run_flow directly — single process, no Docker
+        # Direct mode — call statistical run_flow locally.
+        # When nb_runs > 1, runs execute in parallel with isolated working dirs.
         from flowy.flows.reinforce.run.statistical.run_flow import (
             run_flow as statistical_run_flow,
         )
-        statistical_run_flow(
+
+        run_kwargs = dict(
             use_mockturtle=True,
             iterations=iterations,
             chains=mockturtle_chains,
@@ -285,6 +293,41 @@ def flowy_optimize(m: Module | Component,
             simulation_tb=False,
             verbose=verbose,
         )
+
+        if nb_runs <= 1:
+            statistical_run_flow(**run_kwargs)
+        else:
+            from concurrent.futures import ProcessPoolExecutor, as_completed
+            from pathlib import Path as _Path
+
+            actual_workers = min(nb_workers, nb_runs)
+            print(f"[sprouthdl] Running {nb_runs} optimization runs with {actual_workers} parallel workers")
+
+            temp_dirs: list[str] = []
+            try:
+                for i in range(nb_runs):
+                    td = tempfile.mkdtemp(prefix=f"flowy_run_{i}_")
+                    temp_dirs.append(td)
+
+                with ProcessPoolExecutor(max_workers=actual_workers) as executor:
+                    futures = {
+                        executor.submit(
+                            statistical_run_flow,
+                            **run_kwargs,
+                            working_dir=_Path(td),
+                        ): idx
+                        for idx, td in enumerate(temp_dirs)
+                    }
+                    for future in as_completed(futures):
+                        idx = futures[future]
+                        try:
+                            future.result()
+                            print(f"[sprouthdl] Run {idx + 1}/{nb_runs} completed")
+                        except Exception as exc:
+                            print(f"[sprouthdl] Run {idx + 1}/{nb_runs} failed: {exc}")
+            finally:
+                for td in temp_dirs:
+                    shutil.rmtree(td, ignore_errors=True)
     else:
         # Docker-based multi-run launcher (original path)
         import flowy.flows.reinforce.run.statistical.run_flows_in_docker as run_flows_in_docker
@@ -324,15 +367,31 @@ def flowy_optimize(m: Module | Component,
 
     os.remove(verilog_path)
 
-    best_design = RunIdentifier(
-        root_database="output/db", experiment=experiment,
-        stage="analysis", run="best_designs",
-    )
-    best_design_item = RunDatabase(best_design).load(
-        f"final_mockturtle_design_best_design_{selection_metric.value}"
-    )
-    aig_file_path: str = best_design_item.get("aiger_filepath").path
-    aiger_map_file_path: str = best_design_item.get("aiger_map_filepath").path
+    if pareto_point is not None:
+        # Select a specific design from the Pareto front
+        from sprouthdl.pareto import extract_flowy_pareto
+        front = extract_flowy_pareto(experiment)
+        if pareto_point >= len(front):
+            raise IndexError(
+                f"pareto_point={pareto_point} but only {len(front)} "
+                f"designs on the Pareto front (0..{len(front) - 1})"
+            )
+        entry = front[pareto_point]
+        aig_file_path = entry["aiger_filepath"]
+        aiger_map_file_path = entry["aiger_map_filepath"]
+        print(f"[sprouthdl] Pareto point {pareto_point}: "
+              f"aig_count={entry['metrics'].get('aig_count')}, "
+              f"mockturtle_depth={entry['metrics'].get('mockturtle_depth')}")
+    else:
+        best_design = RunIdentifier(
+            root_database="output/db", experiment=experiment,
+            stage="analysis", run="best_designs",
+        )
+        best_design_item = RunDatabase(best_design).load(
+            f"final_mockturtle_design_best_design_{selection_metric.value}"
+        )
+        aig_file_path = best_design_item.get("aiger_filepath").path
+        aiger_map_file_path = best_design_item.get("aiger_map_filepath").path
 
     c_out: Component = m.to_component().from_aig_file(
         aig_file_path, aiger_map_file_path, make_internal=False
@@ -508,12 +567,13 @@ def _store_cache(
     use_mem_cache: bool = True,
     use_disk_cache: bool = True,
     cache_dir: Path | None = None,
+    metadata: Dict[str, Any] | None = None,
 ) -> None:
     """Store result in in-memory and/or disk caches."""
     if use_mem_cache:
         _cache[cache_key_hex] = (aag_lines, spec, output_names)
     if use_disk_cache:
-        _write_cache_entry(cache_key_hex, aag_lines, spec, output_names, cache_dir)
+        _write_cache_entry(cache_key_hex, aag_lines, spec, output_names, cache_dir, metadata=metadata)
         print(f"[sprouthdl] Cached optimization result: {cache_key_hex[:12]}...")
 
 
@@ -525,6 +585,9 @@ def _optimize_and_cache(
     use_mem_cache: bool = True,
     use_disk_cache: bool = True,
     explicit_cache_dir: str | Path | None = None,
+    nb_runs: int = 1,
+    nb_workers: int = 10,
+    pareto_point: int | None = None,
 ) -> Tuple[List[str], Dict[str, HDLType], List[str]]:
     """Build component, check caches, optimize if needed, cache the AAG lines.
 
@@ -545,7 +608,11 @@ def _optimize_and_cache(
 
     # Compute cache key from verilog content
     verilog_content: str = module.to_verilog()
-    cache_key_hex: str = _compute_disk_cache_key(verilog_content, other_args, merged_kwargs)
+    base_cache_key: str = _compute_disk_cache_key(verilog_content, other_args, merged_kwargs)
+    cache_key_hex: str = base_cache_key
+    # Append pareto_point suffix so each point gets its own cache entry
+    if pareto_point is not None:
+        cache_key_hex = f"{base_cache_key}_pareto_{pareto_point}"
 
     # Check caches before running expensive optimization
     cached = _cache_lookup(cache_key_hex, use_mem_cache, use_disk_cache, cache_dir)
@@ -553,7 +620,13 @@ def _optimize_and_cache(
         return cached
 
     # Cache miss — run optimization
-    optimized: Module | Component = flowy_optimize(module, **merged_kwargs)
+    # Pop multi-run params from merged_kwargs since they're passed explicitly
+    merged_kwargs.pop("nb_runs", None)
+    merged_kwargs.pop("nb_workers", None)
+    optimized: Module | Component = flowy_optimize(
+        module, nb_runs=nb_runs, nb_workers=nb_workers,
+        pareto_point=pareto_point, **merged_kwargs,
+    )
 
     # Get AAG from the optimized module
     optimized_module: Module
@@ -565,8 +638,9 @@ def _optimize_and_cache(
     aag_lines: List[str] = AigerExporter(optimized_module).get_aag()
     spec: Dict[str, HDLType] = optimized_module.get_spec()
 
+    cache_metadata = {"base_cache_key": base_cache_key}
     _store_cache(cache_key_hex, aag_lines, spec, output_names,
-                 use_mem_cache, use_disk_cache, cache_dir)
+                 use_mem_cache, use_disk_cache, cache_dir, metadata=cache_metadata)
     return aag_lines, spec, output_names
 
 
@@ -659,6 +733,10 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
     use_mem_cache: bool = kw.pop("use_mem_cache", True)
     use_disk_cache: bool = kw.pop("use_disk_cache", True)
     cache_dir: str | Path | None = kw.pop("cache_dir", None)
+    # Pop multi-run and pareto params so they don't affect the base cache key
+    nb_runs: int = kw.pop("nb_runs", 1)
+    nb_workers: int = kw.pop("nb_workers", 10)
+    pareto_point: int | None = kw.pop("pareto_point", None)
 
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
@@ -701,6 +779,8 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
                 fn, logic_args, other_args, kw,
                 use_mem_cache=use_mem_cache, use_disk_cache=use_disk_cache,
                 explicit_cache_dir=cache_dir,
+                nb_runs=nb_runs, nb_workers=nb_workers,
+                pareto_point=pareto_point,
             )
 
             return _instantiate_from_cache(
