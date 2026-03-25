@@ -37,6 +37,8 @@ def _load_run_metrics(run_id: RunIdentifier) -> Optional[Dict[str, Any]]:
         record = db.load("final_mockturtle_design")
     except Exception:
         return None
+    if record is None:
+        return None
 
     metrics: Dict[str, Any] = {}
     for key in _METRIC_KEYS:

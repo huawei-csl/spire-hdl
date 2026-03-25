@@ -602,6 +602,9 @@ def _optimize_and_cache(
     module: Module = comp.to_module("mydesign_comb")
 
     merged_kwargs = {**_DEFAULT_OPTIMIZE_KWARGS, **optimize_kwargs}
+    # Pop multi-run params before cache key computation — they affect execution, not the result
+    merged_kwargs.pop("nb_runs", None)
+    merged_kwargs.pop("nb_workers", None)
 
     # Resolve cache directory (see _resolve_cache_dir for priority)
     cache_dir: Path | None = _resolve_cache_dir(fn, explicit_cache_dir) if use_disk_cache else None
@@ -620,9 +623,6 @@ def _optimize_and_cache(
         return cached
 
     # Cache miss — run optimization
-    # Pop multi-run params from merged_kwargs since they're passed explicitly
-    merged_kwargs.pop("nb_runs", None)
-    merged_kwargs.pop("nb_workers", None)
     optimized: Module | Component = flowy_optimize(
         module, nb_runs=nb_runs, nb_workers=nb_workers,
         pareto_point=pareto_point, **merged_kwargs,
