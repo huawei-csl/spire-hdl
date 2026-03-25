@@ -369,7 +369,7 @@ def flowy_optimize(m: Module | Component,
 
     if pareto_point is not None:
         # Select a specific design from the Pareto front
-        from sprouthdl.pareto import extract_flowy_pareto
+        from sprouthdl.optimize.pareto import extract_flowy_pareto
         front = extract_flowy_pareto(experiment)
         if pareto_point >= len(front):
             raise IndexError(
@@ -602,9 +602,9 @@ def _optimize_and_cache(
     module: Module = comp.to_module("mydesign_comb")
 
     merged_kwargs = {**_DEFAULT_OPTIMIZE_KWARGS, **optimize_kwargs}
-    # Pop multi-run params before cache key computation — they affect execution, not the result
-    merged_kwargs.pop("nb_runs", None)
+    # nb_workers is pure parallelism — doesn't affect the result, exclude from cache key
     merged_kwargs.pop("nb_workers", None)
+    merged_kwargs.pop("nb_runs", None) # needs to be deleted, just here for compatibility with some existing caches
 
     # Resolve cache directory (see _resolve_cache_dir for priority)
     cache_dir: Path | None = _resolve_cache_dir(fn, explicit_cache_dir) if use_disk_cache else None
@@ -623,6 +623,8 @@ def _optimize_and_cache(
         return cached
 
     # Cache miss — run optimization
+    # Pop nb_runs before passing merged_kwargs since it's passed explicitly
+    merged_kwargs.pop("nb_runs", None)
     optimized: Module | Component = flowy_optimize(
         module, nb_runs=nb_runs, nb_workers=nb_workers,
         pareto_point=pareto_point, **merged_kwargs,

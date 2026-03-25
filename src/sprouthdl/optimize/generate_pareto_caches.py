@@ -23,7 +23,7 @@ from sprouthdl.optimize import (
     _spec_to_dict,
 )
 from sprouthdl.sprouthdl import HDLType
-from sprouthdl.pareto import extract_flowy_pareto
+from sprouthdl.optimize.pareto import extract_flowy_pareto
 
 
 def _find_base_cache_key(cache_dir: Path) -> Optional[str]:
