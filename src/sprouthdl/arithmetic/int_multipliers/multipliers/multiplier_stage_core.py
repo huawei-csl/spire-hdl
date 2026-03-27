@@ -77,7 +77,7 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
 
 class FinalStageAdderBase(StageBase, abc.ABC):
     @abc.abstractmethod
-    def resolve(self, columns: Dict[int, List[Expr]]) -> List[Expr]:
+    def resolve(self, columns: Dict[int, List[Expr]], carry_in: Optional[Expr] = None) -> List[Expr]:
         raise NotImplementedError
 
 
@@ -133,10 +133,10 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
 
 
 class RippleCarryFinalAdder(FinalStageAdderBase):
-    def resolve(self, columns: Dict[int, List[Expr]]) -> List[Expr]:
+    def resolve(self, columns: Dict[int, List[Expr]], carry_in: Optional[Expr] = None) -> List[Expr]:
         max_weight = self.config.out_width
         result_bits: List[Expr] = []
-        carry: Optional[Expr] = None
+        carry: Optional[Expr] = carry_in
 
         for weight in range(max_weight):
             bits = list(columns.get(weight, []))

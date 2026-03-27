@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, ClassVar, Dict, List, Set, Tuple
+from typing import Callable, ClassVar, Dict, List, Optional, Set, Tuple
 
 from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import FinalStageAdderBase
 from sprouthdl.arithmetic.prefix_adders.prefix_adder_topologies import P_brent_kung, P_han_carlson, P_kogge_stone, P_ladner_fischer, P_ripple_carry, P_sklansky, P_sparse_kogge_stone_2, P_sparse_kogge_stone_4, Pair, analyze_prefix_matrix, legalize_P
@@ -20,7 +20,7 @@ def _find_split(nodes: Set[Pair], i: int, j: int) -> int | None:
 
 class PlusOperatorAdderFinalStage(FinalStageAdderBase):
 
-    def resolve(self, columns: Dict[int, List[Expr]]) -> List[Expr]:
+    def resolve(self, columns: Dict[int, List[Expr]], carry_in: Optional[Expr] = None) -> List[Expr]:
 
         # columns to UInt inputs
         width = self.config.out_width
@@ -48,6 +48,9 @@ class PlusOperatorAdderFinalStage(FinalStageAdderBase):
         a_unit = cast(Concat(row_a), UInt(working_width))
         b_unit = cast(Concat(row_b), UInt(working_width))
         sum_unit = a_unit + b_unit
+        if carry_in is not None:
+            cin = cast(Concat([carry_in]), UInt(working_width))
+            sum_unit = sum_unit + cin
         return [sum_unit[i] for i in range(sum_unit.typ.width)]
 
 
@@ -59,7 +62,7 @@ class PrefixAdderFinalStage(FinalStageAdderBase):
     )
     depth_optimize: ClassVar[bool] = True
 
-    def resolve(self, columns: Dict[int, List[Expr]]) -> List[Expr]:
+    def resolve(self, columns: Dict[int, List[Expr]], carry_in: Optional[Expr] = None) -> List[Expr]:
         """Collapse <=2 bits/column into a final sum using a prefix carry network.
 
         `columns` is expected to come from the compressor tree, so each column
@@ -136,8 +139,10 @@ class PrefixAdderFinalStage(FinalStageAdderBase):
             gp_cache[key] = result
             return result
 
-        # c[0] is Cin=0; c[i+1] is carry into bit i+1.
+        # c[0] is Cin; c[i+1] is carry into bit i+1.
         carries: List[Expr] = [zero] * (working_width + 1)
+        if carry_in is not None:
+            carries[0] = carry_in
         for idx in range(working_width):
             g_prefix, p_prefix = gp(idx, 0)
             carries[idx + 1] = g_prefix | (p_prefix & carries[0])

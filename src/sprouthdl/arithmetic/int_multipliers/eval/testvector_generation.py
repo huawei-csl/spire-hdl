@@ -305,6 +305,57 @@ class AdderTestVectors(TwoInputArithmeticTestVectorsBase):
         return vecs
 
 
+class SubtractorTestVectors(TwoInputArithmeticTestVectorsBase):
+
+    def __init__(
+        self,
+        a_w: int,
+        b_w: int,
+        y_w: Optional[int] = None,
+        num_vectors: Optional[int] = None,
+        tb_sigma: Optional[float] = None,
+        a_encoding: Encoding = Encoding.unsigned,
+        b_encoding: Encoding = Encoding.unsigned,
+        y_encoding: Encoding = Encoding.unsigned,
+    ):
+        y_width = max(a_w, b_w) + 1 if y_w is None else y_w
+        super().__init__(
+            a_w=a_w,
+            b_w=b_w,
+            y_w=y_width,
+            num_vectors=num_vectors,
+            tb_sigma=tb_sigma,
+            a_encoding=a_encoding,
+            b_encoding=b_encoding,
+            y_encoding=y_encoding,
+        )
+
+    def generate(self) -> TestVectors:
+        if self.num_vectors is None:
+            self.num_vectors = 64
+
+        vecs = []
+        for _ in range(self.num_vectors):
+            if self.tb_sigma is not None:
+                va_value = self.a_encoding_model.get_normal_sample(self.a_w, self.tb_sigma)
+                vb_value = self.b_encoding_model.get_normal_sample(self.b_w, self.tb_sigma)
+            else:
+                va_value = self.a_encoding_model.get_uniform_sample(self.a_w)
+                vb_value = self.b_encoding_model.get_uniform_sample(self.b_w)
+
+            va_encoded = self.a_encoding_model.encode_value(va_value, self.a_w)
+            vb_encoded = self.b_encoding_model.encode_value(vb_value, self.b_w)
+
+            y_value = va_value - vb_value
+            y_encoded = self.y_encoding_model.encode_value(y_value, self.y_w)
+
+            vecs.append(
+                (f"{va_value}-{vb_value}", {"a": va_encoded, "b": vb_encoded}, {"y": y_encoded})
+            )
+
+        return vecs
+
+
 class EncoderDecoderTestVectors:
     def __init__(
         self,
