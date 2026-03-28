@@ -11,8 +11,8 @@ from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib
     TwoInputAritEncodings,
 )
 from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
-from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
-from sprouthdl.sprouthdl import Expr
+from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder, StageBasedSubtractor
+from sprouthdl.sprouthdl import Expr, Op2, Signal, cast, reset_shared_cache
 
 
 @dataclass
@@ -83,6 +83,38 @@ def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig) -> Expr:
     return adder.io.y
 
 
+@dataclass
+class SubtractorConfig:
+    """Configuration for choosing between Sprout operator and explicit subtractor."""
+
+    use_operator: bool = False
+    encoding: Encoding = Encoding.unsigned
+    optim_type: Literal["area", "speed"] = "area"
+    fsa_opt: FSAOption | None = None
+    full_output_bit: bool = True
+
+
+def build_subtractor(a: Expr, b: Expr, sub_cfg: SubtractorConfig) -> Expr:
+    if sub_cfg.use_operator:
+        return a - b
+
+    assert sub_cfg.fsa_opt is not None, "fsa_opt must be provided for explicit subtractors"
+    signed = is_signed(sub_cfg.encoding)
+
+    sub = StageBasedSubtractor(
+        a_w=a.typ.width,
+        b_w=b.typ.width,
+        signed_a=signed,
+        signed_b=signed,
+        optim_type=sub_cfg.optim_type,
+        fsa_cls=sub_cfg.fsa_opt.value,
+        full_output_bit=sub_cfg.full_output_bit,
+    ).make_internal()
+    sub.io.a <<= a
+    sub.io.b <<= b
+    return sub.io.y
+
+
 def adder_tree(values: Sequence[Expr], adder_cfg: AdderConfig) -> Expr:
     if len(values) == 0:
         raise ValueError("Adder tree requires at least one value")
@@ -93,3 +125,139 @@ def adder_tree(values: Sequence[Expr], adder_cfg: AdderConfig) -> Expr:
     left = adder_tree(values[:mid], adder_cfg)
     right = adder_tree(values[mid:], adder_cfg)
     return build_adder(left, right, adder_cfg)
+
+
+# ---------------------------------------------------------------------------
+# Graph transformation: replace arithmetic Op2 nodes with StageBased components
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ArithmeticConfig:
+    """Unified configuration for replacing arithmetic operators with StageBased components."""
+
+    encoding: Encoding = Encoding.unsigned
+    optim_type: Literal["area", "speed"] = "area"
+    fsa_opt: FSAOption = FSAOption.PREFIX_BRENT_KUNG
+    full_output_bit: bool = True
+    # multiplier-specific
+    multiplier_opt: MultiplierOption = MultiplierOption.STAGE_BASED_MULTIPLIER
+    ppg_opt: PPGOption = PPGOption.AND
+    ppa_opt: PPAOption = PPAOption.CARRY_SAVE_TREE
+
+
+def replace_arithmetic_ops(component, config: ArithmeticConfig) -> None:
+    """Walk the component's expression DAG and replace +/-/* Op2 nodes
+    (on same-width operands) with StageBased component subgraphs.
+
+    Modifies the expression graph in-place. Call before to_module().
+    """
+    from sprouthdl.sprouthdl_module import iter_values
+
+    # Prevent stale id() collisions in the global shared-wire cache
+    reset_shared_cache()
+
+    # Collect output signals as walk starting points
+    outputs = [sig for sig in iter_values(component.io)
+               if isinstance(sig, Signal) and sig.kind == "output"]
+
+    # Post-order DFS: children appear before parents in `order`
+    visited: set[int] = set()
+    order: list[Expr] = []
+
+    def walk(node: Expr | None) -> None:
+        if node is None or id(node) in visited:
+            return
+        visited.add(id(node))
+        for attr in ("a", "b", "sel"):
+            child = getattr(node, attr, None)
+            if isinstance(child, Expr):
+                walk(child)
+        if hasattr(node, "parts"):
+            for part in node.parts:
+                walk(part)
+        if isinstance(node, Signal) and node._driver is not None:
+            walk(node._driver)
+        order.append(node)
+
+    for sig in outputs:
+        walk(sig)
+
+    # Build replacement map bottom-up
+    replacements: dict[int, Expr] = {}
+
+    def get(expr: Expr) -> Expr:
+        return replacements.get(id(expr), expr)
+
+    for node in order:
+        if not isinstance(node, Op2) or node.op not in ("+", "-", "*"):
+            continue
+
+        a_expr = get(node.a)
+        b_expr = get(node.b)
+
+        if a_expr.typ.width != b_expr.typ.width:
+            continue
+
+        w = a_expr.typ.width
+        signed_a = getattr(a_expr.typ, "signed", False)
+        signed_b = getattr(b_expr.typ, "signed", False)
+        signed = signed_a or signed_b
+
+        if node.op == "+":
+            repl = StageBasedPrefixAdder(
+                a_w=w, b_w=w,
+                signed_a=signed, signed_b=signed,
+                optim_type=config.optim_type,
+                fsa_cls=config.fsa_opt.value,
+                full_output_bit=config.full_output_bit,
+            ).make_internal()
+            repl.io.a <<= a_expr
+            repl.io.b <<= b_expr
+            result = repl.io.y
+
+        elif node.op == "-":
+            repl = StageBasedSubtractor(
+                a_w=w, b_w=w,
+                signed_a=signed, signed_b=signed,
+                optim_type=config.optim_type,
+                fsa_cls=config.fsa_opt.value,
+                full_output_bit=config.full_output_bit,
+            ).make_internal()
+            repl.io.a <<= a_expr
+            repl.io.b <<= b_expr
+            result = repl.io.y
+
+        elif node.op == "*":
+            enc = Encoding.twos_complement if signed else Encoding.unsigned
+            repl = config.multiplier_opt.value(
+                a_w=w, b_w=w,
+                a_encoding=enc,
+                b_encoding=enc,
+                ppg_cls=config.ppg_opt.value,
+                ppa_cls=config.ppa_opt.value,
+                fsa_cls=config.fsa_opt.value,
+                optim_type=config.optim_type,
+            ).make_internal()
+            repl.io.a <<= a_expr
+            repl.io.b <<= b_expr
+            result = repl.io.y
+
+        # Match the original Op2 type (width/signedness)
+        if result.typ.width != node.typ.width or result.typ.signed != node.typ.signed:
+            result = cast(result, node.typ)
+
+        replacements[id(node)] = result
+
+    if not replacements:
+        return
+
+    # Rewrite all references to replaced nodes
+    for node in order:
+        if id(node) in replacements:
+            continue
+        for attr in ("a", "b", "sel", "_driver"):
+            old = getattr(node, attr, None)
+            if old is not None and id(old) in replacements:
+                setattr(node, attr, replacements[id(old)])
+        if hasattr(node, "parts"):
+            node.parts = [replacements.get(id(p), p) for p in node.parts]

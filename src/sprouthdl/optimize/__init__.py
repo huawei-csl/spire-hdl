@@ -7,7 +7,7 @@ from sprouthdl.optimize.optimize import (  # noqa: F401
     set_cache_dir,
     get_cache_dir,
     clear_optimization_cache,
-    # Internal helpers used by generate_pareto_caches
+    # Internal helpers used by generate_caches
     _cache,
     _DISK_CACHE_DIR,
     _DISK_CACHE_VERSION,
