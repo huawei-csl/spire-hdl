@@ -42,7 +42,10 @@ from sprouthdl.sprouthdl import Expr, ExprLike, Signal, as_expr, mux
 # Condition stack helpers
 # ---------------------------------------------------------------------------
 
-_active_conditions: List[Expr] = []
+class _ConditionState:
+    active: List[Expr] = []
+    pending_if_chain: Optional["_IfChain"] = None
+    switch_stack: List["_SwitchState"] = []
 
 
 def _bool_const(value: bool) -> Expr:
@@ -55,20 +58,20 @@ def _validate_bool(expr: Expr, *, context: str) -> None:
 
 
 def _push_condition(cond: Expr) -> None:
-    _active_conditions.append(cond)
+    _ConditionState.active.append(cond)
 
 
 def _pop_condition() -> None:
-    if not _active_conditions:
+    if not _ConditionState.active:
         raise RuntimeError("Condition stack underflow")
-    _active_conditions.pop()
+    _ConditionState.active.pop()
 
 
 def _combined_condition() -> Optional[Expr]:
-    if not _active_conditions:
+    if not _ConditionState.active:
         return None
-    cond = _active_conditions[0]
-    for extra in _active_conditions[1:]:
+    cond = _ConditionState.active[0]
+    for extra in _ConditionState.active[1:]:
         cond = cond & extra
     return cond
 
@@ -100,9 +103,6 @@ class _IfChain:
         return cond_expr
 
 
-_pending_if_chain: Optional[_IfChain] = None
-
-
 class _ConditionalContext:
     def __init__(self, condition: Expr, on_exit: Optional[Callable[[], None]] = None):
         _validate_bool(condition, context="Conditional")
@@ -121,13 +121,11 @@ class _ConditionalContext:
 
 
 def _set_pending_chain(chain: Optional[_IfChain]) -> None:
-    global _pending_if_chain
-    _pending_if_chain = chain
+    _ConditionState.pending_if_chain = chain
 
 
 def _clear_pending_chain_if_needed() -> None:
-    if _pending_if_chain is not None:
-        # A new if_ starts a fresh chain; discard any pending chain.
+    if _ConditionState.pending_if_chain is not None:
         _set_pending_chain(None)
 
 
@@ -147,12 +145,13 @@ def if_(condition: ExprLike) -> _ConditionalContext:
 def elif_(condition: ExprLike) -> _ConditionalContext:
     """Context manager representing an `elif` branch."""
 
-    if _pending_if_chain is None:
+    if _ConditionState.pending_if_chain is None:
         raise RuntimeError("elif_ must follow an if_ or another elif_ block")
-    cond = _pending_if_chain.branch(condition, context="elif")
+    chain = _ConditionState.pending_if_chain
+    cond = chain.branch(condition, context="elif")
 
     def _on_exit():
-        _set_pending_chain(_pending_if_chain)
+        _set_pending_chain(chain)
 
     return _ConditionalContext(cond, on_exit=_on_exit)
 
@@ -160,9 +159,10 @@ def elif_(condition: ExprLike) -> _ConditionalContext:
 def else_() -> _ConditionalContext:
     """Context manager representing an `else` branch."""
 
-    if _pending_if_chain is None:
+    if _ConditionState.pending_if_chain is None:
         raise RuntimeError("else_ must follow an if_ or elif_ block")
-    cond = _pending_if_chain.default()
+    chain = _ConditionState.pending_if_chain
+    cond = chain.default()
 
     def _on_exit():
         _set_pending_chain(None)
@@ -214,9 +214,6 @@ class _SwitchState:
         self._closed = False
 
 
-_switch_stack: List[_SwitchState] = []
-
-
 class switch_:
     """Context manager modeling a Verilog-style `switch_`/`case_` statement."""
 
@@ -227,22 +224,22 @@ class switch_:
     def __enter__(self):
         if self._entered:
             raise RuntimeError("switch_ context cannot be re-entered while active")
-        _switch_stack.append(self._state)
+        _ConditionState.switch_stack.append(self._state)
         self._entered = True
         return self
 
     def __exit__(self, exc_type, exc, tb):
         if not self._entered:
             raise RuntimeError("switch_ context was not active")
-        if not _switch_stack or _switch_stack[-1] is not self._state:
+        if not _ConditionState.switch_stack or _ConditionState.switch_stack[-1] is not self._state:
             raise RuntimeError("switch_ stack corruption detected")
-        _switch_stack.pop()
+        _ConditionState.switch_stack.pop()
         self._state.reset()
         self._entered = False
         return False
 
     def _ensure_active(self, context: str) -> None:
-        if not self._entered or not _switch_stack or _switch_stack[-1] is not self._state:
+        if not self._entered or not _ConditionState.switch_stack or _ConditionState.switch_stack[-1] is not self._state:
             raise RuntimeError(f"{context} must be used within an active switch_ context")
 
     def case_(self, *values: ExprLike) -> _ConditionalContext:
@@ -257,9 +254,9 @@ class switch_:
 
 
 def _current_switch_state(context: str) -> _SwitchState:
-    if not _switch_stack:
+    if not _ConditionState.switch_stack:
         raise RuntimeError(f"{context} must be used inside a switch_ block")
-    return _switch_stack[-1]
+    return _ConditionState.switch_stack[-1]
 
 
 def case_(*values: ExprLike) -> _ConditionalContext:

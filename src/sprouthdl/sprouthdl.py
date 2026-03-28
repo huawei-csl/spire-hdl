@@ -3,48 +3,46 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 import hashlib
+import itertools
 import random
 import time
 from typing import Optional, Union, Sequence
-
 
 # -----------------------------
 # Shared sub-expression (CSE) support
 # -----------------------------
 
 class _SharedCache:
-    """
-    Tracks how many times an Expr *instance* is wrapped via as_expr(...).
-    On the 2nd time, we create a Verilog wire (sig_{index}) with a driver = original expr.
-    Further uses return that wire to shrink emitted Verilog.
-    """
-    def __init__(self):
-        self.counts: dict[int, int] = {}        # node_id -> count
-        self.expr2sig: dict[int, "Signal"] = {} # node_id -> created Signal
-        self.wires: list["Signal"] = []         # all created wires in encounter order
-        self.index: int = 0                     # for naming sig_{index}
+    counts: dict[int, int] = {}
+    expr2sig: dict[int, "Signal"] = {}
+    wires: list["Signal"] = []
+    index: int = 0
+    uid = itertools.count(1)
 
-global _SHARED
-_SHARED = _SharedCache()
+    @classmethod
+    def reset(cls):
+        cls.counts.clear()
+        cls.expr2sig.clear()
+        cls.wires.clear()
+        cls.index = 0
+
 
 def reset_shared_cache():
     """Call this before emitting each Verilog module to avoid cross-module bleed."""
-    _SHARED.counts.clear()
-    _SHARED.expr2sig.clear()
-    _SHARED.wires.clear()
-    _SHARED.index = 0
+    _SharedCache.reset()
 
 def get_shared_wires() -> list["Signal"]:
     """Access the created wires (for inclusion in module's declarations/assigns)."""
-    return list(_SHARED.wires)
+    return list(_SharedCache.wires)
 
 def _create_new_shared_wire(typ: HDLType) -> "Signal":
-    name = f"sig_{_SHARED.index}"
-    _SHARED.index += 1
+    name = f"sig_{_SharedCache.index}"
+    _SharedCache.index += 1
     sig = Signal(name, typ, "wire")
     sig._auto_generated = True
-    _SHARED.wires.append(sig)
+    _SharedCache.wires.append(sig)
     return sig
+
 
 def _maybe_share(e: "Expr", force_share=False) -> "Expr":
     """
@@ -52,21 +50,28 @@ def _maybe_share(e: "Expr", force_share=False) -> "Expr":
     create a 'wire sig_{index}' that drives from the original expression.
     On 3rd+ times, reuse the same wire.
     Leaf Signals/Consts are skipped (they're already "named"/literal).
+
+    Each Expr is keyed by a monotonically increasing UID (assigned lazily)
+    rather than ``id(e)``, so that Python's address recycling after GC
+    cannot cause false cache hits.
     """
     if isinstance(e, (Signal, Const)):
         return e
 
-    nid = id(e)
-    cnt = _SHARED.counts.get(nid, 0) + 1
-    _SHARED.counts[nid] = cnt
+    uid = getattr(e, '_cse_uid', None)
+    if uid is None:
+        uid = next(_SharedCache.uid)
+        e._cse_uid = uid
+    cnt = _SharedCache.counts.get(uid, 0) + 1
+    _SharedCache.counts[uid] = cnt
     cnt_share = 1 # at what count start sharing
     if cnt == cnt_share or (force_share and cnt <= 1):
         sig = _create_new_shared_wire(e.typ)
         sig._driver = e  # continuous assignment: assign sig = <original expr>;
-        _SHARED.expr2sig[nid] = sig
+        _SharedCache.expr2sig[uid] = sig
         return sig
     elif cnt > cnt_share:
-        return _SHARED.expr2sig[nid]
+        return _SharedCache.expr2sig[uid]
     else:
         # 1st sighting: return original expr
         return e
@@ -315,11 +320,11 @@ def cast(expr: ExprLike, to_type: HDLType) -> Signal:
 # explicit register
 class Register(Signal):
     def __init__(self, typ: HDLType, init: Optional[ExprLike] = None, name: Optional[str]=None):
+        if name is None:
+            name = f"reg_{id(self)}"
+        super().__init__(name, typ, kind="reg")
         if init is not None:
             self.set_init(init)
-        if name is None:
-            name = f"reg_{id(self)}"            
-        super().__init__(name, typ, kind="reg")
 
 # explicit wire
 class Wire(Signal):

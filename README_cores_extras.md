@@ -218,7 +218,6 @@ For some scripts you might need to add `PYTHONPATH=$(pwd)` before running the co
 
 ## Todo
 
-- remove _SHARED object (now used for verilog generation)
 - remove is_bool flag, probably not necessary, just use length of 1
 - add better hierarchy capablities / all in graph.
 - Uint(value), optional length bit?

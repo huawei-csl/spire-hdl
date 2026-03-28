@@ -6,7 +6,7 @@ import time
 
 
 from sprouthdl import VERILOG_BANNER
-from sprouthdl.sprouthdl import Bool, Expr, ExprLike, HDLType, Signal, UInt, cat, fit_width, _SHARED, reset_shared_cache
+from sprouthdl.sprouthdl import Bool, Expr, ExprLike, HDLType, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
 
 
 from typing import Any, Dict, Iterable, List, Optional
@@ -209,8 +209,6 @@ class Module:
         """
         self._collect_signals_from_outputs(self._ports_of("output"))
 
-    from typing import Dict, List
-
     # fast version
     def _collect_signals_from_outputs(self, outputs: List["Signal"]) -> None:
         """
@@ -314,10 +312,10 @@ class Module:
 
                 if sid not in port_ids:
                     if node.kind in ("input", "output"):
-                            raise Warning(
-                                f"Internal signal '{node.name}' has port kind '{node.kind}'. "
-                                "Use wire/reg for internals. For internal components use make_internal()"
-                            )
+                        raise RuntimeError(
+                            f"Internal signal '{node.name}' has port kind '{node.kind}'. "
+                            "Use wire/reg for internals. For internal components use make_internal()"
+                        )
                     uniquify_internal(node)
 
                     if sid not in s_in:
@@ -415,11 +413,11 @@ class Module:
             lines.append(f"  {dir_} {sign}{rng} {p.name};")
 
         # Internals
-        # wires = self._internals_of("wire") + _SHARED.wires
+        # wires = self._internals_of("wire") + get_shared_wires()
         # instead of the above merge to avoid duplication if called multiple times
         wires = self._internals_of("wire")
         if not collect_signals:
-            wires += [s for s in _SHARED.wires if not any(s is w for w in wires)]
+            wires += [s for s in get_shared_wires() if not any(s is w for w in wires)]
 
         regs = self._internals_of("reg")
         lines.append('// Wires')

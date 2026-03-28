@@ -2,6 +2,131 @@ from sprouthdl.sprouthdl_module import Module
 from sprouthdl.sprouthdl import *
 from sprouthdl.sprouthdl import Signal, Expr, Const, Op1, Op2, Ternary, Concat, Slice, Resize
 from sprouthdl.sprouthdl_simulator_base import SimulatorBase
+from sprouthdl.sprouthdl_visitor import ExprVisitor
+
+
+# ---------------------------------------------------------------------------
+# Expression evaluator (visitor) for bit-pattern simulation
+# ---------------------------------------------------------------------------
+
+class _SimExprEval(ExprVisitor[int]):
+    """Evaluates an Expr tree to a Python int bit-pattern."""
+
+    def __init__(self, sim: "Simulator") -> None:
+        super().__init__()
+        self._sim = sim
+        self._visiting: set = set()
+
+    def visit_const(self, e: Const) -> int:
+        return _to_bits(e.value, e.typ.width)
+
+    def visit_signal(self, e: Signal) -> int:
+        return self._sim._eval_signal_bits(e)
+
+    def visit_op1(self, e: Op1) -> int:
+        a = self.visit(e.a)
+        if e.op == "~":
+            return _to_bits(~a, e.typ.width)
+        raise NotImplementedError(f"Unary op '{e.op}' not implemented.")
+
+    def visit_op2(self, e: Op2) -> int:
+        op = e.op
+        tw = e.typ.width
+
+        if op in ("&", "|", "^"):
+            av = self.visit(e.a)
+            bv = self.visit(e.b)
+            if op == "&":
+                return _to_bits(av & bv, tw)
+            elif op == "|":
+                return _to_bits(av | bv, tw)
+            else:
+                return _to_bits(av ^ bv, tw)
+
+        elif op == "nand":  # experimental feature
+            av = self.visit(e.a)
+            bv = self.visit(e.b)
+            return _to_bits(~(av & bv), tw)
+
+        elif op in ("+", "-"):
+            aw = e.a.typ.width
+            bw = e.b.typ.width
+            av = _resize_bits(self.visit(e.a), aw, tw, e.a.typ.signed)
+            bv = _resize_bits(self.visit(e.b), bw, tw, e.b.typ.signed)
+            if op == "+":
+                return _to_bits(av + bv, tw)
+            else:
+                return _to_bits(av - bv, tw)
+
+        elif op == "*":
+            aw = e.a.typ.width
+            bw = e.b.typ.width
+            a_raw = self.visit(e.a)
+            b_raw = self.visit(e.b)
+            a_int = _from_bits_signed(a_raw, aw) if e.a.typ.signed else _to_bits(a_raw, aw)
+            b_int = _from_bits_signed(b_raw, bw) if e.b.typ.signed else _to_bits(b_raw, bw)
+            prod = a_int * b_int
+            return _to_bits(prod, tw)
+
+        elif op in ("<<", ">>"):
+            av = self.visit(e.a)
+            bv = self.visit(e.b)
+            shift = _to_bits(bv, max(e.b.typ.width, 32))
+            if op == "<<":
+                return _to_bits(av << shift, tw)
+            else:
+                src_w = e.a.typ.width
+                av_src = _to_bits(av, src_w)
+                return _to_bits(av_src >> shift, tw)
+
+        elif op in ("==", "!=", "<", "<=", ">", ">="):
+            cw = max(e.a.typ.width, e.b.typ.width)
+            av_bits = _resize_bits(self.visit(e.a), e.a.typ.width, cw, e.a.typ.signed)
+            bv_bits = _resize_bits(self.visit(e.b), e.b.typ.width, cw, e.b.typ.signed)
+            if op in ("==", "!="):
+                eq = av_bits == bv_bits
+                val = 1 if (eq if op == "==" else not eq) else 0
+            else:
+                signed = e.a.typ.signed or e.b.typ.signed
+                ai = _from_bits_signed(av_bits, cw) if signed else av_bits
+                bi = _from_bits_signed(bv_bits, cw) if signed else bv_bits
+                if op == "<":
+                    val = 1 if ai < bi else 0
+                elif op == "<=":
+                    val = 1 if ai <= bi else 0
+                elif op == ">":
+                    val = 1 if ai > bi else 0
+                else:
+                    val = 1 if ai >= bi else 0
+            return _to_bits(val, e.typ.width)
+
+        else:
+            raise NotImplementedError(f"Binary op '{op}' not implemented.")
+
+    def visit_ternary(self, e: Ternary) -> int:
+        sel = self.visit(e.sel)
+        chosen = e.a if sel != 0 else e.b
+        cbits = self.visit(chosen)
+        return _resize_bits(cbits, chosen.typ.width, e.typ.width, chosen.typ.signed)
+
+    def visit_concat(self, e: Concat) -> int:
+        acc = 0
+        shift = 0
+        for p in e.parts:
+            pv = self.visit(p)
+            width = p.typ.width
+            acc |= _to_bits(pv, width) << shift
+            shift += width
+        return _to_bits(acc, e.typ.width)
+
+    def visit_slice(self, e: Slice) -> int:
+        av = self.visit(e.a)
+        shifted = av >> e.lsb
+        return _to_bits(shifted, e.typ.width)
+
+    def visit_resize(self, e: Resize) -> int:
+        av = self.visit(e.a)
+        return _resize_bits(av, e.a.typ.width, e.to_width, e.a.typ.signed)
 
 
 class Simulator(SimulatorBase):
@@ -32,7 +157,7 @@ class Simulator(SimulatorBase):
 
         self._by_name = {s.name: s for s in self.m._signals}
 
-        self._cache_expr: dict[int, int] = {}
+        self._expr_eval = _SimExprEval(self)
         self._cache_sig: dict[int, int] = {}
         self._time_steps = 0
 
@@ -148,7 +273,7 @@ class Simulator(SimulatorBase):
         raise TypeError(f"Expected Signal or str, got {type(ref)}")
 
     def _invalidate(self):
-        self._cache_expr.clear()
+        self._expr_eval.clear_cache()
         self._cache_sig.clear()
 
     def _compute_next_state(self) -> dict[int, int]:
@@ -175,7 +300,7 @@ class Simulator(SimulatorBase):
 
     # ------- Expression evaluation (to bit patterns) -------
 
-    def _eval_signal_bits(self, s: Signal, _visiting: Optional[set] = None) -> int:
+    def _eval_signal_bits(self, s: Signal) -> int:
         sid = id(s)
         if sid in self._cache_sig:
             return self._cache_sig[sid]
@@ -189,14 +314,13 @@ class Simulator(SimulatorBase):
         elif s.kind in ("wire", "output"):
             if s._driver is None:
                 raise ValueError(f"Signal '{s.name}' ({s.kind}) has no driver.")
-            if _visiting is None:
-                _visiting = set()
+            visiting = self._expr_eval._visiting
             key = ("sig", sid)
-            if key in _visiting:
+            if key in visiting:
                 raise RuntimeError(f"Combinational loop detected involving '{s.name}'.")
-            _visiting.add(key)
-            drv_bits = self._eval_expr_bits(s._driver, _visiting)
-            _visiting.remove(key)
+            visiting.add(key)
+            drv_bits = self._expr_eval.visit(s._driver)
+            visiting.remove(key)
             bits = _resize_bits(drv_bits, s._driver.typ.width, s.typ.width, s._driver.typ.signed)
         else:
             raise TypeError(f"Unknown signal kind: {s.kind}")
@@ -204,147 +328,9 @@ class Simulator(SimulatorBase):
         self._cache_sig[sid] = bits
         return bits
 
-    def _eval_expr_bits(self, e: Expr, _visiting: Optional[set] = None) -> int:
-        """Evaluate expression e to a bit-pattern of width e.typ.width."""
-        eid = id(e)
-        if eid in self._cache_expr:
-            return self._cache_expr[eid]
-
-        def is_expr_instance(obj, instance_type):
-            # return _clsname(obj) == instance_type.__name__
-            return isinstance(obj, instance_type)
-
-        if is_expr_instance(e, Const):
-            bits = _to_bits(e.value, e.typ.width)
-
-        elif is_expr_instance(e, Signal):
-            bits = self._eval_signal_bits(e, _visiting)
-
-        elif is_expr_instance(e, Op1):
-            a = self._eval_expr_bits(e.a, _visiting)
-            if e.op == "~":
-                bits = _to_bits(~a, e.typ.width)
-            else:
-                raise NotImplementedError(f"Unary op '{e.op}' not implemented.")
-
-        elif is_expr_instance(e, Op2):
-            op = e.op
-            tw = e.typ.width
-
-            if op in ("&", "|", "^"):
-                # Bitwise: inputs are already Resize'd by op_bit() to match widths
-                av = self._eval_expr_bits(e.a, _visiting)
-                bv = self._eval_expr_bits(e.b, _visiting)
-                if op == "&":
-                    bits = _to_bits(av & bv, tw)
-                elif op == "|":
-                    bits = _to_bits(av | bv, tw)
-                else:
-                    bits = _to_bits(av ^ bv, tw)
-
-            elif op == "nand": # experimental feature
-                # Bitwise NAND: inputs are already Resize'd by op_bit() to match widths
-                av = self._eval_expr_bits(e.a, _visiting)
-                bv = self._eval_expr_bits(e.b, _visiting)
-                bits = _to_bits(~(av & bv), tw)
-
-            elif op in ("+", "-"):
-                # Extend both operands to result width using their own signedness
-                aw = e.a.typ.width
-                bw = e.b.typ.width
-                av = _resize_bits(self._eval_expr_bits(e.a, _visiting), aw, tw, e.a.typ.signed)
-                bv = _resize_bits(self._eval_expr_bits(e.b, _visiting), bw, tw, e.b.typ.signed)
-                if op == "+":
-                    bits = _to_bits(av + bv, tw)  # two's-complement add
-                else:
-                    bits = _to_bits(av - bv, tw)
-
-            elif op == "*":
-                # Multiply with signedness
-                aw = e.a.typ.width
-                bw = e.b.typ.width
-                a_raw = self._eval_expr_bits(e.a, _visiting)
-                b_raw = self._eval_expr_bits(e.b, _visiting)
-                a_int = _from_bits_signed(a_raw, aw) if e.a.typ.signed else _to_bits(a_raw, aw)
-                b_int = _from_bits_signed(b_raw, bw) if e.b.typ.signed else _to_bits(b_raw, bw)
-                prod = a_int * b_int
-                bits = _to_bits(prod, tw)
-
-            elif op in ("<<", ">>"):
-                av = self._eval_expr_bits(e.a, _visiting)
-                bv = self._eval_expr_bits(e.b, _visiting)
-                shift = _to_bits(bv, max(e.b.typ.width, 32))  # treat as non-negative small int
-                if op == "<<":
-                    bits = _to_bits(av << shift, tw)
-                else:
-                    # Logical right shift on bit pattern
-                    # Compute using the source width (logical, not arithmetic)
-                    src_w = e.a.typ.width
-                    av_src = _to_bits(av, src_w)
-                    bits = _to_bits(av_src >> shift, tw)
-
-            elif op in ("==", "!=", "<", "<=", ">", ">="):
-                # Compare after extending both to a common width.
-                cw = max(e.a.typ.width, e.b.typ.width)
-                av_bits = _resize_bits(self._eval_expr_bits(e.a, _visiting), e.a.typ.width, cw, e.a.typ.signed)
-                bv_bits = _resize_bits(self._eval_expr_bits(e.b, _visiting), e.b.typ.width, cw, e.b.typ.signed)
-
-                if op in ("==", "!="):
-                    # Bitwise equality over common width
-                    eq = av_bits == bv_bits
-                    val = 1 if (eq if op == "==" else not eq) else 0
-                else:
-                    # Relational: signed if either is signed
-                    signed = e.a.typ.signed or e.b.typ.signed
-                    ai = _from_bits_signed(av_bits, cw) if signed else av_bits
-                    bi = _from_bits_signed(bv_bits, cw) if signed else bv_bits
-                    if op == "<":
-                        val = 1 if ai < bi else 0
-                    elif op == "<=":
-                        val = 1 if ai <= bi else 0
-                    elif op == ">":
-                        val = 1 if ai > bi else 0
-                    else:
-                        val = 1 if ai >= bi else 0
-                bits = _to_bits(val, e.typ.width)
-
-            else:
-                raise NotImplementedError(f"Binary op '{op}' not implemented.")
-
-        elif is_expr_instance(e, Ternary):
-            sel = self._eval_expr_bits(e.sel, _visiting)
-            # Evaluate chosen branch and resize to the ternary's result type
-            chosen = e.a if sel != 0 else e.b
-            cbits = self._eval_expr_bits(chosen, _visiting)
-            from_w = chosen.typ.width
-            bits = _resize_bits(cbits, from_w, e.typ.width, chosen.typ.signed)
-
-        elif is_expr_instance(e, Concat):
-            acc = 0
-            shift = 0
-            for p in e.parts:
-                pv = self._eval_expr_bits(p, _visiting)
-                width = p.typ.width
-                acc |= _to_bits(pv, width) << shift
-                shift += width
-            bits = _to_bits(acc, e.typ.width)
-
-        elif is_expr_instance(e, Slice):
-            av = self._eval_expr_bits(e.a, _visiting)
-            # Use the full source width, then slice
-            shifted = av >> e.lsb
-            width = e.typ.width
-            bits = _to_bits(shifted, width)
-
-        elif is_expr_instance(e, Resize):
-            av = self._eval_expr_bits(e.a, _visiting)
-            bits = _resize_bits(av, e.a.typ.width, e.to_width, e.a.typ.signed)
-
-        else:
-            raise TypeError(f"Unsupported Expr subclass: {type(e)}")
-
-        self._cache_expr[eid] = bits
-        return bits
+    def _eval_expr_bits(self, e: Expr) -> int:
+        """Evaluate expression *e* to a bit-pattern of width ``e.typ.width``."""
+        return self._expr_eval.visit(e)
 
     # peek logic not teste yet -> not really working
     # sprouthdl_simulator.py (patched parts)
