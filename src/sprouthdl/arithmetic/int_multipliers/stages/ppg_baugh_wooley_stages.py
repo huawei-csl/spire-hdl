@@ -57,7 +57,7 @@ class BaughWooleyPartialProductGenerator(PartialProductGeneratorBase):
         # correction bits lower
         if wa == wb:
             cols[wa].append(Const(True, Bool()))
-        else: # more general case where a_width != b_width, not sure if correct
+        else: # asymmetric case: correction = 2^(wa-1) + 2^(wb-1)
             cols[wa - 1].append(Const(True, Bool()))
             cols[wb - 1].append(Const(True, Bool()))
 

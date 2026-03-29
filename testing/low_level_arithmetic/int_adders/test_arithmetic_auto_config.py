@@ -226,5 +226,142 @@ def test_objectives_produce_different_configs():
     assert delay_cfg["aig_depth"] <= area_cfg["aig_depth"]
 
 
+# ---------------------------------------------------------------------------
+# Asymmetric-width tests
+# ---------------------------------------------------------------------------
+
+A_W = 4
+B_W = 8
+
+
+@dataclass
+class _AsymALUIO:
+    a: Signal
+    b: Signal
+    y_add: Signal
+    y_sub: Signal
+    y_mul: Signal
+
+
+class _AsymALU(Component):
+    def __init__(self, a_w: int, b_w: int):
+        self.a_w = a_w
+        self.b_w = b_w
+        max_w = max(a_w, b_w)
+        self.io = _AsymALUIO(
+            a=Signal(name="a", typ=UInt(a_w), kind="input"),
+            b=Signal(name="b", typ=UInt(b_w), kind="input"),
+            y_add=Signal(name="y_add", typ=UInt(max_w + 1), kind="output"),
+            y_sub=Signal(name="y_sub", typ=UInt(max_w + 1), kind="output"),
+            y_mul=Signal(name="y_mul", typ=UInt(a_w + b_w), kind="output"),
+        )
+        self.elaborate()
+
+    def elaborate(self):
+        self.io.y_add <<= self.io.a + self.io.b
+        self.io.y_sub <<= self.io.a - self.io.b
+        self.io.y_mul <<= self.io.a * self.io.b
+
+
+def test_asymmetric_replaces_all_ops():
+    """Asymmetric-width Op2 nodes must all be replaced."""
+    reset_shared_cache()
+
+    comp = _AsymALU(A_W, B_W)
+    replace_arithmetic_ops(comp, AUTO_CFG)
+    module = comp.to_module("AsymALU", with_clock=True, with_reset=True)
+
+    report = module.module_analyze()
+    assert report.by_class_incl_typ.get("Op2<+>", 0) == 0
+    assert report.by_class_incl_typ.get("Op2<->", 0) == 0
+    assert report.by_class_incl_typ.get("Op2<*>", 0) == 0
+
+
+def test_asymmetric_correctness_add():
+    """Replaced asymmetric adder (4+8 bit) produces correct results."""
+    reset_shared_cache()
+
+    comp = _AsymALU(A_W, B_W)
+    replace_arithmetic_ops(comp, AUTO_CFG)
+    module = comp.to_module("AsymALU_add", with_clock=True, with_reset=True)
+
+    vecs = AdderTestVectors(
+        a_w=A_W, b_w=B_W, y_w=comp.io.y_add.typ.width,
+        num_vectors=N_VECS,
+        a_encoding=Encoding.unsigned, b_encoding=Encoding.unsigned,
+        y_encoding=Encoding.unsigned,
+    ).generate()
+
+    sim = Simulator(module)
+    remapped = [(n, i, {"y_add": e["y"]}) for n, i, e in vecs]
+    run_vectors_on_simulator(sim, remapped, use_signed=False, with_clk=False)
+
+
+def test_asymmetric_correctness_sub():
+    """Replaced asymmetric subtractor (4-8 bit) produces correct results."""
+    reset_shared_cache()
+
+    comp = _AsymALU(A_W, B_W)
+    replace_arithmetic_ops(comp, AUTO_CFG)
+    module = comp.to_module("AsymALU_sub", with_clock=True, with_reset=True)
+
+    vecs = SubtractorTestVectors(
+        a_w=A_W, b_w=B_W, y_w=comp.io.y_sub.typ.width,
+        num_vectors=N_VECS,
+        a_encoding=Encoding.unsigned, b_encoding=Encoding.unsigned,
+        y_encoding=Encoding.twos_complement,
+    ).generate()
+
+    sim = Simulator(module)
+    remapped = [(n, i, {"y_sub": e["y"]}) for n, i, e in vecs]
+    run_vectors_on_simulator(sim, remapped, use_signed=False, with_clk=False)
+
+
+def test_asymmetric_correctness_mul():
+    """Replaced asymmetric multiplier (4*8 bit) produces correct results."""
+    reset_shared_cache()
+
+    comp = _AsymALU(A_W, B_W)
+    replace_arithmetic_ops(comp, AUTO_CFG)
+    module = comp.to_module("AsymALU_mul", with_clock=True, with_reset=True)
+
+    vecs = MultiplierTestVectors(
+        a_w=A_W, b_w=B_W, y_w=comp.io.y_mul.typ.width,
+        num_vectors=N_VECS,
+        a_encoding=Encoding.unsigned, b_encoding=Encoding.unsigned,
+        y_encoding=Encoding.unsigned,
+    ).generate()
+
+    sim = Simulator(module)
+    remapped = [(n, i, {"y_mul": e["y"]}) for n, i, e in vecs]
+    run_vectors_on_simulator(sim, remapped, use_signed=False, with_clk=False)
+
+
+def test_asymmetric_transistor_comparison():
+    """Compare transistor count: plain vs auto-replaced for asymmetric ALU."""
+    reset_shared_cache()
+
+    comp_plain = _AsymALU(A_W, B_W)
+    mod_plain = comp_plain.to_module("AsymALU_plain")
+    ym_plain = get_yosys_metrics(mod_plain)
+    tc_plain = ym_plain["estimated_num_transistors"]
+
+    reset_shared_cache()
+
+    comp_auto = _AsymALU(A_W, B_W)
+    replace_arithmetic_ops(comp_auto, AUTO_CFG)
+    mod_auto = comp_auto.to_module("AsymALU_auto")
+    ym_auto = get_yosys_metrics(mod_auto)
+    tc_auto = ym_auto["estimated_num_transistors"]
+
+    print(f"\nAsymmetric ALU ({A_W}+{B_W} bit) transistor comparison:")
+    print(f"  Plain: {tc_plain}")
+    print(f"  Auto:  {tc_auto}")
+
+    report = mod_auto.module_analyze()
+    assert report.by_class_incl_typ.get("Op2<+>", 0) == 0
+    assert report.by_class_incl_typ.get("Op2<*>", 0) == 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
