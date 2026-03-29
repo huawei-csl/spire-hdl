@@ -201,6 +201,69 @@ Check out the `testing/examples/` directory for practical examples:
 
 See the [examples README](testing/examples/README.md) for detailed documentation and key concepts.
 
+## Automatic arithmetic optimization
+
+Sprout-HDL ships a library of configurable arithmetic building blocks: prefix adders (Kogge-Stone, Brent-Kung, Sklansky, ...), multipliers (stage-based with PPG/PPA/FSA selection), and subtractors.  Rather than requiring the user to pick the right topology, `replace_arithmetic_ops` can **automatically select the best configuration** for every `+`, `-`, and `*` operator in a design, guided by a pre-computed evaluation database.
+
+Three optimization objectives are available:
+
+| Objective | Minimizes | Good for |
+|-----------|-----------|----------|
+| `"area"`  | Yosys transistor count | Silicon area, power |
+| `"delay"` | AIG depth (AND-gate levels) | Clock frequency |
+| `"adp"`   | Area-delay product | Balanced designs |
+
+### Example: 16-bit unsigned adder
+
+The auto-config sweep evaluates all prefix-adder topologies and picks the best one per objective:
+
+| Objective | Topology | Transistors | AIG Depth |
+|-----------|----------|------------:|----------:|
+| plain (Yosys `+`) | *(default synthesis)* | 648 | 32 |
+| `area`    | Sparse Kogge-Stone (2) | 626 | 32 |
+| `delay`   | Kogge-Stone            | 952 | 22 |
+| `adp`     | Brent-Kung             | 746 | 26 |
+
+The `adp` objective automatically finds the Brent-Kung topology as a compromise between the area-optimized Sparse Kogge-Stone and the speed-optimized Kogge-Stone.
+
+### Example: 8-bit ALU (add + sub + mul)
+
+A complete 8-bit ALU with addition, subtraction, and multiplication, comparing Yosys default synthesis (`*` operator) against auto-optimized replacements:
+
+| Configuration | Transistors | AIG Depth |
+|---------------|------------:|----------:|
+| plain (Yosys `*`)  | 6168 | 127 |
+| `area`             | 3004 |  73 |
+| `delay`            | 3830 |  30 |
+| `adp`              | 3084 |  30 |
+
+The area objective achieves a **51% transistor reduction** over default synthesis.  The delay objective cuts critical-path depth from 127 to 30 AND-gate levels (**4.2x**), and the balanced `adp` objective achieves both nearly minimal area *and* minimal depth.
+
+### Usage
+
+```python
+from sprouthdl.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
+
+# Define your design using plain operators
+class ALU(Component):
+    def elaborate(self):
+        self.io.y_add <<= self.io.a + self.io.b
+        self.io.y_sub <<= self.io.a - self.io.b
+        self.io.y_mul <<= self.io.a * self.io.b
+
+alu = ALU(width=8)
+
+# Replace operators with optimized hardware — one line
+replace_arithmetic_ops(alu, ArithmeticAutoConfig(objective="adp"))
+
+module = alu.to_module("OptimizedALU")
+print(module.to_verilog())
+```
+
+Each `+`, `-`, and `*` in the expression graph is independently replaced with the empirically best prefix-adder or stage-based multiplier configuration for its specific bit-width and signedness.  For widths not in the evaluation database, the nearest data point is selected using logarithmic interpolation.
+
+See [`testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py`](testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py) for the full test and benchmark code.
+
 ## Next steps
 
 - Explore the `testing/examples/` directory to see working examples of components and modules

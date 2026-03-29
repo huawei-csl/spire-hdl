@@ -159,7 +159,7 @@ def get_aig_stats(m: Module, n_iter_optimizations: Optional[int] = None, simple=
     if simple:
         aig = optimize_aig_simple(aig, n_iter_optimizations=n_iter_optimizations)
     else:
-        aig, _ = optimize_aig_elaborate(aig, n_iter_optimizations=n_iter_optimizations)
+        aig, _ = optimize_aig_elaboraig, n_iter_optimizations=n_iter_optimizations)
 
     depth_aig = DepthAig(aig)
 

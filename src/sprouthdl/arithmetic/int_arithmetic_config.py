@@ -145,7 +145,23 @@ class ArithmeticConfig:
     ppa_opt: PPAOption = PPAOption.CARRY_SAVE_TREE
 
 
-def replace_arithmetic_ops(component, config: ArithmeticConfig) -> None:
+@dataclass
+class ArithmeticAutoConfig:
+    """Auto-selects the best per-operation config from the evaluation database.
+
+    Parameters
+    ----------
+    objective : "area" | "delay" | "adp"
+        - ``"area"``:  minimize yosys transistor count
+        - ``"delay"``: minimize AIG depth (proxy for critical-path delay)
+        - ``"adp"``:   minimize area-delay product (transistor_count * aig_depth)
+    """
+
+    objective: Literal["area", "delay", "adp"] = "area"
+    full_output_bit: bool = True
+
+
+def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoConfig) -> None:
     """Walk the component's expression DAG and replace +/-/* Op2 nodes
     (on same-width operands) with StageBased component subgraphs.
 
@@ -203,13 +219,22 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig) -> None:
         signed_b = getattr(b_expr.typ, "signed", False)
         signed = signed_a or signed_b
 
+        # Resolve per-node config when using auto mode
+        if isinstance(config, ArithmeticAutoConfig):
+            from sprouthdl.arithmetic.eval.auto_config import lookup_best_arithmetic_config
+            node_cfg = lookup_best_arithmetic_config(
+                node.op, w, signed, config.objective, config.full_output_bit,
+            )
+        else:
+            node_cfg = config
+
         if node.op == "+":
             repl = StageBasedPrefixAdder(
                 a_w=w, b_w=w,
                 signed_a=signed, signed_b=signed,
-                optim_type=config.optim_type,
-                fsa_cls=config.fsa_opt.value,
-                full_output_bit=config.full_output_bit,
+                optim_type=node_cfg.optim_type,
+                fsa_cls=node_cfg.fsa_opt.value,
+                full_output_bit=node_cfg.full_output_bit,
             ).make_internal()
             repl.io.a <<= a_expr
             repl.io.b <<= b_expr
@@ -219,9 +244,9 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig) -> None:
             repl = StageBasedSubtractor(
                 a_w=w, b_w=w,
                 signed_a=signed, signed_b=signed,
-                optim_type=config.optim_type,
-                fsa_cls=config.fsa_opt.value,
-                full_output_bit=config.full_output_bit,
+                optim_type=node_cfg.optim_type,
+                fsa_cls=node_cfg.fsa_opt.value,
+                full_output_bit=node_cfg.full_output_bit,
             ).make_internal()
             repl.io.a <<= a_expr
             repl.io.b <<= b_expr
@@ -229,14 +254,14 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig) -> None:
 
         elif node.op == "*":
             enc = Encoding.twos_complement if signed else Encoding.unsigned
-            repl = config.multiplier_opt.value(
+            repl = node_cfg.multiplier_opt.value(
                 a_w=w, b_w=w,
                 a_encoding=enc,
                 b_encoding=enc,
-                ppg_cls=config.ppg_opt.value,
-                ppa_cls=config.ppa_opt.value,
-                fsa_cls=config.fsa_opt.value,
-                optim_type=config.optim_type,
+                ppg_cls=node_cfg.ppg_opt.value,
+                ppa_cls=node_cfg.ppa_opt.value,
+                fsa_cls=node_cfg.fsa_opt.value,
+                optim_type=node_cfg.optim_type,
             ).make_internal()
             repl.io.a <<= a_expr
             repl.io.b <<= b_expr
