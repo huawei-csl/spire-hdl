@@ -1,16 +1,18 @@
 """Evaluate arithmetic configurations and build a config database.
 
-Sweeps adder FSA options and multiplier PPG x PPA x FSA combos across
-width pairs (including asymmetric and both orientations), collects yosys
-transistor count and AIG depth, and stores all results so the best config
-can be selected at lookup time for any objective (area, delay, ADP).
+Sweeps adder/subtractor FSA options and multiplier PPG x PPA x FSA combos
+across width pairs (including asymmetric and both orientations), collects
+yosys transistor count and AIG depth, and stores results as CSV or JSON.
 
 Usage:
     python -m sprouthdl.arithmetic.eval.run_arithmetic_eval
+    python -m sprouthdl.arithmetic.eval.run_arithmetic_eval --format json --no-pareto
 """
 
 from __future__ import annotations
 
+import argparse
+import csv
 import json
 import sys
 import time
@@ -29,15 +31,21 @@ from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib
     get_list_from_enum,
 )
 from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
-from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
+from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder, StageBasedSubtractor
 from sprouthdl.helpers import get_aig_stats, get_yosys_metrics
 from sprouthdl.sprouthdl import reset_shared_cache
 
-_OUT_PATH = Path(__file__).parent / "best_configs.json"
+_OUT_DIR = Path(__file__).parent
 
 _FSA_SKIP = {FSAOption.NONE, FSAOption.PLUS_OPERATOR}
 _PPG_SKIP = {PPGOption.NONE}
 _PPA_SKIP = {PPAOption.NONE}
+
+_CSV_COLUMNS = [
+    "op", "a_w", "b_w", "signed",
+    "fsa_opt", "ppg_opt", "ppa_opt", "optim_type",
+    "transistor_count", "aig_depth", "num_aig_gates",
+]
 
 
 def _width_pairs(bitwidths: list[int]) -> list[tuple[int, int]]:
@@ -52,84 +60,81 @@ def _width_pairs(bitwidths: list[int]) -> list[tuple[int, int]]:
     return sorted(pairs)
 
 
+def _pareto_filter(rows: list[dict]) -> list[dict]:
+    """Keep only Pareto-optimal rows (not dominated on both TC and depth)."""
+    result = []
+    for r in rows:
+        dominated = any(
+            o["transistor_count"] <= r["transistor_count"]
+            and o["aig_depth"] <= r["aig_depth"]
+            and (o["transistor_count"] < r["transistor_count"] or o["aig_depth"] < r["aig_depth"])
+            for o in rows
+        )
+        if not dominated:
+            result.append(r)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Single-config evaluators (run in worker processes)
 # ---------------------------------------------------------------------------
 
-def eval_adder(
-    fsa_opt: FSAOption,
-    a_w: int,
-    b_w: int,
-    signed: bool,
-) -> dict:
-    """Evaluate a single adder configuration with given widths."""
+def eval_adder(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool) -> dict:
     reset_shared_cache()
-
     adder = StageBasedPrefixAdder(
-        a_w=a_w,
-        b_w=b_w,
-        signed_a=signed,
-        signed_b=signed,
-        optim_type="area",
-        fsa_cls=fsa_opt.value,
-        full_output_bit=True,
+        a_w=a_w, b_w=b_w, signed_a=signed, signed_b=signed,
+        optim_type="area", fsa_cls=fsa_opt.value, full_output_bit=True,
     )
-    module = adder.to_module(
-        f"adder_{fsa_opt.name}_{a_w}x{b_w}_{'s' if signed else 'u'}"
-    )
-
+    module = adder.to_module(f"adder_{fsa_opt.name}_{a_w}x{b_w}")
     ym = get_yosys_metrics(module)
     aig = get_aig_stats(module)
-
     return {
-        "fsa_opt": fsa_opt.name,
-        "a_w": a_w,
-        "b_w": b_w,
+        "op": "add", "a_w": a_w, "b_w": b_w, "signed": "signed" if signed else "unsigned",
+        "fsa_opt": fsa_opt.name, "ppg_opt": "", "ppa_opt": "", "optim_type": "",
         "transistor_count": int(ym["estimated_num_transistors"]),
-        "aig_depth": int(aig["depth"]),
-        "num_aig_gates": int(aig["num_gates"]),
+        "aig_depth": int(aig["depth"]), "num_aig_gates": int(aig["num_gates"]),
+    }
+
+
+def eval_subtractor(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool) -> dict:
+    reset_shared_cache()
+    sub = StageBasedSubtractor(
+        a_w=a_w, b_w=b_w, signed_a=signed, signed_b=signed,
+        optim_type="area", fsa_cls=fsa_opt.value, full_output_bit=True,
+    )
+    module = sub.to_module(f"sub_{fsa_opt.name}_{a_w}x{b_w}")
+    ym = get_yosys_metrics(module)
+    aig = get_aig_stats(module)
+    return {
+        "op": "sub", "a_w": a_w, "b_w": b_w, "signed": "signed" if signed else "unsigned",
+        "fsa_opt": fsa_opt.name, "ppg_opt": "", "ppa_opt": "", "optim_type": "",
+        "transistor_count": int(ym["estimated_num_transistors"]),
+        "aig_depth": int(aig["depth"]), "num_aig_gates": int(aig["num_gates"]),
     }
 
 
 def eval_multiplier(
-    ppg_opt: PPGOption,
-    ppa_opt: PPAOption,
-    fsa_opt: FSAOption,
-    a_w: int,
-    b_w: int,
-    encoding: Encoding,
-    optim_type: Literal["area", "speed"],
+    ppg_opt: PPGOption, ppa_opt: PPAOption, fsa_opt: FSAOption,
+    a_w: int, b_w: int, encoding: Encoding, optim_type: Literal["area", "speed"],
 ) -> dict:
-    """Evaluate a single multiplier configuration with given widths."""
     reset_shared_cache()
-
     multiplier = MultiplierOption.STAGE_BASED_MULTIPLIER.value(
-        a_w=a_w,
-        b_w=b_w,
-        a_encoding=encoding,
-        b_encoding=encoding,
-        ppg_cls=ppg_opt.value,
-        ppa_cls=ppa_opt.value,
-        fsa_cls=fsa_opt.value,
-        optim_type=optim_type,
+        a_w=a_w, b_w=b_w, a_encoding=encoding, b_encoding=encoding,
+        ppg_cls=ppg_opt.value, ppa_cls=ppa_opt.value,
+        fsa_cls=fsa_opt.value, optim_type=optim_type,
     )
     module = multiplier.to_module(
         f"mul_{ppg_opt.name}_{ppa_opt.name}_{fsa_opt.name}_{a_w}x{b_w}_{encoding.name}_{optim_type}"
     )
-
     ym = get_yosys_metrics(module)
     aig = get_aig_stats(module)
-
     return {
-        "ppg_opt": ppg_opt.name,
-        "ppa_opt": ppa_opt.name,
-        "fsa_opt": fsa_opt.name,
-        "a_w": a_w,
-        "b_w": b_w,
+        "op": "mul", "a_w": a_w, "b_w": b_w,
+        "signed": "signed" if is_signed(encoding) else "unsigned",
+        "fsa_opt": fsa_opt.name, "ppg_opt": ppg_opt.name, "ppa_opt": ppa_opt.name,
         "optim_type": optim_type,
         "transistor_count": int(ym["estimated_num_transistors"]),
-        "aig_depth": int(aig["depth"]),
-        "num_aig_gates": int(aig["num_gates"]),
+        "aig_depth": int(aig["depth"]), "num_aig_gates": int(aig["num_gates"]),
     }
 
 
@@ -137,43 +142,40 @@ def eval_multiplier(
 # Sweep functions
 # ---------------------------------------------------------------------------
 
-def sweep_adders(
-    bitwidths: list[int],
-    max_workers: int = 16,
-) -> dict[tuple, list]:
-    """Sweep all adder FSA options across width pairs and signed/unsigned."""
-    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
-    pairs = _width_pairs(bitwidths)
-
-    tasks = []
-    for (a_w, b_w), fsa, signed in product(pairs, fsa_options, [False, True]):
-        tasks.append((fsa, a_w, b_w, signed))
-
-    print(f"Adder sweep: {len(tasks)} configurations ({len(pairs)} width pairs)")
-    results: dict[tuple, list] = {}
+def _run_parallel(desc: str, tasks: list, eval_fn, max_workers: int) -> list[dict]:
+    """Run tasks in parallel, return collected rows."""
+    print(f"{desc}: {len(tasks)} configurations")
+    results = []
     errors = []
-
     with ProcessPoolExecutor(max_workers=max_workers) as ex:
-        futures = {ex.submit(eval_adder, *args): args for args in tasks}
-        for fut in tqdm(as_completed(futures), total=len(futures), desc="Adders"):
-            args = futures[fut]
+        futures = {ex.submit(eval_fn, *args): args for args in tasks}
+        for fut in tqdm(as_completed(futures), total=len(futures), desc=desc):
             try:
-                row = fut.result()
-                key = (args[1], args[2], args[3])  # (a_w, b_w, signed)
-                results.setdefault(key, []).append(row)
+                results.append(fut.result())
             except Exception as e:
-                errors.append(f"{args}: {e}")
-
+                errors.append(str(e))
     if errors:
-        print(f"Adder sweep: {len(errors)} errors out of {len(tasks)}")
+        print(f"  {len(errors)} errors out of {len(tasks)}")
     return results
 
 
-def sweep_multipliers(
-    bitwidths: list[int],
-    max_workers: int = 16,
-) -> dict[tuple, list]:
-    """Sweep multiplier PPG x PPA x FSA across width pairs and encodings."""
+def sweep_adders(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
+    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
+    pairs = _width_pairs(bitwidths)
+    tasks = [(fsa, a_w, b_w, signed)
+             for (a_w, b_w), fsa, signed in product(pairs, fsa_options, [False, True])]
+    return _run_parallel("Adders", tasks, eval_adder, max_workers)
+
+
+def sweep_subtractors(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
+    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
+    pairs = _width_pairs(bitwidths)
+    tasks = [(fsa, a_w, b_w, signed)
+             for (a_w, b_w), fsa, signed in product(pairs, fsa_options, [False, True])]
+    return _run_parallel("Subtractors", tasks, eval_subtractor, max_workers)
+
+
+def sweep_multipliers(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
     ppg_options = [p for p in PPGOption if p not in _PPG_SKIP]
     ppa_options = [p for p in PPAOption if p not in _PPA_SKIP]
     fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
@@ -183,7 +185,6 @@ def sweep_multipliers(
     for (a_w, b_w), ppg, ppa, fsa, optim_type in product(
         pairs, ppg_options, ppa_options, fsa_options, ["area", "speed"]
     ):
-        # Skip BOOTH_UNOPTIMISED when a_w <= 2 (known failure)
         if ppg == PPGOption.BOOTH_UNOPTIMISED and a_w <= 2:
             continue
         for encoding in [Encoding.unsigned, Encoding.twos_complement]:
@@ -192,60 +193,60 @@ def sweep_multipliers(
                 continue
             tasks.append((ppg, ppa, fsa, a_w, b_w, encoding, optim_type))
 
-    print(f"Multiplier sweep: {len(tasks)} configurations ({len(pairs)} width pairs)")
-    results: dict[tuple, list] = {}
-    errors = []
-
-    with ProcessPoolExecutor(max_workers=max_workers) as ex:
-        futures = {ex.submit(eval_multiplier, *args): args for args in tasks}
-        for fut in tqdm(as_completed(futures), total=len(futures), desc="Multipliers"):
-            args = futures[fut]
-            try:
-                row = fut.result()
-                key = (args[3], args[4], is_signed(args[5]))  # (a_w, b_w, signed)
-                results.setdefault(key, []).append(row)
-            except Exception as e:
-                errors.append(f"{args}: {e}")
-
-    if errors:
-        print(f"Multiplier sweep: {len(errors)} errors out of {len(tasks)}")
-    return results
+    return _run_parallel("Multipliers", tasks, eval_multiplier, max_workers)
 
 
 # ---------------------------------------------------------------------------
-# Database builder
+# Save functions
 # ---------------------------------------------------------------------------
 
-def build_config_db(
-    adder_groups: dict[tuple, list],
-    multiplier_groups: dict[tuple, list],
-) -> dict:
-    """Build the nested config database storing all evaluated rows."""
-    db = {
+def save_csv(rows: list[dict], path: Path, pareto: bool = True) -> None:
+    """Save rows as flat CSV, optionally Pareto-filtered per group."""
+    if pareto:
+        grouped: dict[tuple, list] = {}
+        for r in rows:
+            key = (r["op"], r["a_w"], r["b_w"], r["signed"])
+            grouped.setdefault(key, []).append(r)
+        filtered = []
+        for group_rows in grouped.values():
+            filtered.extend(_pareto_filter(group_rows))
+        rows = filtered
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def save_json(rows: list[dict], path: Path, pareto: bool = True) -> None:
+    """Save rows as nested JSON (v3 format), optionally Pareto-filtered."""
+    db: dict = {
         "metadata": {
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "version": 3,
         },
-        "configs": {"add": {}, "sub": {}, "mul": {}},
+        "configs": {},
     }
 
-    for (a_w, b_w, signed), rows in adder_groups.items():
-        w_key = f"{a_w}x{b_w}"
-        s_key = "signed" if signed else "unsigned"
-        for op_key in ("add", "sub"):
-            db["configs"][op_key].setdefault(w_key, {})[s_key] = rows
+    grouped: dict[tuple, list] = {}
+    for r in rows:
+        key = (r["op"], str(r["a_w"]), str(r["b_w"]), r["signed"])
+        grouped.setdefault(key, []).append(r)
 
-    for (a_w, b_w, signed), rows in multiplier_groups.items():
-        w_key = f"{a_w}x{b_w}"
-        s_key = "signed" if signed else "unsigned"
-        db["configs"]["mul"].setdefault(w_key, {})[s_key] = rows
+    for (op, a_w_s, b_w_s, sign_key), group_rows in grouped.items():
+        w_key = f"{a_w_s}x{b_w_s}"
+        filtered = _pareto_filter(group_rows) if pareto else group_rows
+        # Strip op/a_w/b_w/signed from individual rows (redundant with key)
+        clean = [{k: v for k, v in r.items() if k not in ("op", "a_w", "b_w", "signed")} for r in filtered]
+        db["configs"].setdefault(op, {}).setdefault(w_key, {})[sign_key] = clean
 
-    all_pairs = sorted(
-        {(k[0], k[1]) for k in adder_groups} | {(k[0], k[1]) for k in multiplier_groups}
-    )
+    all_pairs = sorted({(r["a_w"], r["b_w"]) for r in rows})
     db["metadata"]["width_pairs"] = all_pairs
 
-    return db
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(db, f, separators=(",", ":"))
 
 
 # ---------------------------------------------------------------------------
@@ -255,59 +256,55 @@ def build_config_db(
 def main(
     bitwidths: list[int] | None = None,
     max_workers: int = 16,
-    output_path: Path | None = None,
+    output_dir: Path | None = None,
+    fmt: str = "csv",
+    pareto: bool = True,
 ) -> None:
     if bitwidths is None:
         bitwidths = [1, 2, 4, 8, 16]
-    if output_path is None:
-        output_path = _OUT_PATH
+    if output_dir is None:
+        output_dir = _OUT_DIR
 
     sys.setrecursionlimit(10000)
-
-    print(f"Running arithmetic evaluation sweep for bitwidths={bitwidths}")
-    print(f"Width pairs: {_width_pairs(bitwidths)}")
+    print(f"Sweep: bitwidths={bitwidths}, format={fmt}, pareto={pareto}")
     t0 = time.time()
 
-    adder_groups = sweep_adders(bitwidths, max_workers=max_workers)
-    multiplier_groups = sweep_multipliers(bitwidths, max_workers=max_workers)
+    all_rows = []
+    all_rows.extend(sweep_adders(bitwidths, max_workers=max_workers))
+    all_rows.extend(sweep_subtractors(bitwidths, max_workers=max_workers))
+    all_rows.extend(sweep_multipliers(bitwidths, max_workers=max_workers))
 
-    n_adder = sum(len(v) for v in adder_groups.values())
-    n_mul = sum(len(v) for v in multiplier_groups.values())
-
-    db = build_config_db(adder_groups, multiplier_groups)
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        json.dump(db, f, indent=2)
+    if fmt == "csv":
+        out_path = output_dir / "best_configs.csv"
+        save_csv(all_rows, out_path, pareto=pareto)
+    elif fmt == "json":
+        out_path = output_dir / "best_configs.json"
+        save_json(all_rows, out_path, pareto=pareto)
+    else:
+        raise ValueError(f"Unknown format: {fmt}")
 
     elapsed = time.time() - t0
-    print(f"\nDone in {elapsed:.1f}s. Saved config database to {output_path}")
-    print(f"  Adder rows:      {n_adder}")
-    print(f"  Multiplier rows: {n_mul}")
-
-    # Print summary
-    from sprouthdl.arithmetic.eval.auto_config import OBJECTIVES, _select_best, _load_db
-    _load_db.cache_clear()
-    db = _load_db()
-    for op_key in ("add", "mul"):
-        print(f"\n  Best configs for '{op_key}':")
-        for w_key in sorted(db["configs"][op_key]):
-            for s_key in ("unsigned", "signed"):
-                rows = db["configs"][op_key].get(w_key, {}).get(s_key, [])
-                if not rows:
-                    continue
-                for obj_name in OBJECTIVES:
-                    best = _select_best(rows, obj_name)
-                    if best:
-                        label = f"{w_key} {s_key:>8s} {obj_name:>5s}"
-                        tc = best["transistor_count"]
-                        d = best["aig_depth"]
-                        fsa = best["fsa_opt"]
-                        extra = ""
-                        if "ppg_opt" in best:
-                            extra = f" ppg={best['ppg_opt']} ppa={best['ppa_opt']}"
-                        print(f"    {label}: tc={tc:>6d}  depth={d:>3d}  fsa={fsa}{extra}")
+    print(f"\nDone in {elapsed:.1f}s. Saved to {out_path}")
+    print(f"  Total rows collected: {len(all_rows)}")
+    if pareto:
+        grouped: dict[tuple, list] = {}
+        for r in all_rows:
+            key = (r["op"], r["a_w"], r["b_w"], r["signed"])
+            grouped.setdefault(key, []).append(r)
+        n_pareto = sum(len(_pareto_filter(g)) for g in grouped.values())
+        print(f"  After Pareto filter: {n_pareto}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Run arithmetic evaluation sweep")
+    parser.add_argument("--format", choices=["csv", "json"], default="csv")
+    parser.add_argument("--no-pareto", action="store_true", help="Store all rows, not just Pareto front")
+    parser.add_argument("--bitwidths", nargs="+", type=int, default=[1, 2, 4, 8, 16])
+    parser.add_argument("--workers", type=int, default=16)
+    args = parser.parse_args()
+    main(
+        bitwidths=args.bitwidths,
+        fmt=args.format,
+        pareto=not args.no_pareto,
+        max_workers=args.workers,
+    )

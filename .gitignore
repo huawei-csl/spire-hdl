@@ -11,6 +11,7 @@
 *.vscode
 */__pycache__/*
 *.csv
+!src/sprouthdl/arithmetic/eval/best_configs.csv
 output/*
 *.history
 *.parquet

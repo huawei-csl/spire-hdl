@@ -1,10 +1,7 @@
-"""Auto-config lookup: load best_configs.json and resolve queries.
+"""Auto-config lookup: load best_configs.csv (or .json) and resolve queries.
 
 Provides ``lookup_best_config`` which returns the empirically best
 ``ArithmeticConfig`` for a given (op, a_w, b_w, signed, objective) tuple.
-
-For widths not in the database each width is snapped independently to
-the nearest evaluated width using a logarithmic distance metric.
 
 For commutative ops (``+``, ``*``), both orientations are checked and
 the better one is returned together with a ``swap`` flag.
@@ -17,6 +14,7 @@ Supported objectives:
 
 from __future__ import annotations
 
+import csv
 import json
 import math
 from functools import lru_cache
@@ -34,14 +32,68 @@ Objective = Literal["area", "delay", "adp"]
 
 OBJECTIVES: list[Objective] = ["area", "delay", "adp"]
 
-_DB_PATH = Path(__file__).parent / "best_configs.json"
+_DB_DIR = Path(__file__).parent
+_INT_FIELDS = {"transistor_count", "aig_depth", "num_aig_gates", "a_w", "b_w"}
+
+
+# ---------------------------------------------------------------------------
+# Loaders
+# ---------------------------------------------------------------------------
+
+def _load_csv(path: Path) -> dict[tuple, list[dict]]:
+    """Load CSV into grouped dict keyed by (op, a_w_str, b_w_str, signed)."""
+    grouped: dict[tuple, list[dict]] = {}
+    with open(path) as f:
+        for row in csv.DictReader(f):
+            key = (row["op"], row["a_w"], row["b_w"], row["signed"])
+            clean = {}
+            for k, v in row.items():
+                if k in ("op", "a_w", "b_w", "signed"):
+                    continue
+                if v == "":
+                    continue
+                clean[k] = int(v) if k in _INT_FIELDS else v
+            grouped.setdefault(key, []).append(clean)
+    return grouped
+
+
+def _load_json(path: Path) -> dict[tuple, list[dict]]:
+    """Load JSON (v3 nested format) into same grouped dict."""
+    with open(path) as f:
+        db = json.load(f)
+    grouped: dict[tuple, list[dict]] = {}
+    for op, widths in db["configs"].items():
+        for w_key, signs in widths.items():
+            a_w, b_w = w_key.split("x")
+            for sign_key, rows in signs.items():
+                key = (op, a_w, b_w, sign_key)
+                grouped[key] = []
+                for r in rows:
+                    clean = {}
+                    for k, v in r.items():
+                        if v == "" or v is None:
+                            continue
+                        clean[k] = int(v) if k in _INT_FIELDS else v
+                    grouped[key].append(clean)
+    return grouped
 
 
 @lru_cache(maxsize=1)
-def _load_db() -> dict:
-    with open(_DB_PATH) as f:
-        return json.load(f)
+def _load_db() -> dict[tuple, list[dict]]:
+    """Auto-detect CSV or JSON and load."""
+    csv_path = _DB_DIR / "best_configs.csv"
+    json_path = _DB_DIR / "best_configs.json"
+    if csv_path.exists():
+        return _load_csv(csv_path)
+    elif json_path.exists():
+        return _load_json(json_path)
+    else:
+        raise FileNotFoundError(f"No config database found in {_DB_DIR}")
 
+
+# ---------------------------------------------------------------------------
+# Selection helpers
+# ---------------------------------------------------------------------------
 
 def _nearest_width_log(target: int, available: list[int]) -> int:
     """Find the nearest bitwidth on a logarithmic scale."""
@@ -73,25 +125,21 @@ def _select_best(rows: list[dict], objective: Objective) -> dict | None:
         raise ValueError(f"Unknown objective: {objective!r}. Use one of {OBJECTIVES}")
 
 
-def _snap_width_pair(a_w: int, b_w: int, op_data: dict) -> tuple[int, int]:
-    """Snap each width independently to the nearest available width in the DB."""
-    # Collect all individual widths present in the DB keys
+def _snap_width_pair(a_w: int, b_w: int, db: dict[tuple, list]) -> tuple[int, int]:
+    """Snap each width to the nearest available in the DB."""
     available = set()
-    for key in op_data:
-        parts = key.split("x")
-        available.add(int(parts[0]))
-        available.add(int(parts[1]))
-    available = sorted(available)
-    if not available:
+    for key in db:
+        available.add(int(key[1]))
+        available.add(int(key[2]))
+    available_sorted = sorted(available)
+    if not available_sorted:
         return a_w, b_w
-    return _nearest_width_log(a_w, available), _nearest_width_log(b_w, available)
+    return _nearest_width_log(a_w, available_sorted), _nearest_width_log(b_w, available_sorted)
 
 
-def _lookup_rows(op_data: dict, a_w: int, b_w: int, sign_key: str) -> list[dict]:
-    """Get rows for a specific width pair, or empty list if not found."""
-    w_key = f"{a_w}x{b_w}"
-    return op_data.get(w_key, {}).get(sign_key, [])
-
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def lookup_best_config(
     op: Literal["+", "-", "*"],
@@ -99,25 +147,21 @@ def lookup_best_config(
     b_w: int,
     signed: bool,
     objective: Objective = "area",
-) -> tuple[dict, bool]:
+) -> tuple[dict | None, bool]:
     """Look up the empirically best config for the given operation.
 
     Returns ``(config_dict, swap)`` where *swap* is True if operands
     should be swapped (i.e. the ``b_w x a_w`` orientation was better).
-    For subtraction, swap is always False.
     """
     db = _load_db()
     op_key = {"+": "add", "-": "sub", "*": "mul"}[op]
     sign_key = "signed" if signed else "unsigned"
+    snapped_a, snapped_b = _snap_width_pair(a_w, b_w, db)
 
-    op_data = db["configs"][op_key]
-    snapped_a, snapped_b = _snap_width_pair(a_w, b_w, op_data)
-
-    rows_ab = _lookup_rows(op_data, snapped_a, snapped_b, sign_key)
+    rows_ab = db.get((op_key, str(snapped_a), str(snapped_b), sign_key), [])
 
     if op in ("+", "*") and snapped_a != snapped_b:
-        # Commutative: try both orientations
-        rows_ba = _lookup_rows(op_data, snapped_b, snapped_a, sign_key)
+        rows_ba = db.get((op_key, str(snapped_b), str(snapped_a), sign_key), [])
         best_ab = _select_best(rows_ab, objective)
         best_ba = _select_best(rows_ba, objective)
 
@@ -128,14 +172,11 @@ def lookup_best_config(
         if best_ab is None:
             return best_ba, True
 
-        # Compare the two orientations
         combined = _select_best([best_ab, best_ba], objective)
         swap = combined is best_ba
         return combined, swap
     else:
-        # Non-commutative (subtraction) or symmetric widths
-        best = _select_best(rows_ab, objective)
-        return best, False
+        return _select_best(rows_ab, objective), False
 
 
 def lookup_best_arithmetic_config(
@@ -146,22 +187,17 @@ def lookup_best_arithmetic_config(
     objective: Objective = "area",
     full_output_bit: bool = True,
 ):
-    """Return ``(ArithmeticConfig, swap)`` for the empirically best configuration.
-
-    *swap* is True if the caller should swap operand a and b before
-    feeding them into the replacement component.
-    """
+    """Return ``(ArithmeticConfig, swap)`` for the empirically best configuration."""
     from sprouthdl.arithmetic.int_arithmetic_config import ArithmeticConfig
     from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
 
     entry, swap = lookup_best_config(op, a_w, b_w, signed, objective)
     if entry is None:
-        # Fallback to default config
         encoding = Encoding.twos_complement if signed else Encoding.unsigned
         return ArithmeticConfig(encoding=encoding, full_output_bit=full_output_bit), False
 
     encoding = Encoding.twos_complement if signed else Encoding.unsigned
-    optim_type = entry.get("optim_type", "area")
+    optim_type = entry.get("optim_type", "area") or "area"
 
     if op == "*":
         cfg = ArithmeticConfig(
