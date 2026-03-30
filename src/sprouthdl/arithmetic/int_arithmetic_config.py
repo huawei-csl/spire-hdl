@@ -161,100 +161,11 @@ class ArithmeticAutoConfig:
     full_output_bit: bool = True
 
 
-def _build_replacement(
-    op: str,
-    a_expr: Expr, b_expr: Expr,
-    a_w: int, b_w: int,
-    signed_a: bool, signed_b: bool,
-    node_cfg: ArithmeticConfig,
-) -> Expr:
-    """Build a StageBased replacement for a single arithmetic Op2 node."""
-    if op == "+":
-        repl = StageBasedPrefixAdder(
-            a_w=a_w, b_w=b_w,
-            signed_a=signed_a, signed_b=signed_b,
-            optim_type=node_cfg.optim_type,
-            fsa_cls=node_cfg.fsa_opt.value,
-            full_output_bit=node_cfg.full_output_bit,
-        ).make_internal()
-        repl.io.a <<= a_expr
-        repl.io.b <<= b_expr
-        return repl.io.y
-
-    elif op == "-":
-        repl = StageBasedSubtractor(
-            a_w=a_w, b_w=b_w,
-            signed_a=signed_a, signed_b=signed_b,
-            optim_type=node_cfg.optim_type,
-            fsa_cls=node_cfg.fsa_opt.value,
-            full_output_bit=node_cfg.full_output_bit,
-        ).make_internal()
-        repl.io.a <<= a_expr
-        repl.io.b <<= b_expr
-        return repl.io.y
-
-    elif op == "*":
-        enc_a = Encoding.twos_complement if signed_a else Encoding.unsigned
-        enc_b = Encoding.twos_complement if signed_b else Encoding.unsigned
-
-        # Karatsuba requires equal widths — pad if needed
-        eff_a_w, eff_b_w = a_w, b_w
-        eff_a, eff_b = a_expr, b_expr
-        if eff_a_w != eff_b_w and node_cfg.multiplier_opt in (
-            MultiplierOption.KARATSUBA_MULTIPLIER,
-            MultiplierOption.KARATSUBA_MULTIPLIER_FROM_OPTIMIZED_4BIT_BLOCKS,
-        ):
-            max_w = max(eff_a_w, eff_b_w)
-            if eff_a_w < max_w:
-                eff_a = cast(eff_a, SInt(max_w) if signed_a else UInt(max_w))
-                eff_a_w = max_w
-            if eff_b_w < max_w:
-                eff_b = cast(eff_b, SInt(max_w) if signed_b else UInt(max_w))
-                eff_b_w = max_w
-
-        repl = node_cfg.multiplier_opt.value(
-            a_w=eff_a_w, b_w=eff_b_w,
-            a_encoding=enc_a,
-            b_encoding=enc_b,
-            ppg_cls=node_cfg.ppg_opt.value,
-            ppa_cls=node_cfg.ppa_opt.value,
-            fsa_cls=node_cfg.fsa_opt.value,
-            optim_type=node_cfg.optim_type,
-        ).make_internal()
-        repl.io.a <<= eff_a
-        repl.io.b <<= eff_b
-        return repl.io.y
-
-
-def _count_expr_nodes(expr: Expr) -> int:
-    """Count expression nodes reachable from *expr* (lightweight graph size metric)."""
-    visited: set[int] = set()
-
-    def _walk(node: Expr | None) -> None:
-        if node is None or id(node) in visited:
-            return
-        visited.add(id(node))
-        for attr in ("a", "b", "sel"):
-            child = getattr(node, attr, None)
-            if isinstance(child, Expr):
-                _walk(child)
-        if hasattr(node, "parts"):
-            for part in node.parts:
-                _walk(part)
-        if isinstance(node, Signal) and node._driver is not None:
-            _walk(node._driver)
-
-    _walk(expr)
-    return len(visited)
-
-
 def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoConfig) -> None:
     """Walk the component's expression DAG and replace +/-/* Op2 nodes
     with StageBased component subgraphs.
 
-    Supports operands with different bit-widths.  For commutative ops
-    (``+``, ``*``) with asymmetric widths, both operand orientations are
-    tried and the smaller circuit is kept.
+    Supports operands with different bit-widths.
 
     Modifies the expression graph in-place. Call before to_module().
     """
@@ -317,23 +228,61 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
         else:
             node_cfg = config
 
-        # For commutative ops with asymmetric widths, try both orientations
-        if node.op in ("+", "*") and a_w != b_w:
-            result_ab = _build_replacement(
-                node.op, a_expr, b_expr, a_w, b_w,
-                signed_a, signed_b, node_cfg,
-            )
-            result_ba = _build_replacement(
-                node.op, b_expr, a_expr, b_w, a_w,
-                signed_b, signed_a, node_cfg,
-            )
-            result = (result_ba if _count_expr_nodes(result_ba) < _count_expr_nodes(result_ab)
-                      else result_ab)
-        else:
-            result = _build_replacement(
-                node.op, a_expr, b_expr, a_w, b_w,
-                signed_a, signed_b, node_cfg,
-            )
+        if node.op == "+":
+            repl = StageBasedPrefixAdder(
+                a_w=a_w, b_w=b_w,
+                signed_a=signed_a, signed_b=signed_b,
+                optim_type=node_cfg.optim_type,
+                fsa_cls=node_cfg.fsa_opt.value,
+                full_output_bit=node_cfg.full_output_bit,
+            ).make_internal()
+            repl.io.a <<= a_expr
+            repl.io.b <<= b_expr
+            result = repl.io.y
+
+        elif node.op == "-":
+            repl = StageBasedSubtractor(
+                a_w=a_w, b_w=b_w,
+                signed_a=signed_a, signed_b=signed_b,
+                optim_type=node_cfg.optim_type,
+                fsa_cls=node_cfg.fsa_opt.value,
+                full_output_bit=node_cfg.full_output_bit,
+            ).make_internal()
+            repl.io.a <<= a_expr
+            repl.io.b <<= b_expr
+            result = repl.io.y
+
+        elif node.op == "*":
+            enc_a = Encoding.twos_complement if signed_a else Encoding.unsigned
+            enc_b = Encoding.twos_complement if signed_b else Encoding.unsigned
+
+            # Karatsuba requires equal widths — pad if needed
+            eff_a_w, eff_b_w = a_w, b_w
+            eff_a, eff_b = a_expr, b_expr
+            if eff_a_w != eff_b_w and node_cfg.multiplier_opt in (
+                MultiplierOption.KARATSUBA_MULTIPLIER,
+                MultiplierOption.KARATSUBA_MULTIPLIER_FROM_OPTIMIZED_4BIT_BLOCKS,
+            ):
+                max_w = max(eff_a_w, eff_b_w)
+                if eff_a_w < max_w:
+                    eff_a = cast(eff_a, SInt(max_w) if signed_a else UInt(max_w))
+                    eff_a_w = max_w
+                if eff_b_w < max_w:
+                    eff_b = cast(eff_b, SInt(max_w) if signed_b else UInt(max_w))
+                    eff_b_w = max_w
+
+            repl = node_cfg.multiplier_opt.value(
+                a_w=eff_a_w, b_w=eff_b_w,
+                a_encoding=enc_a,
+                b_encoding=enc_b,
+                ppg_cls=node_cfg.ppg_opt.value,
+                ppa_cls=node_cfg.ppa_opt.value,
+                fsa_cls=node_cfg.fsa_opt.value,
+                optim_type=node_cfg.optim_type,
+            ).make_internal()
+            repl.io.a <<= eff_a
+            repl.io.b <<= eff_b
+            result = repl.io.y
 
         # Match the original Op2 type (width/signedness)
         if result.typ.width != node.typ.width or result.typ.signed != node.typ.signed:

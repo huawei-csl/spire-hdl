@@ -20,6 +20,7 @@ data/*
 *.vcd
 *.dat
 *.json
+!src/sprouthdl/arithmetic/eval/best_configs.json
 *.zip
 .devcontainer/*
 .claude
