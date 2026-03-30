@@ -211,8 +211,8 @@ def test_objectives_produce_different_configs():
     from sprouthdl.arithmetic.eval.auto_config import lookup_best_config
 
     # 16-bit unsigned multiplier has clear area vs delay tradeoff
-    area_cfg = lookup_best_config("*", 16, signed=False, objective="area")
-    delay_cfg = lookup_best_config("*", 16, signed=False, objective="delay")
+    area_cfg, _ = lookup_best_config("*", 16, 16, signed=False, objective="area")
+    delay_cfg, _ = lookup_best_config("*", 16, 16, signed=False, objective="delay")
 
     print(f"\n16-bit unsigned multiplier configs:")
     print(f"  area: tc={area_cfg['transistor_count']}, depth={area_cfg['aig_depth']}, "
@@ -224,6 +224,23 @@ def test_objectives_produce_different_configs():
     assert area_cfg["transistor_count"] <= delay_cfg["transistor_count"]
     # Delay-optimized should have smaller or equal depth
     assert delay_cfg["aig_depth"] <= area_cfg["aig_depth"]
+
+
+def test_swap_selection():
+    """For asymmetric commutative ops, auto-config should pick the best orientation."""
+    from sprouthdl.arithmetic.eval.auto_config import lookup_best_config
+
+    # Check that both orientations are considered for 4x8 multiplier
+    cfg_4x8, swap_4x8 = lookup_best_config("*", 4, 8, signed=False, objective="area")
+    cfg_8x4, swap_8x4 = lookup_best_config("*", 8, 4, signed=False, objective="area")
+
+    # Both lookups should find the same best config (since both orientations are checked)
+    assert cfg_4x8["transistor_count"] == cfg_8x4["transistor_count"]
+    # But one of them should have swap=True
+    assert swap_4x8 != swap_8x4
+
+    print(f"\n4x8 mul area: tc={cfg_4x8['transistor_count']}, swap={swap_4x8}")
+    print(f"8x4 mul area: tc={cfg_8x4['transistor_count']}, swap={swap_8x4}")
 
 
 # ---------------------------------------------------------------------------

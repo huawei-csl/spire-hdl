@@ -221,10 +221,14 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
         # Resolve per-node config when using auto mode
         if isinstance(config, ArithmeticAutoConfig):
             from sprouthdl.arithmetic.eval.auto_config import lookup_best_arithmetic_config
-            node_cfg = lookup_best_arithmetic_config(
-                node.op, max(a_w, b_w), signed_a or signed_b,
+            node_cfg, swap = lookup_best_arithmetic_config(
+                node.op, a_w, b_w, signed_a or signed_b,
                 config.objective, config.full_output_bit,
             )
+            if swap:
+                a_expr, b_expr = b_expr, a_expr
+                a_w, b_w = b_w, a_w
+                signed_a, signed_b = signed_b, signed_a
         else:
             node_cfg = config
 

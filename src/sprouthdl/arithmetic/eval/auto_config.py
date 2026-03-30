@@ -1,9 +1,13 @@
 """Auto-config lookup: load best_configs.json and resolve queries.
 
 Provides ``lookup_best_config`` which returns the empirically best
-``ArithmeticConfig`` for a given (op, width, signed, objective) tuple.
-For widths not in the database the nearest evaluated bitwidth is chosen
-using a logarithmic distance metric.
+``ArithmeticConfig`` for a given (op, a_w, b_w, signed, objective) tuple.
+
+For widths not in the database each width is snapped independently to
+the nearest evaluated width using a logarithmic distance metric.
+
+For commutative ops (``+``, ``*``), both orientations are checked and
+the better one is returned together with a ``swap`` flag.
 
 Supported objectives:
     - ``"area"``:  minimize transistor_count  (tiebreak: aig_depth)
@@ -40,12 +44,7 @@ def _load_db() -> dict:
 
 
 def _nearest_width_log(target: int, available: list[int]) -> int:
-    """Find the nearest bitwidth on a logarithmic scale.
-
-    Uses ``|log2(target) - log2(candidate)|``.  Ties are broken by
-    preferring the larger width (conservative — slightly overestimates
-    complexity rather than underestimating).
-    """
+    """Find the nearest bitwidth on a logarithmic scale."""
     log_target = math.log2(target)
     best = None
     best_dist = float("inf")
@@ -61,7 +60,6 @@ def _select_best(rows: list[dict], objective: Objective) -> dict | None:
     """Pick the single best row from *rows* for the given *objective*."""
     if not rows:
         return None
-
     if objective == "area":
         return min(rows, key=lambda r: (r["transistor_count"], r["aig_depth"]))
     elif objective == "delay":
@@ -75,50 +73,98 @@ def _select_best(rows: list[dict], objective: Objective) -> dict | None:
         raise ValueError(f"Unknown objective: {objective!r}. Use one of {OBJECTIVES}")
 
 
+def _snap_width_pair(a_w: int, b_w: int, op_data: dict) -> tuple[int, int]:
+    """Snap each width independently to the nearest available width in the DB."""
+    # Collect all individual widths present in the DB keys
+    available = set()
+    for key in op_data:
+        parts = key.split("x")
+        available.add(int(parts[0]))
+        available.add(int(parts[1]))
+    available = sorted(available)
+    if not available:
+        return a_w, b_w
+    return _nearest_width_log(a_w, available), _nearest_width_log(b_w, available)
+
+
+def _lookup_rows(op_data: dict, a_w: int, b_w: int, sign_key: str) -> list[dict]:
+    """Get rows for a specific width pair, or empty list if not found."""
+    w_key = f"{a_w}x{b_w}"
+    return op_data.get(w_key, {}).get(sign_key, [])
+
+
 def lookup_best_config(
     op: Literal["+", "-", "*"],
-    width: int,
+    a_w: int,
+    b_w: int,
     signed: bool,
     objective: Objective = "area",
-) -> dict:
+) -> tuple[dict, bool]:
     """Look up the empirically best config for the given operation.
 
-    Returns a dict with the config keys (``fsa_opt``, and for multipliers
-    also ``ppg_opt`` and ``ppa_opt``), plus metric fields.
+    Returns ``(config_dict, swap)`` where *swap* is True if operands
+    should be swapped (i.e. the ``b_w x a_w`` orientation was better).
+    For subtraction, swap is always False.
     """
     db = _load_db()
     op_key = {"+": "add", "-": "sub", "*": "mul"}[op]
     sign_key = "signed" if signed else "unsigned"
 
     op_data = db["configs"][op_key]
-    available_widths = sorted(int(k) for k in op_data.keys())
-    nearest = _nearest_width_log(width, available_widths)
+    snapped_a, snapped_b = _snap_width_pair(a_w, b_w, op_data)
 
-    rows = op_data[str(nearest)][sign_key]
-    return _select_best(rows, objective)
+    rows_ab = _lookup_rows(op_data, snapped_a, snapped_b, sign_key)
+
+    if op in ("+", "*") and snapped_a != snapped_b:
+        # Commutative: try both orientations
+        rows_ba = _lookup_rows(op_data, snapped_b, snapped_a, sign_key)
+        best_ab = _select_best(rows_ab, objective)
+        best_ba = _select_best(rows_ba, objective)
+
+        if best_ab is None and best_ba is None:
+            return None, False
+        if best_ba is None:
+            return best_ab, False
+        if best_ab is None:
+            return best_ba, True
+
+        # Compare the two orientations
+        combined = _select_best([best_ab, best_ba], objective)
+        swap = combined is best_ba
+        return combined, swap
+    else:
+        # Non-commutative (subtraction) or symmetric widths
+        best = _select_best(rows_ab, objective)
+        return best, False
 
 
 def lookup_best_arithmetic_config(
     op: Literal["+", "-", "*"],
-    width: int,
+    a_w: int,
+    b_w: int,
     signed: bool,
     objective: Objective = "area",
     full_output_bit: bool = True,
 ):
-    """Return an ``ArithmeticConfig`` for the empirically best configuration."""
-    # Import here to avoid circular dependency
+    """Return ``(ArithmeticConfig, swap)`` for the empirically best configuration.
+
+    *swap* is True if the caller should swap operand a and b before
+    feeding them into the replacement component.
+    """
     from sprouthdl.arithmetic.int_arithmetic_config import ArithmeticConfig
     from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
 
-    entry = lookup_best_config(op, width, signed, objective)
-    encoding = Encoding.twos_complement if signed else Encoding.unsigned
+    entry, swap = lookup_best_config(op, a_w, b_w, signed, objective)
+    if entry is None:
+        # Fallback to default config
+        encoding = Encoding.twos_complement if signed else Encoding.unsigned
+        return ArithmeticConfig(encoding=encoding, full_output_bit=full_output_bit), False
 
-    # For multipliers, pick optim_type from the winning entry (area vs speed
-    # full-adder variant).  For adders it's a no-op but we pass it through.
+    encoding = Encoding.twos_complement if signed else Encoding.unsigned
     optim_type = entry.get("optim_type", "area")
 
     if op == "*":
-        return ArithmeticConfig(
+        cfg = ArithmeticConfig(
             encoding=encoding,
             optim_type=optim_type,
             fsa_opt=FSAOption[entry["fsa_opt"]],
@@ -128,9 +174,10 @@ def lookup_best_arithmetic_config(
             ppa_opt=PPAOption[entry["ppa_opt"]],
         )
     else:
-        return ArithmeticConfig(
+        cfg = ArithmeticConfig(
             encoding=encoding,
             optim_type=optim_type,
             fsa_opt=FSAOption[entry["fsa_opt"]],
             full_output_bit=full_output_bit,
         )
+    return cfg, swap
