@@ -180,7 +180,111 @@ For specific constants, decompose multiplication into shifts and adds (e.g., `*3
 
 ---
 
-## 3. Recommendations
+## 3. Comparison Replacement
+
+Investigated replacing comparison operators (`==`, `!=`, `<=`, `>`) with optimized hardware at the graph level (inside `replace_arithmetic_ops`), before the AIG writer's default chain-based implementations.
+
+### Equality (`==`, `!=`): XOR + NOR-tree
+
+The AIG writer's `bv_eq` uses a linear AND-chain (O(n) depth). Replacing `==`/`!=` at the graph level with XOR per bit + balanced OR-tree + final invert gives O(log n) depth.
+
+Tested on the FP16 multiplier (119 `==` ops, 2 `!=`, all with constant operands):
+
+| Objective | Arith only TC | + NOR tree TC | Delta TC | Arith only Depth | + NOR tree Depth | Delta Depth |
+|-----------|---:|---:|---:|---:|---:|---:|
+| area | 11668 | 11640 | **-28** | 222 | 217 | **-5** |
+| delay | 12580 | 12496 | **-84** | 145 | 143 | **-2** |
+| adp | 11900 | 11762 | **-138** | 145 | 146 | +1 |
+
+Small but consistent improvements. The NOR-tree is now integrated into `replace_arithmetic_ops` — applied automatically for all `==` and `!=` ops.
+
+A linear NOR-chain (O(n) depth) was also tested but had **zero effect** — the AIG optimizer already produces the equivalent chain, so explicit chaining adds nothing.
+
+### Inequality (`<=`, `>`, `!=`): subtraction-based
+
+Replacing inequality comparisons with prefix subtractors (carry-out for `<=`/`>`, zero-detect for `!=`):
+
+| Objective | NOR tree only TC | + ineq sub TC | Delta TC | NOR tree Depth | + ineq sub Depth | Delta Depth |
+|-----------|---:|---:|---:|---:|---:|---:|
+| area | 11640 | 11728 | +88 | 217 | 217 | 0 |
+| delay | 12496 | 12596 | +100 | 143 | 139 | **-4** |
+| adp | 11762 | 11876 | +114 | 146 | 141 | **-5** |
+
+Inequality subtraction helps depth (-4 to -5) but **hurts area** (+88 to +114 TC). Only 5 inequality ops in the FP16 design — too few to justify the overhead. Not implemented.
+
+### Conclusion
+
+- **`==`/`!=` NOR-tree**: implemented, consistent small gains across all objectives
+- **Inequality subtraction**: not worth it for designs with few comparisons, trades area for small depth gain
+- **Overall**: comparisons are a minor contributor; the 119 equality ops in FP16 are mostly small-width (5-10 bits) against constants, where the tree vs chain difference is minimal
+
+---
+
+## 4. Fused Multiply-Accumulate (MAC) Detection
+
+Investigated detecting `a * b + c` patterns in the graph and replacing with a fused MAC, which feeds the accumulate operand directly into the multiplier's column reduction (saving one full FSA stage).
+
+Sprout-HDL already has a `FusedMacComponent` / `fused_inner_product` infrastructure.
+
+### Results: fused MAC vs separate auto-replaced mul+add
+
+| Size | Sep auto (area) TC | Fused (area) TC | Fused better? | Sep auto (adp) TC | Fused (adp) TC | Fused better? |
+|------|---:|---:|---|---:|---:|---|
+| 4x4 | 776 | 790 | No (+2%) | 788 | 802 | No (+2%) |
+| 8x8 | 3072 | 3092 | No (+1%) | 3312 | 3170 | **Yes (-4%)** |
+| 16x16 | 11406 | 11354 | **Yes (-0.5%)** | 12288 | 11580 | **Yes (-6%)** |
+
+The fused MAC is **marginally better at larger widths** (8x8+, up to 6% for adp) but **slightly worse at small widths**. The AIG optimizer is effective enough to mostly eliminate the redundant FSA between a separate multiplier and adder.
+
+For asymmetric widths (4x8, 8x16), the fused MAC was significantly worse (up to 95% more transistors) because the current `FusedMacComponent` uses `max(a_w, b_w)` (square multiplier), while separate auto-config handles actual asymmetric widths natively.
+
+### With dedicated fused MAC config sweep
+
+The earlier results used the multiplier's best config, which isn't optimal for a fused MAC (the accumulate operand changes the column structure). A dedicated sweep over PPG x PPA x FSA x optim_type for the fused MAC yields much better results:
+
+**8-bit MAC (200 configs swept):**
+
+| Objective | Sep auto TC | Sep Depth | Fused swept TC | Fused Depth | TC delta | Depth delta |
+|-----------|---:|---:|---:|---:|---:|---:|
+| area | 3072 | 79 | 3088 | 37 | +0.5% | **-53%** |
+| delay | 3620 | 48 | 4288 | 28 | +18% | **-42%** |
+| adp | 3312 | 41 | 3170 | 32 | **-4%** | **-22%** |
+
+**16-bit MAC (200 configs swept):**
+
+| Objective | Sep auto TC | Sep Depth | Fused swept TC | Fused Depth | TC delta | Depth delta |
+|-----------|---:|---:|---:|---:|---:|---:|
+| area | 11406 | 73 | 11354 | 65 | **-0.5%** | **-11%** |
+| delay | 13824 | 56 | 12716 | 47 | **-8%** | **-16%** |
+| adp | 12288 | 61 | 12716 | 47 | +3% | **-23%** |
+
+The fused MAC **dominates on depth** (11-53% shallower) at roughly equal area. The depth savings come from eliminating the separate FSA stage between multiplier and adder — the accumulate operand is absorbed directly into the multiplier's column reduction.
+
+Best fused MAC configs differ from best multiplier configs: CarrySave PPA wins consistently for MAC (vs Dadda for standalone multiplier), because CarrySave handles the extra accumulate columns more efficiently.
+
+### Conclusion
+
+- **With proper sweep**: fused MAC gives **11-53% depth reduction** at similar area — significant for delay-sensitive designs
+- **Without sweep** (using multiplier config): only 0-6% gain — the config mismatch hides the fusion benefit
+- A fused MAC sweep in the DB would unlock this potential
+- Pattern detection (`Op2<+>` with `Op2<*>` child) is straightforward in the existing graph walker
+- **Recommended** as a medium-priority optimization, especially for DSP-heavy designs (filters, neural nets)
+
+---
+
+## 5. Recommendations
+
+| Feature | Gain | Effort | Priority |
+|---------|------|--------|----------|
+| Asymmetric adder sweep in DB | 27-55% TC | Low (22 configs/pair) | **High** |
+| Asymmetric multiplier sweep in DB | 49-77% TC | Medium (550 configs/pair, parallelize) | **High** |
+| Operand swap selection from DB | Included in above | Included | **High** |
+| Constant operand transparent (A) | 27-100% TC | None (already works) | **Free** |
+| Constant-aware config sweep (B) | +16-91% on top of A | Medium (sweep per constant class) | **High** for multipliers |
+| `==`/`!=` NOR-tree | -28 to -138 TC, -2 to -5 depth | Low (implemented) | **Done** |
+| Inequality subtraction | -4 to -5 depth, +88-114 TC | Low | **Low** (trades area for depth) |
+| Fused MAC detection + sweep | 11-53% depth, ~equal area | Medium | **Medium** (big depth win for DSP designs) |
+| Shift-and-add decomposition (C) | Potentially optimal for small consts | High | Low (B suffices) |
 
 | Feature | Gain | Effort | Priority |
 |---------|------|--------|----------|

@@ -162,8 +162,12 @@ class ArithmeticAutoConfig:
 
 
 def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoConfig) -> None:
-    """Walk the component's expression DAG and replace +/-/* Op2 nodes
-    with StageBased component subgraphs.
+    """Walk the component's expression DAG and replace arithmetic and
+    comparison Op2 nodes with optimized subgraphs.
+
+    Replaces ``+``, ``-``, ``*`` with StageBased adder/subtractor/multiplier
+    components, and ``==``, ``!=`` with XOR + balanced NOR-tree
+    (O(log n) depth instead of linear chain).
 
     Supports operands with different bit-widths.
 
@@ -207,7 +211,7 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
         return replacements.get(id(expr), expr)
 
     for node in order:
-        if not isinstance(node, Op2) or node.op not in ("+", "-", "*"):
+        if not isinstance(node, Op2) or node.op not in ("+", "-", "*", "==", "!="):
             continue
 
         a_expr = get(node.a)
@@ -217,6 +221,31 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
         b_w = b_expr.typ.width
         signed_a = getattr(a_expr.typ, "signed", False)
         signed_b = getattr(b_expr.typ, "signed", False)
+
+        # Equality: replace with XOR + NOR-tree (no config needed)
+        if node.op in ("==", "!="):
+            max_w = max(a_w, b_w)
+            if a_w < max_w:
+                a_expr = cast(a_expr, UInt(max_w))
+            if b_w < max_w:
+                b_expr = cast(b_expr, UInt(max_w))
+            # XOR each bit, then balanced OR-tree, then invert
+            xor_bits = [a_expr[i] ^ b_expr[i] for i in range(max_w)]
+            level = xor_bits
+            while len(level) > 1:
+                next_level = []
+                for i in range(0, len(level), 2):
+                    if i + 1 < len(level):
+                        next_level.append(level[i] | level[i + 1])
+                    else:
+                        next_level.append(level[i])
+                level = next_level
+            result = ~level[0] if node.op == "==" else level[0]
+
+            if result.typ.width != node.typ.width or result.typ.signed != node.typ.signed:
+                result = cast(result, node.typ)
+            replacements[id(node)] = result
+            continue
 
         # Resolve per-node config when using auto mode
         if isinstance(config, ArithmeticAutoConfig):
