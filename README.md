@@ -269,47 +269,50 @@ The optimizer also detects **multiply-accumulate (MAC) patterns** (`a * b + c`) 
 A common DSP pattern where MAC fusion shines — each tap is `coeff[i] * x[i]` accumulated into a sum:
 
 ```python
-from dataclasses import dataclass
+from dataclasses import make_dataclass
 from sprouthdl.sprouthdl import UInt, Signal
 from sprouthdl.sprouthdl_module import Component
 from sprouthdl.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
 
-@dataclass
-class FIR4IO:
-    x0: Signal; x1: Signal; x2: Signal; x3: Signal
-    c0: Signal; c1: Signal; c2: Signal; c3: Signal
-    y: Signal
-
-class FIR4(Component):
-    """4-tap FIR filter: y = c0*x0 + c1*x1 + c2*x2 + c3*x3"""
-    def __init__(self, w: int = 8):
-        self.io = FIR4IO(
-            x0=Signal(name="x0", typ=UInt(w), kind="input"),
-            x1=Signal(name="x1", typ=UInt(w), kind="input"),
-            x2=Signal(name="x2", typ=UInt(w), kind="input"),
-            x3=Signal(name="x3", typ=UInt(w), kind="input"),
-            c0=Signal(name="c0", typ=UInt(w), kind="input"),
-            c1=Signal(name="c1", typ=UInt(w), kind="input"),
-            c2=Signal(name="c2", typ=UInt(w), kind="input"),
-            c3=Signal(name="c3", typ=UInt(w), kind="input"),
-            y=Signal(name="y", typ=UInt(2 * w + 2), kind="output"),
-        )
+class FIR(Component):
+    """N-tap FIR filter: y = c0*x0 + c1*x1 + ... + c[N-1]*x[N-1]"""
+    def __init__(self, n_taps: int = 4, w: int = 8):
+        self.n_taps = n_taps
+        x = [Signal(name=f"x{i}", typ=UInt(w), kind="input") for i in range(n_taps)]
+        c = [Signal(name=f"c{i}", typ=UInt(w), kind="input") for i in range(n_taps)]
+        y = Signal(name="y", typ=UInt(2 * w + 2), kind="output")
+        IO = make_dataclass("FIRIO",
+            [(f"x{i}", Signal) for i in range(n_taps)]
+            + [(f"c{i}", Signal) for i in range(n_taps)]
+            + [("y", Signal)])
+        self.io = IO(**{f"x{i}": x[i] for i in range(n_taps)},
+                      **{f"c{i}": c[i] for i in range(n_taps)}, y=y)
+        self._x, self._c = x, c
         self.elaborate()
 
     def elaborate(self):
         # Plain Python operators — the optimizer handles the rest
-        self.io.y <<= (self.io.c0 * self.io.x0
-                      + self.io.c1 * self.io.x1
-                      + self.io.c2 * self.io.x2
-                      + self.io.c3 * self.io.x3)
+        acc = self._c[0] * self._x[0]
+        for i in range(1, self.n_taps):
+            acc = acc + self._c[i] * self._x[i]
+        self.io.y <<= acc
 
-fir = FIR4(w=8)
+fir = FIR(n_taps=4, w=8)
 replace_arithmetic_ops(fir, ArithmeticAutoConfig(objective="adp"))
 module = fir.to_module("FIR4_optimized")
 print(module.to_verilog())
 ```
 
-The optimizer automatically detects the `c*x + ...` MAC patterns and fuses each multiply-add pair, reducing critical-path depth by eliminating intermediate adder stages.
+The optimizer automatically detects the `c*x + ...` inner product pattern and fuses all four multiply-add pairs into a single column reduction with one final-stage adder, eliminating three intermediate adder stages:
+
+| Configuration | Transistors | AIG Depth |
+|---------------|------------:|----------:|
+| plain (Yosys `*`, `+`) | 24556 | 142 |
+| `area`             | 11356 |  49 |
+| `delay`            | 11434 |  45 |
+| `adp`              | 11434 |  45 |
+
+The area objective achieves a **54% transistor reduction**, and the delay objective cuts critical-path depth from 142 to 45 AND-gate levels (**68%**).
 
 See [`testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py`](testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py) for the full test and benchmark code.
 

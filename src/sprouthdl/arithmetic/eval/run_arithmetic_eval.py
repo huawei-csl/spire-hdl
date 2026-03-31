@@ -33,6 +33,10 @@ from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib
 from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
 from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder, StageBasedSubtractor
 from sprouthdl.arithmetic.int_mac_fused import FusedMacComponent, MacBuildConfig
+from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core_fused import (
+    MultiplierConfig as FusedMultiplierConfig,
+    fused_inner_product,
+)
 from sprouthdl.helpers import get_aig_stats, get_yosys_metrics
 from sprouthdl.sprouthdl import reset_shared_cache
 
@@ -248,6 +252,68 @@ def sweep_macs(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
     return _run_parallel("MACs", tasks, eval_mac, max_workers)
 
 
+def eval_inner_product(
+    ppg_opt: PPGOption, ppa_opt: PPAOption, fsa_opt: FSAOption,
+    n_terms: int, n_bits: int, encoding: Encoding,
+    optim_type: Literal["area", "speed"],
+) -> dict:
+    """Evaluate a fused inner product: y = a0*b0 + a1*b1 + ... (n_terms pairs, no c)."""
+    reset_shared_cache()
+    from sprouthdl.sprouthdl import Const, UInt as _UInt, SInt as _SInt
+
+    signed = is_signed(encoding)
+    io_type = _SInt if signed else _UInt
+
+    fused_cfg = FusedMultiplierConfig(
+        ppg_opt=ppg_opt, ppa_opt=ppa_opt, fsa_opt=fsa_opt,
+        optim_type=optim_type,
+    )
+
+    from sprouthdl.sprouthdl_module import Module
+    m = Module(f"dot{n_terms}_{ppg_opt.name}_{ppa_opt.name}_{fsa_opt.name}_{n_bits}b_{encoding.name}_{optim_type}",
+               with_clock=False, with_reset=False)
+    vec_a = [m.input(io_type(n_bits), f"a{i}") for i in range(n_terms)]
+    vec_b = [m.input(io_type(n_bits), f"b{i}") for i in range(n_terms)]
+    c_term = Const(0, _UInt(1))
+    result = fused_inner_product(vec_a, vec_b, c_term, fused_cfg, encoding)
+    y = m.output(io_type(result.typ.width), "y")
+    y <<= result
+
+    ym = get_yosys_metrics(m)
+    aig = get_aig_stats(m)
+    return {
+        "op": f"dot{n_terms}", "a_w": n_bits, "b_w": n_bits,
+        "signed": "signed" if signed else "unsigned",
+        "fsa_opt": fsa_opt.name, "ppg_opt": ppg_opt.name, "ppa_opt": ppa_opt.name,
+        "optim_type": optim_type,
+        "transistor_count": int(ym["estimated_num_transistors"]),
+        "aig_depth": int(aig["depth"]), "num_aig_gates": int(aig["num_gates"]),
+    }
+
+
+def sweep_inner_products(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
+    """Sweep fused inner product configs for 2-term and 4-term dot products."""
+    ppg_options = [p for p in PPGOption if p not in _PPG_SKIP]
+    ppa_options = [p for p in PPAOption if p not in _PPA_SKIP]
+    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
+
+    tasks = []
+    for n_terms, n_bits, ppg, ppa, fsa, optim_type in product(
+        [2, 4], bitwidths, ppg_options, ppa_options, fsa_options, ["area", "speed"]
+    ):
+        if n_bits < 2:
+            continue
+        if ppg == PPGOption.BOOTH_UNOPTIMISED and n_bits <= 2:
+            continue
+        for encoding in [Encoding.unsigned, Encoding.twos_complement]:
+            sig = (is_signed(encoding), is_signed(encoding))
+            if sig not in ppg.value.supported_signatures:
+                continue
+            tasks.append((ppg, ppa, fsa, n_terms, n_bits, encoding, optim_type))
+
+    return _run_parallel("Inner products", tasks, eval_inner_product, max_workers)
+
+
 # ---------------------------------------------------------------------------
 # Save functions
 # ---------------------------------------------------------------------------
@@ -331,6 +397,7 @@ def main(
     all_rows.extend(sweep_subtractors(bitwidths, max_workers=max_workers))
     all_rows.extend(sweep_multipliers(bitwidths, max_workers=max_workers))
     all_rows.extend(sweep_macs(bitwidths, max_workers=max_workers))
+    all_rows.extend(sweep_inner_products(bitwidths, max_workers=max_workers))
 
     if fmt == "csv":
         out_path = output_dir / "best_configs.csv"

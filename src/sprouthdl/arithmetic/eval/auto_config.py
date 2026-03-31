@@ -187,12 +187,125 @@ def lookup_best_mac_config(
     """Look up the best fused MAC config for y = a*b + c (symmetric widths)."""
     db = _load_db()
     sign_key = "signed" if signed else "unsigned"
-    # MAC entries are keyed as op="mac", with a_w=b_w=n_bits
     snapped = _nearest_width_log(n_bits, sorted({
         int(k[1]) for k in db if k[0] == "mac"
     } or {n_bits}))
     rows = db.get(("mac", str(snapped), str(snapped), sign_key), [])
     return _select_best(rows, objective)
+
+
+def lookup_best_dot_config(
+    n_terms: int,
+    n_bits: int,
+    signed: bool,
+    objective: Objective = "area",
+) -> dict | None:
+    """Look up the best fused inner product config for y = sum(ai*bi)."""
+    db = _load_db()
+    sign_key = "signed" if signed else "unsigned"
+    op_key = f"dot{n_terms}"
+    available = sorted({int(k[1]) for k in db if k[0] == op_key} or {n_bits})
+    snapped = _nearest_width_log(n_bits, available)
+    rows = db.get((op_key, str(snapped), str(snapped), sign_key), [])
+    return _select_best(rows, objective)
+
+
+def _objective_metric(entry: dict, objective: Objective) -> tuple:
+    """Return the sort key for comparing entries by objective."""
+    tc = entry["transistor_count"]
+    d = entry["aig_depth"]
+    if objective == "area":
+        return (tc, d)
+    elif objective == "delay":
+        return (d, tc)
+    elif objective == "adp":
+        return (tc * d, tc)
+    return (tc, d)
+
+
+def estimate_sep_mul_add_cost(
+    a_w: int, b_w: int, c_w: int, signed: bool, objective: Objective,
+) -> dict | None:
+    """Estimate cost of separate mul + add from DB entries."""
+    mul_entry, _ = lookup_best_config("*", a_w, b_w, signed, objective)
+    if mul_entry is None:
+        return None
+    prod_w = a_w + b_w
+    add_entry, _ = lookup_best_config("+", prod_w, c_w, signed, objective)
+    if add_entry is None:
+        return None
+    return {
+        "transistor_count": mul_entry["transistor_count"] + add_entry["transistor_count"],
+        "aig_depth": mul_entry["aig_depth"] + add_entry["aig_depth"],
+    }
+
+
+def pick_best_mac_strategy(
+    n_bits: int, c_w: int, signed: bool, objective: Objective,
+) -> tuple[str, dict | None]:
+    """Compare fused MAC vs separate mul+add. Returns (strategy, config).
+
+    strategy is "mac" or "sep". config is the fused MAC config dict (if mac),
+    or None (if sep — caller uses normal mul+add replacement).
+    """
+    mac_cfg = lookup_best_mac_config(n_bits, signed, objective)
+    sep_cost = estimate_sep_mul_add_cost(n_bits, n_bits, c_w, signed, objective)
+
+    if mac_cfg is None:
+        return "sep", None
+    if sep_cost is None:
+        return "mac", mac_cfg
+
+    mac_metric = _objective_metric(mac_cfg, objective)
+    sep_metric = _objective_metric(sep_cost, objective)
+    if mac_metric <= sep_metric:
+        return "mac", mac_cfg
+    return "sep", None
+
+
+def pick_best_dot_strategy(
+    n_terms: int, n_bits: int, signed: bool, objective: Objective,
+) -> tuple[str, dict | None]:
+    """Compare fused inner product vs MAC tree vs separate muls+adds.
+
+    Returns (strategy, config) where strategy is "dot", "mac", or "sep".
+    """
+    dot_cfg = lookup_best_dot_config(n_terms, n_bits, signed, objective)
+    mac_cfg = lookup_best_mac_config(n_bits, signed, objective)
+    sep_mul, _ = lookup_best_config("*", n_bits, n_bits, signed, objective)
+    prod_w = 2 * n_bits
+    sep_add, _ = lookup_best_config("+", prod_w, prod_w, signed, objective)
+
+    candidates = []
+
+    if dot_cfg is not None:
+        candidates.append(("dot", dot_cfg, _objective_metric(dot_cfg, objective)))
+
+    # MAC tree: n_terms MACs, depth = mac_depth + log2(n_terms) adder tree levels
+    if mac_cfg is not None and sep_add is not None:
+        import math
+        tree_levels = math.ceil(math.log2(max(n_terms, 2)))
+        mac_tree_cost = {
+            "transistor_count": n_terms * mac_cfg["transistor_count"] + tree_levels * sep_add["transistor_count"],
+            "aig_depth": mac_cfg["aig_depth"] + tree_levels * sep_add["aig_depth"],
+        }
+        candidates.append(("mac", mac_cfg, _objective_metric(mac_tree_cost, objective)))
+
+    # Separate: n_terms muls + (n_terms-1) adds
+    if sep_mul is not None and sep_add is not None:
+        import math
+        tree_levels = math.ceil(math.log2(max(n_terms, 2)))
+        sep_cost = {
+            "transistor_count": n_terms * sep_mul["transistor_count"] + (n_terms - 1) * sep_add["transistor_count"],
+            "aig_depth": sep_mul["aig_depth"] + tree_levels * sep_add["aig_depth"],
+        }
+        candidates.append(("sep", None, _objective_metric(sep_cost, objective)))
+
+    if not candidates:
+        return "sep", None
+
+    best = min(candidates, key=lambda x: x[2])
+    return best[0], best[1]
 
 
 def lookup_best_arithmetic_config(

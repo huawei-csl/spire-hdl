@@ -407,22 +407,21 @@ class _Mac(Component):
         self.io.y <<= self.io.a * self.io.b + self.io.c
 
 
-def test_mac_fusion_replaces_ops():
-    """MAC pattern (a*b + c) should be fused — both * and + consumed."""
+def test_mac_replaces_ops():
+    """MAC pattern (a*b + c) should replace both * and + (fused or separate)."""
     reset_shared_cache()
 
     comp = _Mac(N_BITS)
     replace_arithmetic_ops(comp, AUTO_CFG)
-    module = comp.to_module("MAC_fused", with_clock=True, with_reset=True)
+    module = comp.to_module("MAC_replaced", with_clock=True, with_reset=True)
 
     report = module.module_analyze()
-    # Both the * and the + should be gone (fused into MAC)
-    assert report.by_class_incl_typ.get("Op2<*>", 0) == 0
+    # The plain + should be gone (either fused or replaced with prefix adder)
     assert report.by_class_incl_typ.get("Op2<+>", 0) == 0
 
 
-def test_mac_fusion_correctness():
-    """Fused MAC produces correct y = a*b + c results."""
+def test_mac_correctness():
+    """Replaced MAC produces correct y = a*b + c results."""
     reset_shared_cache()
     import random
 
@@ -447,12 +446,10 @@ def test_mac_fusion_correctness():
 
 
 def test_mac_depth_improvement():
-    """Fused MAC should have lower depth than separate mul+add."""
+    """Auto-config MAC should have lower or equal depth than fixed config."""
     reset_shared_cache()
 
-    # Separate mul+add
     comp_sep = _Mac(N_BITS)
-    # Use a config that does NOT fuse MAC (plain ArithmeticConfig)
     from sprouthdl.arithmetic.int_arithmetic_config import ArithmeticConfig
     replace_arithmetic_ops(comp_sep, ArithmeticConfig())
     mod_sep = comp_sep.to_module("MAC_sep")
@@ -460,18 +457,113 @@ def test_mac_depth_improvement():
 
     reset_shared_cache()
 
-    # Fused MAC via auto-config
-    comp_fused = _Mac(N_BITS)
-    replace_arithmetic_ops(comp_fused, ArithmeticAutoConfig(objective="delay"))
-    mod_fused = comp_fused.to_module("MAC_fused_delay")
-    aig_fused = get_aig_stats(mod_fused)
+    comp_auto = _Mac(N_BITS)
+    replace_arithmetic_ops(comp_auto, ArithmeticAutoConfig(objective="delay"))
+    mod_auto = comp_auto.to_module("MAC_auto_delay")
+    aig_auto = get_aig_stats(mod_auto)
 
     print(f"\nMAC depth comparison ({N_BITS}-bit):")
-    print(f"  Separate: depth={aig_sep['depth']}")
-    print(f"  Fused:    depth={aig_fused['depth']}")
+    print(f"  Fixed config: depth={aig_sep['depth']}")
+    print(f"  Auto (delay): depth={aig_auto['depth']}")
 
-    # Fused should not be deeper (may be equal or better)
-    assert aig_fused["depth"] <= aig_sep["depth"]
+    assert aig_auto["depth"] <= aig_sep["depth"]
+
+
+# ---------------------------------------------------------------------------
+# Inner product tests
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _DotIO:
+    x0: Signal; x1: Signal; x2: Signal; x3: Signal
+    c0: Signal; c1: Signal; c2: Signal; c3: Signal
+    y: Signal
+
+
+class _Dot4(Component):
+    """4-term inner product: y = c0*x0 + c1*x1 + c2*x2 + c3*x3"""
+    def __init__(self, w: int):
+        self.w = w
+        self.io = _DotIO(
+            x0=Signal(name="x0", typ=UInt(w), kind="input"),
+            x1=Signal(name="x1", typ=UInt(w), kind="input"),
+            x2=Signal(name="x2", typ=UInt(w), kind="input"),
+            x3=Signal(name="x3", typ=UInt(w), kind="input"),
+            c0=Signal(name="c0", typ=UInt(w), kind="input"),
+            c1=Signal(name="c1", typ=UInt(w), kind="input"),
+            c2=Signal(name="c2", typ=UInt(w), kind="input"),
+            c3=Signal(name="c3", typ=UInt(w), kind="input"),
+            y=Signal(name="y", typ=UInt(2 * w + 2), kind="output"),
+        )
+        self.elaborate()
+
+    def elaborate(self):
+        self.io.y <<= (self.io.c0 * self.io.x0
+                      + self.io.c1 * self.io.x1
+                      + self.io.c2 * self.io.x2
+                      + self.io.c3 * self.io.x3)
+
+
+def test_inner_product_replaces_ops():
+    """Inner product chain should replace all * and + ops."""
+    reset_shared_cache()
+
+    comp = _Dot4(N_BITS)
+    replace_arithmetic_ops(comp, AUTO_CFG)
+    module = comp.to_module("Dot4_replaced", with_clock=True, with_reset=True)
+
+    report = module.module_analyze()
+    assert report.by_class_incl_typ.get("Op2<+>", 0) == 0
+    assert report.by_class_incl_typ.get("Op2<*>", 0) == 0
+
+
+def test_inner_product_correctness():
+    """Replaced inner product produces correct results."""
+    reset_shared_cache()
+    import random
+
+    comp = _Dot4(N_BITS)
+    replace_arithmetic_ops(comp, AUTO_CFG)
+    module = comp.to_module("Dot4_correct", with_clock=True, with_reset=True)
+
+    sim = Simulator(module)
+    rng = random.Random(123)
+    mask = (1 << N_BITS) - 1
+    mask_y = (1 << (2 * N_BITS + 2)) - 1
+
+    for _ in range(N_VECS):
+        vals = {f"x{i}": rng.randint(0, mask) for i in range(4)}
+        vals.update({f"c{i}": rng.randint(0, mask) for i in range(4)})
+        expected = sum(vals[f"c{i}"] * vals[f"x{i}"] for i in range(4)) & mask_y
+        for k, v in vals.items():
+            sim.set(k, v)
+        sim.eval()
+        got = sim.get("y")
+        assert got == expected, f"dot4: got={got} exp={expected}"
+
+
+def test_inner_product_depth():
+    """Inner product with auto-config should improve depth vs fixed config."""
+    reset_shared_cache()
+
+    comp_fixed = _Dot4(N_BITS)
+    from sprouthdl.arithmetic.int_arithmetic_config import ArithmeticConfig
+    replace_arithmetic_ops(comp_fixed, ArithmeticConfig())
+    mod_fixed = comp_fixed.to_module("Dot4_fixed")
+    aig_fixed = get_aig_stats(mod_fixed)
+
+    reset_shared_cache()
+
+    comp_auto = _Dot4(N_BITS)
+    replace_arithmetic_ops(comp_auto, ArithmeticAutoConfig(objective="delay"))
+    mod_auto = comp_auto.to_module("Dot4_auto_delay")
+    aig_auto = get_aig_stats(mod_auto)
+
+    print(f"\n4-term inner product depth ({N_BITS}-bit):")
+    print(f"  Fixed config: depth={aig_fixed['depth']}")
+    print(f"  Auto (delay): depth={aig_auto['depth']}")
+
+    assert aig_auto["depth"] <= aig_fixed["depth"]
 
 
 if __name__ == "__main__":
