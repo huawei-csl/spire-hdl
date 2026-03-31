@@ -32,6 +32,7 @@ from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib
 )
 from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
 from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder, StageBasedSubtractor
+from sprouthdl.arithmetic.int_mac_fused import FusedMacComponent, MacBuildConfig
 from sprouthdl.helpers import get_aig_stats, get_yosys_metrics
 from sprouthdl.sprouthdl import reset_shared_cache
 
@@ -196,6 +197,57 @@ def sweep_multipliers(bitwidths: list[int], max_workers: int = 16) -> list[dict]
     return _run_parallel("Multipliers", tasks, eval_multiplier, max_workers)
 
 
+def eval_mac(
+    ppg_opt: PPGOption, ppa_opt: PPAOption, fsa_opt: FSAOption,
+    n_bits: int, c_bits: int, encoding: Encoding,
+    optim_type: Literal["area", "speed"],
+) -> dict:
+    """Evaluate a single fused MAC configuration (y = a*b + c)."""
+    reset_shared_cache()
+    fused = FusedMacComponent(MacBuildConfig(
+        n_bits=n_bits, c_bits=c_bits,
+        ppg_opt=ppg_opt, ppa_opt=ppa_opt, fsa_opt=fsa_opt,
+        encoding=encoding, optim_type=optim_type, use_operator=False,
+    ))
+    module = fused.to_module(
+        f"mac_{ppg_opt.name}_{ppa_opt.name}_{fsa_opt.name}_{n_bits}b_c{c_bits}_{encoding.name}_{optim_type}"
+    )
+    ym = get_yosys_metrics(module)
+    aig = get_aig_stats(module)
+    return {
+        "op": "mac", "a_w": n_bits, "b_w": n_bits, "signed": "signed" if is_signed(encoding) else "unsigned",
+        "fsa_opt": fsa_opt.name, "ppg_opt": ppg_opt.name, "ppa_opt": ppa_opt.name,
+        "optim_type": optim_type,
+        "transistor_count": int(ym["estimated_num_transistors"]),
+        "aig_depth": int(aig["depth"]), "num_aig_gates": int(aig["num_gates"]),
+    }
+
+
+def sweep_macs(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
+    """Sweep fused MAC configs. Uses symmetric widths with c_bits = 2*n_bits."""
+    ppg_options = [p for p in PPGOption if p not in _PPG_SKIP]
+    ppa_options = [p for p in PPAOption if p not in _PPA_SKIP]
+    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
+
+    # MAC sweep uses symmetric widths only (a_w == b_w), c_bits = 2*n_bits
+    tasks = []
+    for n_bits, ppg, ppa, fsa, optim_type in product(
+        bitwidths, ppg_options, ppa_options, fsa_options, ["area", "speed"]
+    ):
+        if n_bits < 2:  # MAC with 1-bit inputs is trivial
+            continue
+        if ppg == PPGOption.BOOTH_UNOPTIMISED and n_bits <= 2:
+            continue
+        c_bits = 2 * n_bits
+        for encoding in [Encoding.unsigned, Encoding.twos_complement]:
+            sig = (is_signed(encoding), is_signed(encoding))
+            if sig not in ppg.value.supported_signatures:
+                continue
+            tasks.append((ppg, ppa, fsa, n_bits, c_bits, encoding, optim_type))
+
+    return _run_parallel("MACs", tasks, eval_mac, max_workers)
+
+
 # ---------------------------------------------------------------------------
 # Save functions
 # ---------------------------------------------------------------------------
@@ -211,6 +263,9 @@ def save_csv(rows: list[dict], path: Path, pareto: bool = True) -> None:
         for group_rows in grouped.values():
             filtered.extend(_pareto_filter(group_rows))
         rows = filtered
+
+    # Sort for deterministic output (stable diffs across re-runs)
+    rows.sort(key=lambda r: (r["op"], r["a_w"], r["b_w"], r["signed"], r["transistor_count"], r["aig_depth"]))
 
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="") as f:
@@ -234,9 +289,11 @@ def save_json(rows: list[dict], path: Path, pareto: bool = True) -> None:
         key = (r["op"], str(r["a_w"]), str(r["b_w"]), r["signed"])
         grouped.setdefault(key, []).append(r)
 
-    for (op, a_w_s, b_w_s, sign_key), group_rows in grouped.items():
+    for (op, a_w_s, b_w_s, sign_key), group_rows in sorted(grouped.items()):
         w_key = f"{a_w_s}x{b_w_s}"
         filtered = _pareto_filter(group_rows) if pareto else group_rows
+        # Sort within group for deterministic output
+        filtered.sort(key=lambda r: (r["transistor_count"], r["aig_depth"]))
         # Strip op/a_w/b_w/signed from individual rows (redundant with key)
         clean = [{k: v for k, v in r.items() if k not in ("op", "a_w", "b_w", "signed")} for r in filtered]
         db["configs"].setdefault(op, {}).setdefault(w_key, {})[sign_key] = clean
@@ -273,6 +330,7 @@ def main(
     all_rows.extend(sweep_adders(bitwidths, max_workers=max_workers))
     all_rows.extend(sweep_subtractors(bitwidths, max_workers=max_workers))
     all_rows.extend(sweep_multipliers(bitwidths, max_workers=max_workers))
+    all_rows.extend(sweep_macs(bitwidths, max_workers=max_workers))
 
     if fmt == "csv":
         out_path = output_dir / "best_configs.csv"

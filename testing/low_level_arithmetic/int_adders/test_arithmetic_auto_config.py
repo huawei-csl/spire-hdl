@@ -380,5 +380,99 @@ def test_asymmetric_transistor_comparison():
     assert report.by_class_incl_typ.get("Op2<*>", 0) == 0
 
 
+# ---------------------------------------------------------------------------
+# MAC (fused multiply-accumulate) tests
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _MacIO:
+    a: Signal
+    b: Signal
+    c: Signal
+    y: Signal
+
+
+class _Mac(Component):
+    def __init__(self, w: int):
+        self.w = w
+        self.io = _MacIO(
+            a=Signal(name="a", typ=UInt(w), kind="input"),
+            b=Signal(name="b", typ=UInt(w), kind="input"),
+            c=Signal(name="c", typ=UInt(2 * w), kind="input"),
+            y=Signal(name="y", typ=UInt(2 * w + 1), kind="output"),
+        )
+        self.elaborate()
+
+    def elaborate(self):
+        self.io.y <<= self.io.a * self.io.b + self.io.c
+
+
+def test_mac_fusion_replaces_ops():
+    """MAC pattern (a*b + c) should be fused — both * and + consumed."""
+    reset_shared_cache()
+
+    comp = _Mac(N_BITS)
+    replace_arithmetic_ops(comp, AUTO_CFG)
+    module = comp.to_module("MAC_fused", with_clock=True, with_reset=True)
+
+    report = module.module_analyze()
+    # Both the * and the + should be gone (fused into MAC)
+    assert report.by_class_incl_typ.get("Op2<*>", 0) == 0
+    assert report.by_class_incl_typ.get("Op2<+>", 0) == 0
+
+
+def test_mac_fusion_correctness():
+    """Fused MAC produces correct y = a*b + c results."""
+    reset_shared_cache()
+    import random
+
+    comp = _Mac(N_BITS)
+    replace_arithmetic_ops(comp, AUTO_CFG)
+    module = comp.to_module("MAC_correct", with_clock=True, with_reset=True)
+
+    sim = Simulator(module)
+    rng = random.Random(42)
+    mask_ab = (1 << N_BITS) - 1
+    mask_c = (1 << (2 * N_BITS)) - 1
+    mask_y = (1 << (2 * N_BITS + 1)) - 1
+
+    for _ in range(N_VECS):
+        a = rng.randint(0, mask_ab)
+        b = rng.randint(0, mask_ab)
+        c = rng.randint(0, mask_c)
+        expected = (a * b + c) & mask_y
+        sim.set("a", a).set("b", b).set("c", c).eval()
+        got = sim.get("y")
+        assert got == expected, f"{a}*{b}+{c}: got={got} exp={expected}"
+
+
+def test_mac_depth_improvement():
+    """Fused MAC should have lower depth than separate mul+add."""
+    reset_shared_cache()
+
+    # Separate mul+add
+    comp_sep = _Mac(N_BITS)
+    # Use a config that does NOT fuse MAC (plain ArithmeticConfig)
+    from sprouthdl.arithmetic.int_arithmetic_config import ArithmeticConfig
+    replace_arithmetic_ops(comp_sep, ArithmeticConfig())
+    mod_sep = comp_sep.to_module("MAC_sep")
+    aig_sep = get_aig_stats(mod_sep)
+
+    reset_shared_cache()
+
+    # Fused MAC via auto-config
+    comp_fused = _Mac(N_BITS)
+    replace_arithmetic_ops(comp_fused, ArithmeticAutoConfig(objective="delay"))
+    mod_fused = comp_fused.to_module("MAC_fused_delay")
+    aig_fused = get_aig_stats(mod_fused)
+
+    print(f"\nMAC depth comparison ({N_BITS}-bit):")
+    print(f"  Separate: depth={aig_sep['depth']}")
+    print(f"  Fused:    depth={aig_fused['depth']}")
+
+    # Fused should not be deeper (may be equal or better)
+    assert aig_fused["depth"] <= aig_sep["depth"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])

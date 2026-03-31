@@ -166,8 +166,9 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
     comparison Op2 nodes with optimized subgraphs.
 
     Replaces ``+``, ``-``, ``*`` with StageBased adder/subtractor/multiplier
-    components, and ``==``, ``!=`` with XOR + balanced NOR-tree
-    (O(log n) depth instead of linear chain).
+    components, ``==``/``!=`` with XOR + balanced NOR-tree, and detects
+    ``a * b + c`` patterns for fused multiply-accumulate (MAC) replacement
+    when using ``ArithmeticAutoConfig``.
 
     Supports operands with different bit-widths.
 
@@ -204,6 +205,22 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
     for sig in outputs:
         walk(sig)
 
+    # Build reference count map to detect single-consumer * nodes (for MAC fusion)
+    ref_count: dict[int, int] = {}
+    for node in order:
+        for attr in ("a", "b", "sel"):
+            child = getattr(node, attr, None)
+            if child is not None:
+                ref_count[id(child)] = ref_count.get(id(child), 0) + 1
+        if hasattr(node, "parts"):
+            for part in node.parts:
+                ref_count[id(part)] = ref_count.get(id(part), 0) + 1
+        if isinstance(node, Signal) and node._driver is not None:
+            ref_count[id(node._driver)] = ref_count.get(id(node._driver), 0) + 1
+
+    # Track which * nodes have been consumed by a MAC fusion
+    mac_consumed: set[int] = set()
+
     # Build replacement map bottom-up
     replacements: dict[int, Expr] = {}
 
@@ -229,7 +246,6 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
                 a_expr = cast(a_expr, UInt(max_w))
             if b_w < max_w:
                 b_expr = cast(b_expr, UInt(max_w))
-            # XOR each bit, then balanced OR-tree, then invert
             xor_bits = [a_expr[i] ^ b_expr[i] for i in range(max_w)]
             level = xor_bits
             while len(level) > 1:
@@ -245,6 +261,61 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
             if result.typ.width != node.typ.width or result.typ.signed != node.typ.signed:
                 result = cast(result, node.typ)
             replacements[id(node)] = result
+            continue
+
+        # MAC detection: Op2<+> where one child is a single-consumer Op2<*>
+        if node.op == "+" and isinstance(config, ArithmeticAutoConfig):
+            mul_node = None
+            c_expr = None
+            # Check if a is a * that's only used here
+            orig_a = node.a  # use original (pre-replacement) to check structure
+            orig_b = node.b
+            if isinstance(orig_a, Op2) and orig_a.op == "*" and ref_count.get(id(orig_a), 0) == 1 and id(orig_a) not in mac_consumed:
+                mul_node = orig_a
+                c_expr = b_expr
+            elif isinstance(orig_b, Op2) and orig_b.op == "*" and ref_count.get(id(orig_b), 0) == 1 and id(orig_b) not in mac_consumed:
+                mul_node = orig_b
+                c_expr = a_expr
+
+            if mul_node is not None:
+                from sprouthdl.arithmetic.eval.auto_config import lookup_best_mac_config
+                ma = get(mul_node.a)
+                mb = get(mul_node.b)
+                ma_w = ma.typ.width
+                mb_w = mb.typ.width
+                mul_signed = getattr(ma.typ, "signed", False) or getattr(mb.typ, "signed", False)
+                mac_cfg = lookup_best_mac_config(max(ma_w, mb_w), mul_signed, config.objective)
+
+                if mac_cfg is not None:
+                    from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core_fused import (
+                        MultiplierConfig as FusedMultiplierConfig,
+                        fused_inner_product,
+                    )
+                    encoding = Encoding.twos_complement if mul_signed else Encoding.unsigned
+                    fused_cfg = FusedMultiplierConfig(
+                        ppg_opt=PPGOption[mac_cfg["ppg_opt"]],
+                        ppa_opt=PPAOption[mac_cfg["ppa_opt"]],
+                        fsa_opt=FSAOption[mac_cfg["fsa_opt"]],
+                        optim_type=mac_cfg.get("optim_type", "area") or "area",
+                    )
+                    # Pad to symmetric widths for fused MAC
+                    max_w = max(ma_w, mb_w)
+                    if ma_w < max_w:
+                        ma = cast(ma, SInt(max_w) if mul_signed else UInt(max_w))
+                    if mb_w < max_w:
+                        mb = cast(mb, SInt(max_w) if mul_signed else UInt(max_w))
+
+                    result = fused_inner_product([ma], [mb], c_expr, fused_cfg, encoding)
+                    mac_consumed.add(id(mul_node))
+                    replacements[id(mul_node)] = result  # prevent standalone * replacement
+
+                    if result.typ.width != node.typ.width or result.typ.signed != node.typ.signed:
+                        result = cast(result, node.typ)
+                    replacements[id(node)] = result
+                    continue
+
+        # Skip * nodes that were already consumed by MAC fusion
+        if node.op == "*" and id(node) in mac_consumed:
             continue
 
         # Resolve per-node config when using auto mode

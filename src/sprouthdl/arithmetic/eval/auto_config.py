@@ -179,6 +179,22 @@ def lookup_best_config(
         return _select_best(rows_ab, objective), False
 
 
+def lookup_best_mac_config(
+    n_bits: int,
+    signed: bool,
+    objective: Objective = "area",
+) -> dict | None:
+    """Look up the best fused MAC config for y = a*b + c (symmetric widths)."""
+    db = _load_db()
+    sign_key = "signed" if signed else "unsigned"
+    # MAC entries are keyed as op="mac", with a_w=b_w=n_bits
+    snapped = _nearest_width_log(n_bits, sorted({
+        int(k[1]) for k in db if k[0] == "mac"
+    } or {n_bits}))
+    rows = db.get(("mac", str(snapped), str(snapped), sign_key), [])
+    return _select_best(rows, objective)
+
+
 def lookup_best_arithmetic_config(
     op: Literal["+", "-", "*"],
     a_w: int,
