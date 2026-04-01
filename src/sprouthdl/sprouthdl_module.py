@@ -640,13 +640,26 @@ class IOCollector:
         return agg
 
 
-def iter_values(obj: Any, *, allow_to_list: bool = True) -> Iterable[Any]:
-    if allow_to_list and hasattr(obj, "to_list"):  # HDLAggregate, returns list of Expr (should be Signals)
-        return obj.to_list()
-    if isinstance(obj, dict):
-        return obj.values()
-    if is_dataclass(obj):
-        return (getattr(obj, f.name) for f in fields(obj))
-    if hasattr(obj, "_fields"):  # namedtuple
-        return (getattr(obj, n) for n in obj._fields)
-    return vars(obj).values()  # normal object
+def _to_aggregate(obj: Any) -> "AggregateRecordDynamic":
+    """Convert any IO container into an AggregateRecordDynamic for uniform handling."""
+    from sprouthdl.aggregate.aggregate_record_dynamic import AggregateRecordDynamic
+    if isinstance(obj, AggregateRecordDynamic):  # already an aggregate — no conversion needed
+        return obj
+    if is_dataclass(obj):  # @dataclass IO (most common Component IO pattern)
+        pairs = [(f.name, getattr(obj, f.name)) for f in fields(obj)]
+    elif hasattr(obj, "_fields"):  # namedtuple IO
+        pairs = [(n, getattr(obj, n)) for n in obj._fields]
+    elif isinstance(obj, dict):  # plain dict IO
+        pairs = list(obj.items())
+    else:  # plain object with __dict__
+        pairs = list(vars(obj).items())
+    DynIO = make_dataclass("DynIO", [(n, type(v)) for n, v in pairs], bases=(AggregateRecordDynamic,))
+    return DynIO(**{n: v for n, v in pairs})
+
+
+def iter_values(obj: Any) -> Iterable[Any]:
+    """Extract leaf Signals from an IO container (dataclass, namedtuple, dict,
+    or HDLAggregate).  Converts to AggregateRecordDynamic first, then flattens
+    via to_list() — all aggregate fields (Array, Record, ...) and plain lists
+    are recursively resolved into individual Signals."""
+    return _to_aggregate(obj).to_list()
