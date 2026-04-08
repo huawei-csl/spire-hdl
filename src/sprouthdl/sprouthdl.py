@@ -3,9 +3,14 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 import hashlib
+import itertools
 import random
-import time
 from typing import Optional, Union, Sequence
+from sprouthdl.signal_name_inference import (
+    infer_signal_name_from_assignment,
+    mark_expr_name,
+    resolve_shared_wire_name,
+)
 
 
 # -----------------------------
@@ -18,33 +23,44 @@ class _SharedCache:
     On the 2nd time, we create a Verilog wire (sig_{index}) with a driver = original expr.
     Further uses return that wire to shrink emitted Verilog.
     """
-    def __init__(self):
-        self.counts: dict[int, int] = {}        # node_id -> count
-        self.expr2sig: dict[int, "Signal"] = {} # node_id -> created Signal
-        self.wires: list["Signal"] = []         # all created wires in encounter order
-        self.index: int = 0                     # for naming sig_{index}
+    counts: dict[int, int] = {}              # node_id -> count
+    expr2sig: dict[int, "Signal"] = {}       # node_id -> created Signal
+    wires: list["Signal"] = []               # all created wires in encounter order
+    index: int = 0                           # for naming sig_{index}
+    uid = itertools.count(1)                 # unique id for each expression
+    used_names: set[str] = set()             # avoid duplicate auto-generated names
 
-global _SHARED
-_SHARED = _SharedCache()
+    @classmethod
+    def reset(cls):
+        cls.counts.clear()
+        cls.expr2sig.clear()
+        cls.wires.clear()
+        cls.index = 0
+        cls.used_names.clear()
+
 
 def reset_shared_cache():
     """Call this before emitting each Verilog module to avoid cross-module bleed."""
-    _SHARED.counts.clear()
-    _SHARED.expr2sig.clear()
-    _SHARED.wires.clear()
-    _SHARED.index = 0
+    _SharedCache.reset()
+
 
 def get_shared_wires() -> list["Signal"]:
     """Access the created wires (for inclusion in module's declarations/assigns)."""
-    return list(_SHARED.wires)
+    return list(_SharedCache.wires)
 
-def _create_new_shared_wire(typ: HDLType) -> "Signal":
-    name = f"sig_{_SHARED.index}"
-    _SHARED.index += 1
+def _create_new_shared_wire(typ: HDLType, suggested_name: Optional[str] = None) -> "Signal":
+    name, _SharedCache.index = resolve_shared_wire_name(
+        suggested_name=suggested_name,
+        used_names=_SharedCache.used_names,
+        index=_SharedCache.index,
+    )
+
+    _SharedCache.used_names.add(name)
     sig = Signal(name, typ, "wire")
     sig._auto_generated = True
-    _SHARED.wires.append(sig)
+    _SharedCache.wires.append(sig)
     return sig
+
 
 def _maybe_share(e: "Expr", force_share=False) -> "Expr":
     """
@@ -52,21 +68,28 @@ def _maybe_share(e: "Expr", force_share=False) -> "Expr":
     create a 'wire sig_{index}' that drives from the original expression.
     On 3rd+ times, reuse the same wire.
     Leaf Signals/Consts are skipped (they're already "named"/literal).
+
+    Each Expr is keyed by a monotonically increasing UID (assigned lazily)
+    rather than ``id(e)``, so that Python's address recycling after GC
+    cannot cause false cache hits.
     """
     if isinstance(e, (Signal, Const)):
         return e
 
-    nid = id(e)
-    cnt = _SHARED.counts.get(nid, 0) + 1
-    _SHARED.counts[nid] = cnt
+    uid = getattr(e, '_cse_uid', None)
+    if uid is None:
+        uid = next(_SharedCache.uid)
+        e._cse_uid = uid
+    cnt = _SharedCache.counts.get(uid, 0) + 1
+    _SharedCache.counts[uid] = cnt
     cnt_share = 1 # at what count start sharing
     if cnt == cnt_share or (force_share and cnt <= 1):
-        sig = _create_new_shared_wire(e.typ)
+        sig = _create_new_shared_wire(e.typ, getattr(e, "_suggested_name", None))
         sig._driver = e  # continuous assignment: assign sig = <original expr>;
-        _SHARED.expr2sig[nid] = sig
+        _SharedCache.expr2sig[uid] = sig
         return sig
     elif cnt > cnt_share:
-        return _SHARED.expr2sig[nid]
+        return _SharedCache.expr2sig[uid]
     else:
         # 1st sighting: return original expr
         return e
@@ -306,6 +329,7 @@ class Signal(Expr):
     def __repr__(self):
         return f"Signal(name={self.name!r}, kind={self.kind}, typ=<{self.typ.width}{'s' if self.typ.signed else 'u'}>)"
 
+
 # helper which generates signal for casting
 def cast(expr: ExprLike, to_type: HDLType) -> Signal:
     s = _create_new_shared_wire(to_type)
@@ -315,17 +339,17 @@ def cast(expr: ExprLike, to_type: HDLType) -> Signal:
 # explicit register
 class Register(Signal):
     def __init__(self, typ: HDLType, init: Optional[ExprLike] = None, name: Optional[str]=None):
+        if name is None:
+            name = infer_signal_name_from_assignment("reg", "reg", __file__)
+        super().__init__(name, typ, kind="reg")
         if init is not None:
             self.set_init(init)
-        if name is None:
-            name = f"reg_{id(self)}"            
-        super().__init__(name, typ, kind="reg")
 
 # explicit wire
 class Wire(Signal):
     def __init__(self, typ: HDLType, name: Optional[str]=None):
         if name is None:
-            name = f"wire_{id(self)}"
+            name = infer_signal_name_from_assignment("wire", "wire", __file__)
         super().__init__(name, typ, kind="wire")
 
 
@@ -509,22 +533,22 @@ def z_ext(expr: Expr, width: int) -> Expr:
 
 def op_add(a: Expr, b: Expr) -> Expr:
     t = add_result_type(a, b)
-    return Op2(a, b, "+", t)
+    return mark_expr_name(Op2(a, b, "+", t), __file__)
 
 
 def op_sub(a: Expr, b: Expr) -> Expr:
     t = add_result_type(a, b)
-    return Op2(a, b, "-", t)
+    return mark_expr_name(Op2(a, b, "-", t), __file__)
 
 
 def op_mul(a: Expr, b: Expr) -> Expr:
     t = mul_result_type(a, b)
-    return Op2(a, b, "*", t)
+    return mark_expr_name(Op2(a, b, "*", t), __file__)
 
 
 def op_bit(a: Expr, b: Expr, sym: str) -> Expr:
     t = bitwise_result_type(a, b)
-    return Op2(fit_width(a, t), fit_width(b, t), sym, t)
+    return mark_expr_name(Op2(fit_width(a, t), fit_width(b, t), sym, t), __file__)
 
 # op bit with shared inputs
 # def op_bit(a: Expr, b: Expr, sym: str) -> Expr:
@@ -535,7 +559,7 @@ def op_bit(a: Expr, b: Expr, sym: str) -> Expr:
 
 
 def op_not(a: Expr) -> Expr:
-    return Op1(a, "~", HDLType(a.typ.width, signed=False, is_bool=a.typ.is_bool))
+    return mark_expr_name(Op1(a, "~", HDLType(a.typ.width, signed=False, is_bool=a.typ.is_bool)), __file__)
 
 
 def op_shift(a: Expr, b: Expr, sym: str) -> Expr:
@@ -544,7 +568,7 @@ def op_shift(a: Expr, b: Expr, sym: str) -> Expr:
         t = HDLType(a.typ.width + b.value, signed=a.typ.signed)
     else:
         t = HDLType(a.typ.width, signed=a.typ.signed)
-    return Op2(a, b, sym, t)
+    return mark_expr_name(Op2(a, b, sym, t), __file__)
 
 
 def op_cmp(a: Expr, b: Expr, sym: str) -> Expr:
@@ -561,7 +585,7 @@ def op_cmp(a: Expr, b: Expr, sym: str) -> Expr:
         b_al = fit_width(b, t_target)
     else:
         b_al = b
-    return Op2(a_al, b_al, sym, Bool())
+    return mark_expr_name(Op2(a_al, b_al, sym, Bool()), __file__)
 
 
 def mux(sel: ExprLike, a: ExprLike, b: ExprLike) -> Expr:

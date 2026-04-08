@@ -154,8 +154,8 @@ def test_replace_mul():
     run_vectors_on_simulator(sim, vecs, use_signed=False, with_clk=False)
 
 
-def test_skip_different_width():
-    """Op2 nodes with different-width operands should NOT be replaced."""
+def test_replace_different_width():
+    """Op2 nodes with different-width operands should now be replaced."""
     reset_shared_cache()
 
     class _DiffWidthAdder(Component):
@@ -181,8 +181,8 @@ def test_skip_different_width():
     module = comp.to_module("DiffWidthAfter")
 
     report_after = module.module_analyze()
-    # Op2<+> should still be present — widths differ, no replacement
-    assert report_after.by_class_incl_typ.get("Op2<+>", 0) > 0
+    # Op2<+> should be gone — asymmetric widths are now replaced
+    assert report_after.by_class_incl_typ.get("Op2<+>", 0) == 0
 
 
 if __name__ == "__main__":

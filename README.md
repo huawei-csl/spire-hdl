@@ -201,6 +201,10 @@ Check out the `testing/examples/` directory for practical examples:
 
 See the [examples README](testing/examples/README.md) for detailed documentation and key concepts.
 
+## Automatic arithmetic optimization
+
+`replace_arithmetic_ops` automatically selects the best hardware configuration for every `+`, `-`, `*`, `==`, `!=` operator and detects MAC / inner product patterns for fusion.  See [`README_arithmetic_optimization.md`](README_arithmetic_optimization.md) for details, benchmarks, and examples including a 4-tap FIR filter with **54% area reduction** and **68% depth reduction**.
+
 ## Next steps
 
 - Explore the `testing/examples/` directory to see working examples of components and modules

@@ -6,7 +6,7 @@ import time
 
 
 from sprouthdl import VERILOG_BANNER
-from sprouthdl.sprouthdl import Bool, Expr, ExprLike, HDLType, Signal, UInt, cat, fit_width, _SHARED, reset_shared_cache
+from sprouthdl.sprouthdl import Bool, Expr, ExprLike, HDLType, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
 
 
 from typing import Any, Dict, Iterable, List, Optional
@@ -209,8 +209,6 @@ class Module:
         """
         self._collect_signals_from_outputs(self._ports_of("output"))
 
-    from typing import Dict, List
-
     # fast version
     def _collect_signals_from_outputs(self, outputs: List["Signal"]) -> None:
         """
@@ -314,10 +312,10 @@ class Module:
 
                 if sid not in port_ids:
                     if node.kind in ("input", "output"):
-                            raise Warning(
-                                f"Internal signal '{node.name}' has port kind '{node.kind}'. "
-                                "Use wire/reg for internals. For internal components use make_internal()"
-                            )
+                        raise RuntimeError(
+                            f"Internal signal '{node.name}' has port kind '{node.kind}'. "
+                            "Use wire/reg for internals. For internal components use make_internal()"
+                        )
                     uniquify_internal(node)
 
                     if sid not in s_in:
@@ -415,11 +413,11 @@ class Module:
             lines.append(f"  {dir_} {sign}{rng} {p.name};")
 
         # Internals
-        # wires = self._internals_of("wire") + _SHARED.wires
+        # wires = self._internals_of("wire") + get_shared_wires()
         # instead of the above merge to avoid duplication if called multiple times
         wires = self._internals_of("wire")
         if not collect_signals:
-            wires += [s for s in _SHARED.wires if not any(s is w for w in wires)]
+            wires += [s for s in get_shared_wires() if not any(s is w for w in wires)]
 
         regs = self._internals_of("reg")
         lines.append('// Wires')
@@ -642,13 +640,26 @@ class IOCollector:
         return agg
 
 
-def iter_values(obj: Any, *, allow_to_list: bool = True) -> Iterable[Any]:
-    if allow_to_list and hasattr(obj, "to_list"):  # HDLAggregate, returns list of Expr (should be Signals)
-        return obj.to_list()
-    if isinstance(obj, dict):
-        return obj.values()
-    if is_dataclass(obj):
-        return (getattr(obj, f.name) for f in fields(obj))
-    if hasattr(obj, "_fields"):  # namedtuple
-        return (getattr(obj, n) for n in obj._fields)
-    return vars(obj).values()  # normal object
+def _to_aggregate(obj: Any) -> "AggregateRecordDynamic":
+    """Convert any IO container into an AggregateRecordDynamic for uniform handling."""
+    from sprouthdl.aggregate.aggregate_record_dynamic import AggregateRecordDynamic
+    if isinstance(obj, AggregateRecordDynamic):  # already an aggregate — no conversion needed
+        return obj
+    if is_dataclass(obj):  # @dataclass IO (most common Component IO pattern)
+        pairs = [(f.name, getattr(obj, f.name)) for f in fields(obj)]
+    elif hasattr(obj, "_fields"):  # namedtuple IO
+        pairs = [(n, getattr(obj, n)) for n in obj._fields]
+    elif isinstance(obj, dict):  # plain dict IO
+        pairs = list(obj.items())
+    else:  # plain object with __dict__
+        pairs = list(vars(obj).items())
+    DynIO = make_dataclass("DynIO", [(n, type(v)) for n, v in pairs], bases=(AggregateRecordDynamic,))
+    return DynIO(**{n: v for n, v in pairs})
+
+
+def iter_values(obj: Any) -> Iterable[Any]:
+    """Extract leaf Signals from an IO container (dataclass, namedtuple, dict,
+    or HDLAggregate).  Converts to AggregateRecordDynamic first, then flattens
+    via to_list() — all aggregate fields (Array, Record, ...) and plain lists
+    are recursively resolved into individual Signals."""
+    return _to_aggregate(obj).to_list()

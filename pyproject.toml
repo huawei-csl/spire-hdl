@@ -22,6 +22,8 @@ dynamic = [
 packages = ["src/sprouthdl"]
 include = [
     "src/sprouthdl/arithmetic/int_multipliers/data/**",
+    "src/sprouthdl/arithmetic/eval/*.json",
+    "src/sprouthdl/arithmetic/eval/*.csv",
 ]
 
 # Optional but nice: also define sdist the same way
@@ -29,6 +31,8 @@ include = [
 packages = ["src/sprouthdl"]
 include = [
     "src/sprouthdl/arithmetic/int_multipliers/data/**",
+    "src/sprouthdl/arithmetic/eval/*.json",
+    "src/sprouthdl/arithmetic/eval/*.csv",
 ]
 
 [tool.hatch.metadata.hooks.requirements_txt]

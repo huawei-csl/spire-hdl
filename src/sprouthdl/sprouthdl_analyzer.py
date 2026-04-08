@@ -6,6 +6,7 @@ from typing import Dict, Set, Tuple, Iterable
 
 # from sprout_hdl_module import Module
 from sprouthdl.sprouthdl import Concat, Const, Expr, Op1, Op2, Resize, Signal, Slice, Ternary
+from sprouthdl.sprouthdl_visitor import expr_children
 # from sprout_hdl_module import Module
 
 @dataclass
@@ -56,30 +57,10 @@ class _Analyzer:
         return True  # Op1/Op2/Ternary
 
     # ---- structural children (transparent through wiring) ----
-    def _children(self, e: Expr) -> Iterable[Expr]:
+    @staticmethod
+    def _children(e: Expr) -> Iterable[Expr]:
         """Return structural children of e. For Signals, dive into driver if it's a comb signal."""
-        if isinstance(e, Const):
-            return ()
-        if isinstance(e, Signal):
-            # Do NOT cross registers (seq boundary). Inputs with no driver are leaves.
-            if e.kind in ("input", "reg"):
-                return ()
-            # 'wire' or 'output' with a driver: traverse into the cone
-            return (e._driver,) if e._driver is not None else ()
-        if isinstance(e, Op1):
-            return (e.a,)
-        if isinstance(e, Op2):
-            return (e.a, e.b)
-        if isinstance(e, Ternary):
-            return (e.sel, e.a, e.b)
-        if isinstance(e, Concat):
-            return tuple(e.parts)
-        if isinstance(e, Slice):
-            return (e.a,)
-        if isinstance(e, Resize):
-            return (e.a,)
-        # Fallback: no children
-        return ()
+        return expr_children(e)
 
     # ---- counting (unique nodes) ----
     def _count_walk(self, e: Expr):
