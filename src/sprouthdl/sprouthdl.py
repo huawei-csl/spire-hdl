@@ -411,6 +411,11 @@ class Slice(Expr):
         # Full-width slice is a no-op — avoids illegal bit-select on 1-bit signals
         if self.start == 0 and self.msb + 1 == self.a.typ.width:
             return self.a.to_verilog()
+        # Constant folding: evaluate bit-select at codegen time to avoid
+        # illegal Verilog like 5'd31[4] (bit-select on a constant literal)
+        if isinstance(self.a, Const):
+            extracted = (self.a.value >> self.lsb) & ((1 << self.typ.width) - 1)
+            return Const(extracted, self.typ).to_verilog()
         if self.typ.width == 1:
             return f"{self.a.to_verilog()}[{self.lsb}]"
         return f"{self.a.to_verilog()}[{self.msb}:{self.lsb}]"
