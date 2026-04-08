@@ -29,7 +29,7 @@ A complete 8-bit ALU with addition, subtraction, and multiplication, comparing Y
 
 | Configuration | Transistors | AIG Depth |
 |---------------|------------:|----------:|
-| plain (Yosys `*`)  | 6168 | 127 |
+| plain (Yosys `+`/`-`/`*`)  | 6168 | 127 |
 | `area`             | 3004 |  73 |
 | `delay`            | 3830 |  30 |
 | `adp`              | 3084 |  30 |
@@ -39,23 +39,45 @@ The area objective achieves a **51% transistor reduction** over default synthesi
 ## Usage
 
 ```python
+from dataclasses import dataclass
+from sprouthdl.sprouthdl import Signal, UInt
+from sprouthdl.sprouthdl_module import Component
 from sprouthdl.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
 
-# Define your design using plain operators
+@dataclass
+class ALUIO:
+    a: Signal
+    b: Signal
+    y_add: Signal
+    y_sub: Signal
+    y_mul: Signal
+
 class ALU(Component):
+    def __init__(self, w: int):
+        self.io = ALUIO(
+            a=Signal(name="a", typ=UInt(w), kind="input"),
+            b=Signal(name="b", typ=UInt(w), kind="input"),
+            y_add=Signal(name="y_add", typ=UInt(w + 1), kind="output"),
+            y_sub=Signal(name="y_sub", typ=UInt(w + 1), kind="output"),
+            y_mul=Signal(name="y_mul", typ=UInt(2 * w), kind="output"),
+        )
+        self.elaborate()
+
     def elaborate(self):
-        self.io.y_add <<= self.io.a + self.io.b
-        self.io.y_sub <<= self.io.a - self.io.b
-        self.io.y_mul <<= self.io.a * self.io.b
+        self.io.y_add <<= self.io.a + self.io.b  # addition
+        self.io.y_sub <<= self.io.a - self.io.b  # subtraction
+        self.io.y_mul <<= self.io.a * self.io.b  # multiplication
 
-alu = ALU(width=8)
+alu = ALU(w=8)
 
-# Replace operators with optimized hardware — one line
+# Replace all +, -, * operators with optimized hardware — one line
 replace_arithmetic_ops(alu, ArithmeticAutoConfig(objective="adp"))
 
 module = alu.to_module("OptimizedALU")
 print(module.to_verilog())
 ```
+
+See [`testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py`](testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py) for full test and benchmark code.
 
 Each `+`, `-`, and `*` in the expression graph is independently replaced with the empirically best prefix-adder or stage-based multiplier configuration for its specific bit-width and signedness.  For widths not in the evaluation database, the nearest data point is selected using logarithmic interpolation.
 
