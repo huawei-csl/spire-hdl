@@ -11,6 +11,7 @@ from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib
     TwoInputAritEncodings,
 )
 from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
+from sprouthdl.arithmetic.eval.auto_config import lookup_best_config
 from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder, StageBasedSubtractor
 from sprouthdl.sprouthdl import Const, Expr, Op2, SInt, Signal, UInt, cast, reset_shared_cache
 
@@ -41,7 +42,7 @@ class AdderConfig:
 
 def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig | ArithmeticAutoConfig) -> Expr:
     if isinstance(mult_cfg, ArithmeticAutoConfig):
-        from sprouthdl.arithmetic.eval.auto_config import lookup_best_arithmetic_config
+
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, swap = lookup_best_arithmetic_config(
             "*", a.typ.width, b.typ.width, signed,
@@ -82,7 +83,7 @@ def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig | ArithmeticAu
 
 def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig | ArithmeticAutoConfig) -> Expr:
     if isinstance(adder_cfg, ArithmeticAutoConfig):
-        from sprouthdl.arithmetic.eval.auto_config import lookup_best_arithmetic_config
+
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, swap = lookup_best_arithmetic_config(
             "+", a.typ.width, b.typ.width, signed,
@@ -130,7 +131,7 @@ class SubtractorConfig:
 
 def build_subtractor(a: Expr, b: Expr, sub_cfg: SubtractorConfig | ArithmeticAutoConfig) -> Expr:
     if isinstance(sub_cfg, ArithmeticAutoConfig):
-        from sprouthdl.arithmetic.eval.auto_config import lookup_best_arithmetic_config
+
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, _ = lookup_best_arithmetic_config(
             "-", a.typ.width, b.typ.width, signed,
@@ -207,6 +208,43 @@ class ArithmeticAutoConfig:
 
     objective: Literal["area", "delay", "adp"] = "area"
     full_output_bit: bool = True
+
+
+def lookup_best_arithmetic_config(
+    op: Literal["+", "-", "*"],
+    a_w: int,
+    b_w: int,
+    signed: bool,
+    objective: Literal["area", "delay", "adp"] = "area",
+    full_output_bit: bool = True,
+):
+    """Return ``(ArithmeticConfig, swap)`` for the empirically best configuration."""
+    entry, swap = lookup_best_config(op, a_w, b_w, signed, objective)
+    encoding = Encoding.twos_complement if signed else Encoding.unsigned
+
+    if entry is None:
+        return ArithmeticConfig(encoding=encoding, full_output_bit=full_output_bit), False
+
+    optim_type = entry.get("optim_type", "area") or "area"
+
+    if op == "*":
+        cfg = ArithmeticConfig(
+            encoding=encoding,
+            optim_type=optim_type,
+            fsa_opt=FSAOption[entry["fsa_opt"]],
+            full_output_bit=full_output_bit,
+            multiplier_opt=MultiplierOption.STAGE_BASED_MULTIPLIER,
+            ppg_opt=PPGOption[entry["ppg_opt"]],
+            ppa_opt=PPAOption[entry["ppa_opt"]],
+        )
+    else:
+        cfg = ArithmeticConfig(
+            encoding=encoding,
+            optim_type=optim_type,
+            fsa_opt=FSAOption[entry["fsa_opt"]],
+            full_output_bit=full_output_bit,
+        )
+    return cfg, swap
 
 
 def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoConfig) -> None:
@@ -469,7 +507,7 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
 
         # Resolve per-node config when using auto mode
         if isinstance(config, ArithmeticAutoConfig):
-            from sprouthdl.arithmetic.eval.auto_config import lookup_best_arithmetic_config
+    
             node_cfg, swap = lookup_best_arithmetic_config(
                 node.op, a_w, b_w, signed_a or signed_b,
                 config.objective, config.full_output_bit,
