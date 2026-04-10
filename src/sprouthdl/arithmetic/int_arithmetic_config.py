@@ -39,7 +39,25 @@ class AdderConfig:
     full_output_bit: bool = True
 
 
-def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig) -> Expr:
+def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig | ArithmeticAutoConfig) -> Expr:
+    if isinstance(mult_cfg, ArithmeticAutoConfig):
+        from sprouthdl.arithmetic.eval.auto_config import lookup_best_arithmetic_config
+        signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
+        arith_cfg, swap = lookup_best_arithmetic_config(
+            "*", a.typ.width, b.typ.width, signed,
+            mult_cfg.objective, mult_cfg.full_output_bit,
+        )
+        if swap:
+            a, b = b, a
+        enc = Encoding.twos_complement if signed else Encoding.unsigned
+        mult_cfg = MultiplierConfig(
+            multiplier_opt=arith_cfg.multiplier_opt,
+            encodings=TwoInputAritEncodings.with_enc(enc),
+            ppg_opt=arith_cfg.ppg_opt,
+            ppa_opt=arith_cfg.ppa_opt,
+            fsa_opt=arith_cfg.fsa_opt,
+            optim_type=arith_cfg.optim_type,
+        )
     if mult_cfg.use_operator:
         return a * b
 
@@ -62,7 +80,23 @@ def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig) -> Expr:
     return multiplier.io.y
 
 
-def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig) -> Expr:
+def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig | ArithmeticAutoConfig) -> Expr:
+    if isinstance(adder_cfg, ArithmeticAutoConfig):
+        from sprouthdl.arithmetic.eval.auto_config import lookup_best_arithmetic_config
+        signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
+        arith_cfg, swap = lookup_best_arithmetic_config(
+            "+", a.typ.width, b.typ.width, signed,
+            adder_cfg.objective, adder_cfg.full_output_bit,
+        )
+        if swap:
+            a, b = b, a
+        encoding = Encoding.twos_complement if signed else Encoding.unsigned
+        adder_cfg = AdderConfig(
+            encoding=encoding,
+            optim_type=arith_cfg.optim_type,
+            fsa_opt=arith_cfg.fsa_opt,
+            full_output_bit=arith_cfg.full_output_bit,
+        )
     if adder_cfg.use_operator:
         return a + b
 
@@ -94,7 +128,21 @@ class SubtractorConfig:
     full_output_bit: bool = True
 
 
-def build_subtractor(a: Expr, b: Expr, sub_cfg: SubtractorConfig) -> Expr:
+def build_subtractor(a: Expr, b: Expr, sub_cfg: SubtractorConfig | ArithmeticAutoConfig) -> Expr:
+    if isinstance(sub_cfg, ArithmeticAutoConfig):
+        from sprouthdl.arithmetic.eval.auto_config import lookup_best_arithmetic_config
+        signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
+        arith_cfg, _ = lookup_best_arithmetic_config(
+            "-", a.typ.width, b.typ.width, signed,
+            sub_cfg.objective, sub_cfg.full_output_bit,
+        )
+        encoding = Encoding.twos_complement if signed else Encoding.unsigned
+        sub_cfg = SubtractorConfig(
+            encoding=encoding,
+            optim_type=arith_cfg.optim_type,
+            fsa_opt=arith_cfg.fsa_opt,
+            full_output_bit=arith_cfg.full_output_bit,
+        )
     if sub_cfg.use_operator:
         return a - b
 
@@ -115,7 +163,7 @@ def build_subtractor(a: Expr, b: Expr, sub_cfg: SubtractorConfig) -> Expr:
     return sub.io.y
 
 
-def adder_tree(values: Sequence[Expr], adder_cfg: AdderConfig) -> Expr:
+def adder_tree(values: Sequence[Expr], adder_cfg: AdderConfig | ArithmeticAutoConfig) -> Expr:
     if len(values) == 0:
         raise ValueError("Adder tree requires at least one value")
     if len(values) == 1:
