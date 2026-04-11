@@ -413,30 +413,27 @@ def _push_shared_state() -> dict:
 
     Returns a snapshot dict to pass to :func:`_pop_shared_state`.
     """
-    from sprouthdl.sprouthdl import _SHARED
+    from sprouthdl.sprouthdl import _SharedCache
     snapshot = {
-        "counts":   dict(_SHARED.counts),
-        "expr2sig": dict(_SHARED.expr2sig),
-        "wires":    list(_SHARED.wires),
-        "index":    _SHARED.index,
+        "counts":     dict(_SharedCache.counts),
+        "expr2sig":   dict(_SharedCache.expr2sig),
+        "wires":      list(_SharedCache.wires),
+        "index":      _SharedCache.index,
+        "used_names": set(_SharedCache.used_names),
     }
-    _SHARED.counts.clear()
-    _SHARED.expr2sig.clear()
-    _SHARED.wires.clear()
-    _SHARED.index = 0
+    _SharedCache.reset()
     return snapshot
 
 
 def _pop_shared_state(snapshot: dict) -> None:
     """Restore the global shared-wire state from a previous snapshot."""
-    from sprouthdl.sprouthdl import _SHARED
-    _SHARED.counts.clear()
-    _SHARED.counts.update(snapshot["counts"])
-    _SHARED.expr2sig.clear()
-    _SHARED.expr2sig.update(snapshot["expr2sig"])
-    _SHARED.wires.clear()
-    _SHARED.wires.extend(snapshot["wires"])
-    _SHARED.index = snapshot["index"]
+    from sprouthdl.sprouthdl import _SharedCache
+    _SharedCache.reset()
+    _SharedCache.counts.update(snapshot["counts"])
+    _SharedCache.expr2sig.update(snapshot["expr2sig"])
+    _SharedCache.wires.extend(snapshot["wires"])
+    _SharedCache.index = snapshot["index"]
+    _SharedCache.used_names.update(snapshot["used_names"])
 
 
 def _build_component(
@@ -796,4 +793,169 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
         return decorator(_fn)
     else:
         # Called as @flowy_optimized(...) with arguments
+        return decorator
+
+
+# ---------------------------------------------------------------------------
+# ABC / DeepSyn optimization
+# ---------------------------------------------------------------------------
+
+def abc_optimize(
+    m: Module | Component,
+    abc_script: str = "strash; &get -n; &deepsyn -T 10; &put",
+    suppress_stderr: bool = True,
+) -> List[str]:
+    """Run yosys synthesis + ABC script optimization and return optimized AAG lines.
+
+    Parameters
+    ----------
+    m : Module or Component
+        The design to optimize.
+    abc_script : str
+        ABC commands to execute (e.g. ``"strash; &get -n; &deepsyn -T 10; &put"``).
+    suppress_stderr : bool
+        Suppress yosys/ABC output.
+
+    Returns
+    -------
+    list[str]
+        Optimized AIGER ASCII lines.
+    """
+    from pyosys import libyosys as ys
+    from sprouthdl.aig.aig_aigerverse import file_to_lines
+    from sprouthdl.helpers import _suppress_output
+
+    if isinstance(m, Component):
+        m = m.to_module("mydesign_comb")
+
+    verilog_content: str = m.to_verilog()
+
+    fd_v, verilog_tmp = tempfile.mkstemp(suffix=".v")
+    os.close(fd_v)
+    fd_abc, abc_tmp = tempfile.mkstemp(suffix=".abc")
+    os.close(fd_abc)
+    fd_aag, aag_out_tmp = tempfile.mkstemp(suffix=".aag")
+    os.close(fd_aag)
+
+    try:
+        with open(verilog_tmp, "w") as f:
+            f.write(verilog_content)
+        with open(abc_tmp, "w") as f:
+            f.write(abc_script + "\n")
+
+        with _suppress_output(stderr=suppress_stderr):
+            ys.run_pass("design -reset")
+            ys.run_pass(f"read_verilog -sv {verilog_tmp}")
+            ys.run_pass("hierarchy -check -auto-top")
+            ys.run_pass("proc; opt; fsm; memory; opt")
+            ys.run_pass(f"abc -script {abc_tmp}")
+            ys.run_pass("techmap; opt; abc -fast; opt")
+            ys.run_pass("aigmap")
+            ys.run_pass(f"write_aiger -ascii -symbols -no-startoffset {aag_out_tmp}")
+
+        return file_to_lines(aag_out_tmp)
+    finally:
+        for p in (verilog_tmp, abc_tmp, aag_out_tmp):
+            if os.path.exists(p):
+                os.remove(p)
+
+
+def abc_optimized(
+    _fn: Callable[..., Any] | None = None,
+    *,
+    abc_script: str = "strash; &get -n; &deepsyn -T 10; &put",
+    use_mem_cache: bool = True,
+    use_disk_cache: bool = True,
+    cache_dir: str | Path | None = None,
+) -> Callable[..., Any]:
+    """Decorator that optimizes a function's logic through ABC (via yosys/pyosys).
+
+    Usage::
+
+        @abc_optimized(abc_script="strash; &get -n; &deepsyn -T 30; &put")
+        def my_mult(a, b):
+            return a * b
+
+    At call time, Expr arguments are detected and the function is converted to
+    a Component, optimized via ``abc_optimize``, and the result is cached.
+    """
+    from sprouthdl.sprouthdl_aiger import AigerExporter, AigerImporter
+    from sprouthdl.sprouthdl_module import IOCollector
+
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            fn_sig: inspect.Signature = inspect.signature(fn)
+            bound: inspect.BoundArguments = fn_sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+
+            logic_args: Dict[str, Tuple[int, bool]] = {}
+            other_args: Dict[str, Any] = {}
+            actual_logic_args: Dict[str, Expr] = {}
+
+            for param_name, value in bound.arguments.items():
+                param = fn_sig.parameters[param_name]
+                if param.kind == inspect.Parameter.VAR_POSITIONAL:
+                    for i, v in enumerate(value):
+                        varg_name = f"{param_name}_{chr(ord('a') + i)}"
+                        if isinstance(v, Expr):
+                            logic_args[varg_name] = (v.typ.width, v.typ.signed)
+                            actual_logic_args[varg_name] = v
+                        else:
+                            other_args[varg_name] = v
+                elif isinstance(value, Expr):
+                    logic_args[param_name] = (value.typ.width, value.typ.signed)
+                    actual_logic_args[param_name] = value
+                else:
+                    other_args[param_name] = value
+
+            if not logic_args:
+                return fn(*args, **kwargs)
+
+            # Build component and module
+            comp, output_names = _build_component(fn, logic_args, other_args)
+            module: Module = comp.to_module("mydesign_comb")
+            original_spec: Dict[str, HDLType] = module.get_spec()
+
+            # Cache key includes the abc script
+            optimize_kwargs = {"abc_script": abc_script}
+            resolved_cache_dir: Path | None = (
+                _resolve_cache_dir(fn, cache_dir) if use_disk_cache else None
+            )
+            verilog_content: str = module.to_verilog()
+            cache_key_hex: str = _compute_disk_cache_key(
+                verilog_content, other_args, optimize_kwargs,
+            )
+
+            cached = _cache_lookup(
+                cache_key_hex, use_mem_cache, use_disk_cache, resolved_cache_dir,
+            )
+            if cached is not None:
+                return _instantiate_from_cache(
+                    cached[0], cached[1], cached[2], actual_logic_args,
+                )
+
+            # Cache miss — optimize
+            raw_aag: List[str] = abc_optimize(module, abc_script)
+
+            # Regroup bit-blasted ports to match original widths
+            opt_module: Module = AigerImporter(raw_aag).get_sprout_module()
+            IOCollector().group(opt_module, original_spec)
+            aag_lines: List[str] = AigerExporter(opt_module).get_aag()
+            spec: Dict[str, HDLType] = opt_module.get_spec()
+
+            _store_cache(
+                cache_key_hex, aag_lines, spec, output_names,
+                use_mem_cache, use_disk_cache, resolved_cache_dir,
+            )
+
+            return _instantiate_from_cache(
+                aag_lines, spec, output_names, actual_logic_args,
+            )
+
+        return wrapper
+
+    if _fn is not None:
+        return decorator(_fn)
+    else:
         return decorator

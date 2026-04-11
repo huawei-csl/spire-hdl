@@ -2,6 +2,8 @@
 
 from sprouthdl.optimize.optimize import (  # noqa: F401
     # Public API
+    abc_optimize,
+    abc_optimized,
     flowy_optimize,
     flowy_optimized,
     set_cache_dir,

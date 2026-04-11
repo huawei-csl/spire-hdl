@@ -205,6 +205,10 @@ See the [examples README](testing/examples/README.md) for detailed documentation
 
 `replace_arithmetic_ops` automatically selects the best hardware configuration for every `+`, `-`, `*`, `==`, `!=` operator and detects MAC / inner product patterns for fusion.  See [`README_arithmetic_optimization.md`](README_arithmetic_optimization.md) for details, benchmarks, and examples including a 4-tap FIR filter with **54% area reduction** and **68% depth reduction**.
 
+## Circuit optimization decorators
+
+`@flowy_optimized` and `@abc_optimized` let you optimize any combinational function at the AIG level with a single decorator.  See [`README_optimization_decorators.md`](README_optimization_decorators.md) for usage, ABC script examples, and benchmark results.
+
 ## Next steps
 
 - Explore the `testing/examples/` directory to see working examples of components and modules
