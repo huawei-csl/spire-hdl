@@ -28,6 +28,26 @@ def full_adder_low_area(x: Expr, y: Expr, z: Expr) -> Tuple[Expr, Expr]:
     return s, (x & y) | (y & z) | (z & x)
 
 
+class _LeveledBit:
+    """A partial-product-tree bit annotated with its symbolic arrival level
+    and a stable insertion order.
+
+    Used exclusively by the canonical-bit-selection PPA path (enabled via
+    ``PartialProductAccumulatorBase.canonical_bit_selection``). The idea
+    mirrors :class:`sprouthdl.ml_ppa.environment.PPAEnv`'s ``BitMeta``:
+    before each FA/HA/4:2 reduction we sort a column's bits by
+    ``(level, ord_)`` and consume the earliest-arriving k. This
+    earliest-first rule collapses the critical path aggressively.
+    """
+
+    __slots__ = ("expr", "level", "ord_")
+
+    def __init__(self, expr: Expr, level: int, ord_: int) -> None:
+        self.expr = expr
+        self.level = level
+        self.ord_ = ord_
+
+
 # ---- abstract component/stage definitions --------------------------------------
 @dataclass(frozen=True)
 class TwoInputAritConfig:
@@ -70,9 +90,160 @@ class PartialProductGeneratorBase(StageBase, abc.ABC):
 
 
 class PartialProductAccumulatorBase(StageBase, abc.ABC):
+    # Default bit-selection rule for the column reduction loop.
+    #
+    # When False (legacy), each concrete PPA picks bits from its column
+    # lists with its historical FIFO/LIFO rule — whatever pattern the
+    # accumulate() implementation uses via list.pop() / slicing. When
+    # True, the accumulate() implementation follows the *canonical*
+    # earliest-arrival rule: sort the column by (arrival_level, ord_)
+    # and consume the first k bits, matching
+    # sprouthdl.ml_ppa.environment.PPAEnv._canonical_bits. The action
+    # sequence is otherwise identical — only which physical bits get
+    # fed into each FA/HA/4:2 application differs.
+    #
+    # Per-PPA defaults are set on the concrete subclasses based on the
+    # benchmark numbers in docs/ml_ppa_results.md §"canonicalisation
+    # surprise" and the follow-up comparison study: Dadda, Wallace and
+    # FourTwoCompressor default to True (canonical strictly wins or is
+    # Pareto-neutral); CarrySave and CompressorTree default to False
+    # (legacy wins on depth, which is their usual use case). Users
+    # can override per-instance via the constructor argument.
+    canonical_bit_selection: ClassVar[bool] = False
+
+    def __init__(
+        self,
+        config: TwoInputAritConfig,
+        *,
+        canonical_bit_selection: Optional[bool] = None,
+    ) -> None:
+        super().__init__(config)
+        if canonical_bit_selection is not None:
+            self.canonical_bit_selection = canonical_bit_selection
+
     @abc.abstractmethod
     def accumulate(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
         raise NotImplementedError
+
+    # ---- canonical-bit-selection helpers ---------------------------------
+    #
+    # The helpers below are used by concrete PPAs whenever
+    # self.canonical_bit_selection is True. They maintain a parallel
+    # column representation where each entry is a _LeveledBit carrying
+    # the symbolic arrival level and a stable insertion index, so the
+    # bit-picking step can always pop the k earliest-arriving bits from
+    # a column. Leave self.canonical_bit_selection = False to bypass
+    # them entirely and keep the historical behaviour.
+
+    def _wrap_columns(
+        self, columns: Dict[int, List[Expr]]
+    ) -> DefaultDict[int, List[_LeveledBit]]:
+        """Turn a plain ``columns`` dict into level-tracked lists.
+
+        Every PP bit enters at level 1 (a single AND of two inputs) and
+        is stamped with a unique, monotonically increasing ``ord_``. The
+        counter is stored on the instance so later FA/HA applications
+        can keep issuing fresh insertion indices.
+        """
+        wrapped: DefaultDict[int, List[_LeveledBit]] = defaultdict(list)
+        ord_counter = 0
+        for weight in sorted(columns.keys()):
+            for e in columns[weight]:
+                wrapped[weight].append(_LeveledBit(e, level=1, ord_=ord_counter))
+                ord_counter += 1
+        self._ord_counter = ord_counter
+        return wrapped
+
+    def _unwrap_columns(
+        self, wrapped: DefaultDict[int, List[_LeveledBit]]
+    ) -> DefaultDict[int, List[Expr]]:
+        """Strip the level/order metadata and return a plain columns dict."""
+        out: DefaultDict[int, List[Expr]] = defaultdict(list)
+        for weight, bits in wrapped.items():
+            out[weight].extend(b.expr for b in bits)
+        return out
+
+    def _take_earliest(
+        self, bits: List[_LeveledBit], k: int
+    ) -> List[_LeveledBit]:
+        """Pop the ``k`` earliest-arrival bits from ``bits`` in place.
+
+        Sort key is ``(arrival_level, ord_)`` — lowest level wins,
+        ``ord_`` breaks ties by insertion order. Mirrors
+        :meth:`sprouthdl.ml_ppa.environment.PPAEnv._canonical_bits`
+        exactly so replayed scripted-policy action logs reproduce
+        the same circuit.
+        """
+        if len(bits) < k:
+            raise ValueError(f"column has {len(bits)} bits, need {k}")
+        ranked = sorted(range(len(bits)), key=lambda i: (bits[i].level, bits[i].ord_))
+        take_idx = sorted(ranked[:k])  # sort by index for stable in-place deletion
+        taken = [bits[i] for i in take_idx]
+        for i in reversed(take_idx):
+            del bits[i]
+        return taken
+
+    def _apply_fa_canonical(
+        self,
+        col_lower: List[_LeveledBit],
+        col_upper: List[_LeveledBit],
+        full_adder,
+    ) -> None:
+        """Consume 3 canonical-earliest bits from ``col_lower``, append
+        the sum back to the same column and the carry to ``col_upper``,
+        both at level ``max(input_levels) + 2`` (symbolic FA depth)."""
+        taken = self._take_earliest(col_lower, 3)
+        s, c = full_adder(taken[0].expr, taken[1].expr, taken[2].expr)
+        new_lvl = max(t.level for t in taken) + 2
+        col_lower.append(_LeveledBit(s, new_lvl, self._ord_counter))
+        col_upper.append(_LeveledBit(c, new_lvl, self._ord_counter + 1))
+        self._ord_counter += 2
+
+    def _apply_ha_canonical(
+        self,
+        col_lower: List[_LeveledBit],
+        col_upper: List[_LeveledBit],
+    ) -> None:
+        """Half-adder counterpart to :meth:`_apply_fa_canonical`.
+
+        Consumes 2 earliest bits; outputs land at ``max+1``."""
+        taken = self._take_earliest(col_lower, 2)
+        s, c = half_adder(taken[0].expr, taken[1].expr)
+        new_lvl = max(t.level for t in taken) + 1
+        col_lower.append(_LeveledBit(s, new_lvl, self._ord_counter))
+        col_upper.append(_LeveledBit(c, new_lvl, self._ord_counter + 1))
+        self._ord_counter += 2
+
+    def _apply_c42_canonical(
+        self,
+        col_lower: List[_LeveledBit],
+        col_upper: List[_LeveledBit],
+        full_adder,
+        zero: Expr,
+    ) -> None:
+        """4:2 compressor implemented as two cascaded FAs, matching
+        :meth:`FourTwoCompressorAccumulator._compress_4_2`.
+
+        ``s1, c1 = FA(a, b, c)`` at ``l_inner = max(la, lb, lc) + 2``;
+        ``s2, c2 = FA(s1, d, 0)`` at ``l_outer = max(l_inner, ld) + 2``.
+        ``c1`` sits at the shallower ``l_inner`` level, ``s2`` and
+        ``c2`` at ``l_outer``.
+        """
+        taken = self._take_earliest(col_lower, 4)
+        a, b, c, d = (t.expr for t in taken)
+        s1, c1 = full_adder(a, b, c)
+        s2, c2 = full_adder(s1, d, zero)
+        l_inner = max(taken[0].level, taken[1].level, taken[2].level) + 2
+        l_outer = max(l_inner, taken[3].level) + 2
+        col_lower.append(_LeveledBit(s2, l_outer, self._ord_counter))
+        col_upper.append(_LeveledBit(c1, l_inner, self._ord_counter + 1))
+        col_upper.append(_LeveledBit(c2, l_outer, self._ord_counter + 2))
+        self._ord_counter += 3
+
+    @staticmethod
+    def _column_heights(cols: DefaultDict[int, List[_LeveledBit]]) -> Dict[int, int]:
+        """Return a snapshot of ``{weight: height}`` for every column."""
+        return {w: len(bits) for w, bits in cols.items()}
 
 
 class FinalStageAdderBase(StageBase, abc.ABC):
@@ -82,8 +253,20 @@ class FinalStageAdderBase(StageBase, abc.ABC):
 
 
 class CompressorTreeAccumulator(PartialProductAccumulatorBase):
-    def __init__(self, config: StageMultiplierConfig) -> None:
-        super().__init__(config)
+    # Default: legacy FIFO reduction. At widths 12-16 the legacy path
+    # is ~37% shallower than canonical on this PPA, and canonical only
+    # wins gates by 5-9%. CompressorTree is typically chosen when
+    # delay matters, so we keep the original as the default and let
+    # users opt into canonical for area-first flows.
+    canonical_bit_selection: ClassVar[bool] = False
+
+    def __init__(
+        self,
+        config: StageMultiplierConfig,
+        *,
+        canonical_bit_selection: Optional[bool] = None,
+    ) -> None:
+        super().__init__(config, canonical_bit_selection=canonical_bit_selection)
         self._full_adder = (
             full_adder_low_area
             if self.config.optim_type == "area"
@@ -91,6 +274,13 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
         )
 
     def accumulate(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
+        if self.canonical_bit_selection:
+            return self._accumulate_canonical(columns)
+        return self._accumulate_legacy(columns)
+
+    def _accumulate_legacy(
+        self, columns: Dict[int, List[Expr]]
+    ) -> DefaultDict[int, List[Expr]]:
         cols: DefaultDict[int, List[Expr]] = defaultdict(list)
         for weight, bits in columns.items():
             cols[weight].extend(bits)
@@ -112,6 +302,27 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
                 break
 
         return cols
+
+    def _accumulate_canonical(
+        self, columns: Dict[int, List[Expr]]
+    ) -> DefaultDict[int, List[Expr]]:
+        """Mirrors ``sprouthdl.ml_ppa.methods.scripted_policies.compressor_tree_policy``:
+        outer loop reduces each column in ascending weight order using
+        per-step earliest-arrival FAs, repeating until every column has
+        at most 2 bits. Sums from an FA are appended back to the *same*
+        column and become available for the next FA in the same pass.
+        """
+        cols = self._wrap_columns(columns)
+        changed = True
+        while changed:
+            changed = False
+            for weight in sorted(list(cols.keys())):
+                while len(cols[weight]) > 2:
+                    self._apply_fa_canonical(
+                        cols[weight], cols[weight + 1], self._full_adder
+                    )
+                    changed = True
+        return self._unwrap_columns(cols)
 
     def _compress_column(self, bits: List[Expr]) -> Tuple[List[Expr], List[Expr]]:
         sum_bits: List[Expr] = []
