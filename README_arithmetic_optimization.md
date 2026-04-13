@@ -79,6 +79,35 @@ print(module.to_verilog())
 
 See [`testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py`](testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py) for full test and benchmark code.
 
+## Explicit builder functions
+
+If you'd rather construct optimized arithmetic directly instead of writing Python operators and running `replace_arithmetic_ops` afterwards, three builder helpers accept the same `ArithmeticAutoConfig` and look up the best per-operation configuration on the fly:
+
+- `build_adder(a, b, cfg)` — builds a single optimized adder from two expressions.
+- `build_multiplier(a, b, cfg)` — builds a single optimized multiplier from two expressions.
+- `adder_tree(values, cfg)` — reduces a sequence of expressions with a balanced binary tree of optimized adders.
+
+```python
+from sprouthdl.arithmetic.int_arithmetic_config import (
+    ArithmeticAutoConfig, build_adder, build_multiplier, adder_tree,
+)
+
+cfg = ArithmeticAutoConfig(objective="adp")
+
+# Single optimized adder / multiplier
+sum_ab = build_adder(self.io.a, self.io.b, cfg)
+prod   = build_multiplier(self.io.a, self.io.b, cfg)
+
+# Balanced tree reduction over N terms
+self.io.y <<= adder_tree(
+    [self.io.c[i] * self.io.x[i] for i in range(n_taps)], cfg,
+)
+```
+
+Use the builders when you want direct control over where optimized hardware is instantiated (e.g., inside a loop, or mixed with hand-written RTL); use `replace_arithmetic_ops` when you prefer to author the design with plain operators and let the optimizer rewrite the whole graph — including MAC/inner-product fusion, which the builders do not perform.
+
+## Replacement-based optimization details
+
 Each `+`, `-`, and `*` in the expression graph is independently replaced with the empirically best prefix-adder or stage-based multiplier configuration for its specific bit-width and signedness.  For widths not in the evaluation database, the nearest data point is selected using logarithmic interpolation.
 
 The optimizer also detects **multiply-accumulate (MAC) patterns** (`a * b + c`) and fuses them into a single hardware unit, absorbing the accumulate operand directly into the multiplier's column reduction and eliminating a full adder stage.
