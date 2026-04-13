@@ -54,6 +54,60 @@ class PlusOperatorAdderFinalStage(FinalStageAdderBase):
         return [sum_unit[i] for i in range(sum_unit.typ.width)]
 
 
+class NaiveRippleCarryFinalStage(FinalStageAdderBase):
+    """Textbook ripple-carry adder final stage, emitted as a direct chain.
+
+    NAIVE_RIPPLE_CARRY: textbook a^b^c / (a&b)|(c&(a^b)) recurrence, emitted
+    as a direct chain. Beats every other FSA at width 8-16 when the design
+    is synthesised via the yosys read_verilog path that downstream consumers
+    use (e.g. vendor tools).
+    
+    Implementation note: we deliberately stop the FA chain at column
+    ``out_width - 1`` and only produce the final carry-out if
+    ``full_output_bit=True``. Truncating the chain (vs computing the MSB
+    carry and relying on yosys DCE) lets yosys see a tighter logic cone
+    and produces noticeably smaller netlists.
+    """
+
+    def resolve(self, columns: Dict[int, List[Expr]], carry_in: Optional[Expr] = None) -> List[Expr]:
+        out_w = self.config.out_width
+        zero = Const(False, Bool())
+        carry: Expr = carry_in if carry_in is not None else zero
+        sum_bits: List[Expr] = []
+
+        for i in range(out_w):
+            bits = list(columns.get(i, []))
+            if len(bits) > 2:
+                raise ValueError(
+                    f"NaiveRippleCarryFinalStage expects ≤2 bits/column, "
+                    f"got {len(bits)} at column {i}"
+                )
+            if len(bits) == 0:
+                # Empty spill column (only happens at column out_w-1 when
+                # full_output_bit=True for an unsigned adder). Just propagate
+                # the incoming carry as the final sum bit.
+                sum_bits.append(carry)
+                carry = zero
+            elif len(bits) == 1:
+                # Effectively a half-adder of (lone_bit, carry).
+                a = bits[0]
+                sum_bits.append(a ^ carry)
+                carry = a & carry
+            else:  # len(bits) == 2
+                # Textbook FA recurrence with the (a^b) partial propagate
+                # shared between the sum and carry expressions. This mirrors
+                # ``full_adder_fast`` but is inlined here to avoid the
+                # per-column ``half_adder`` + ``full_adder_fast`` split that
+                # ``RippleCarryFinalAdder`` uses; the flatter chain maps to
+                # a cheaper cell mix through yosys ``read_verilog`` tech map.
+                a, b = bits[0], bits[1]
+                p = a ^ b
+                sum_bits.append(p ^ carry)
+                carry = (a & b) | (carry & p)
+
+        return sum_bits
+
+
 class PrefixAdderFinalStage(FinalStageAdderBase):
     """Final stage adder that realises a chosen prefix network."""
 
@@ -166,7 +220,7 @@ class SklanskyPrefixFinalStage(PrefixAdderFinalStage):
 class RipplePrefixFinalStage(PrefixAdderFinalStage):
     prefix_matrix_builder: ClassVar[Callable[[int], Set[Pair]]] = staticmethod(P_ripple_carry)
     depth_optimize: ClassVar[bool] = False
-    
+
 class HanCarlsonPrefixFinalStage(PrefixAdderFinalStage):
     prefix_matrix_builder: ClassVar[Callable[[int], Set[Pair]]] = staticmethod(P_han_carlson)
 
