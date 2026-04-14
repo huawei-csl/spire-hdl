@@ -28,23 +28,16 @@ def full_adder_low_area(x: Expr, y: Expr, z: Expr) -> Tuple[Expr, Expr]:
     return s, (x & y) | (y & z) | (z & x)
 
 
-SelectionMode = Literal["fifo", "lifo", "canonical"]
-
-
 class _LeveledBit:
-    """A partial-product-tree bit annotated with symbolic arrival level
-    and stable insertion order.
+    """A partial-product-tree bit annotated with its symbolic arrival level
+    and a stable insertion order.
 
-    We use the same representation for both legacy and canonical paths.
-    The *schedule* remains algorithm-specific; only the bit-picking rule
-    changes:
-
-    - ``fifo``: historical left-to-right consumption
-    - ``lifo``: historical stack-style ``pop()`` consumption
-    - ``canonical``: earliest-arrival-first by ``(level, ord_)``
-
-    Unifying on one representation removes most of the duplicated
-    legacy/canonical reduction code.
+    Used exclusively by the canonical-bit-selection PPA path (enabled via
+    ``PartialProductAccumulatorBase.canonical_bit_selection``). The idea
+    mirrors :class:`sprouthdl.ml_ppa.environment.PPAEnv`'s ``BitMeta``:
+    before each FA/HA/4:2 reduction we sort a column's bits by
+    ``(level, ord_)`` and consume the earliest-arriving k. This
+    earliest-first rule collapses the critical path aggressively.
     """
 
     __slots__ = ("expr", "level", "ord_")
@@ -99,20 +92,24 @@ class PartialProductGeneratorBase(StageBase, abc.ABC):
 class PartialProductAccumulatorBase(StageBase, abc.ABC):
     # Default bit-selection rule for the column reduction loop.
     #
-    # ``canonical_bit_selection = False`` keeps each concrete PPA's
-    # historical selection rule. For most reducers that means LIFO
-    # ``pop()`` behaviour; ``CompressorTreeAccumulator`` overrides that to
-    # FIFO because its legacy implementation consumed from the front.
+    # When False (legacy), each concrete PPA picks bits from its column
+    # lists with its historical FIFO/LIFO rule — whatever pattern the
+    # accumulate() implementation uses via list.pop() / slicing. When
+    # True, the accumulate() implementation follows the *canonical*
+    # earliest-arrival rule: sort the column by (arrival_level, ord_)
+    # and consume the first k bits, matching
+    # sprouthdl.ml_ppa.environment.PPAEnv._canonical_bits. The action
+    # sequence is otherwise identical — only which physical bits get
+    # fed into each FA/HA/4:2 application differs.
     #
-    # ``canonical_bit_selection = True`` switches selection to the
-    # earliest-arrival rule from ``sprouthdl.ml_ppa.environment.PPAEnv``:
-    # sort the candidate bits by ``(arrival_level, ord_)`` and consume
-    # the earliest k. For Wallace/Dadda/CarrySave/FourTwo the *schedule*
-    # stays identical and only the consumed bits differ. CompressorTree
-    # is the exception: its canonical path intentionally uses a different
-    # greedy schedule, so that class still keeps two schedule variants.
+    # Per-PPA defaults are set on the concrete subclasses based on the
+    # benchmark numbers in docs/ml_ppa_results.md §"canonicalisation
+    # surprise" and the follow-up comparison study: Dadda, Wallace and
+    # FourTwoCompressor default to True (canonical strictly wins or is
+    # Pareto-neutral); CarrySave and CompressorTree default to False
+    # (legacy wins on depth, which is their usual use case). Users
+    # can override per-instance via the constructor argument.
     canonical_bit_selection: ClassVar[bool] = False
-    legacy_selection_mode: ClassVar[SelectionMode] = "lifo"
 
     def __init__(
         self,
@@ -123,24 +120,30 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
         super().__init__(config)
         if canonical_bit_selection is not None:
             self.canonical_bit_selection = canonical_bit_selection
-        self._ord_counter = 0
 
     @abc.abstractmethod
     def accumulate(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
         raise NotImplementedError
 
-    # ---- shared wrapped-column helpers -----------------------------------
-
-    def _selection_mode(self) -> SelectionMode:
-        return "canonical" if self.canonical_bit_selection else self.legacy_selection_mode
+    # ---- canonical-bit-selection helpers ---------------------------------
+    #
+    # The helpers below are used by concrete PPAs whenever
+    # self.canonical_bit_selection is True. They maintain a parallel
+    # column representation where each entry is a _LeveledBit carrying
+    # the symbolic arrival level and a stable insertion index, so the
+    # bit-picking step can always pop the k earliest-arriving bits from
+    # a column. Leave self.canonical_bit_selection = False to bypass
+    # them entirely and keep the historical behaviour.
 
     def _wrap_columns(
         self, columns: Dict[int, List[Expr]]
     ) -> DefaultDict[int, List[_LeveledBit]]:
         """Turn a plain ``columns`` dict into level-tracked lists.
 
-        Every partial-product bit enters at level 1 (one AND from the
-        inputs) and receives a fresh monotonically increasing ``ord_``.
+        Every PP bit enters at level 1 (a single AND of two inputs) and
+        is stamped with a unique, monotonically increasing ``ord_``. The
+        counter is stored on the instance so later FA/HA applications
+        can keep issuing fresh insertion indices.
         """
         wrapped: DefaultDict[int, List[_LeveledBit]] = defaultdict(list)
         ord_counter = 0
@@ -154,92 +157,83 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
     def _unwrap_columns(
         self, wrapped: DefaultDict[int, List[_LeveledBit]]
     ) -> DefaultDict[int, List[Expr]]:
+        """Strip the level/order metadata and return a plain columns dict."""
         out: DefaultDict[int, List[Expr]] = defaultdict(list)
         for weight, bits in wrapped.items():
-            out[weight].extend(bit.expr for bit in bits)
+            out[weight].extend(b.expr for b in bits)
         return out
 
-    def _take_bits(
-        self,
-        bits: List[_LeveledBit],
-        k: int,
-        *,
-        mode: Optional[SelectionMode] = None,
+    def _take_earliest(
+        self, bits: List[_LeveledBit], k: int
     ) -> List[_LeveledBit]:
-        actual_mode = self._selection_mode() if mode is None else mode
-        if actual_mode == "canonical":
-            return self._take_earliest(bits, k)
-        if actual_mode == "lifo":
-            return self._take_lifo(bits, k)
-        if actual_mode == "fifo":
-            return self._take_fifo(bits, k)
-        raise ValueError(f"unsupported selection mode: {actual_mode}")
+        """Pop the ``k`` earliest-arrival bits from ``bits`` in place.
 
-    @staticmethod
-    def _take_fifo(bits: List[_LeveledBit], k: int) -> List[_LeveledBit]:
-        if len(bits) < k:
-            raise ValueError(f"column has {len(bits)} bits, need {k}")
-        return [bits.pop(0) for _ in range(k)]
-
-    @staticmethod
-    def _take_lifo(bits: List[_LeveledBit], k: int) -> List[_LeveledBit]:
-        if len(bits) < k:
-            raise ValueError(f"column has {len(bits)} bits, need {k}")
-        return [bits.pop() for _ in range(k)]
-
-    def _take_earliest(self, bits: List[_LeveledBit], k: int) -> List[_LeveledBit]:
+        Sort key is ``(arrival_level, ord_)`` — lowest level wins,
+        ``ord_`` breaks ties by insertion order. Mirrors
+        :meth:`sprouthdl.ml_ppa.environment.PPAEnv._canonical_bits`
+        exactly so replayed scripted-policy action logs reproduce
+        the same circuit.
+        """
         if len(bits) < k:
             raise ValueError(f"column has {len(bits)} bits, need {k}")
         ranked = sorted(range(len(bits)), key=lambda i: (bits[i].level, bits[i].ord_))
-        take_idx = sorted(ranked[:k])  # stable in-place deletion
+        take_idx = sorted(ranked[:k])  # sort by index for stable in-place deletion
         taken = [bits[i] for i in take_idx]
         for i in reversed(take_idx):
             del bits[i]
         return taken
 
-    def _apply_fa(
+    def _apply_fa_canonical(
         self,
         col_lower: List[_LeveledBit],
         col_upper: List[_LeveledBit],
         full_adder,
-        *,
-        mode: Optional[SelectionMode] = None,
     ) -> None:
-        taken = self._take_bits(col_lower, 3, mode=mode)
+        """Consume 3 canonical-earliest bits from ``col_lower``, append
+        the sum back to the same column and the carry to ``col_upper``,
+        both at level ``max(input_levels) + 2`` (symbolic FA depth)."""
+        taken = self._take_earliest(col_lower, 3)
         s, c = full_adder(taken[0].expr, taken[1].expr, taken[2].expr)
         new_lvl = max(t.level for t in taken) + 2
         col_lower.append(_LeveledBit(s, new_lvl, self._ord_counter))
         col_upper.append(_LeveledBit(c, new_lvl, self._ord_counter + 1))
         self._ord_counter += 2
 
-    def _apply_ha(
+    def _apply_ha_canonical(
         self,
         col_lower: List[_LeveledBit],
         col_upper: List[_LeveledBit],
-        *,
-        mode: Optional[SelectionMode] = None,
     ) -> None:
-        taken = self._take_bits(col_lower, 2, mode=mode)
+        """Half-adder counterpart to :meth:`_apply_fa_canonical`.
+
+        Consumes 2 earliest bits; outputs land at ``max+1``."""
+        taken = self._take_earliest(col_lower, 2)
         s, c = half_adder(taken[0].expr, taken[1].expr)
         new_lvl = max(t.level for t in taken) + 1
         col_lower.append(_LeveledBit(s, new_lvl, self._ord_counter))
         col_upper.append(_LeveledBit(c, new_lvl, self._ord_counter + 1))
         self._ord_counter += 2
 
-    def _apply_c42(
+    def _apply_c42_canonical(
         self,
         col_lower: List[_LeveledBit],
         col_upper: List[_LeveledBit],
         full_adder,
         zero: Expr,
-        *,
-        mode: Optional[SelectionMode] = None,
     ) -> None:
-        taken = self._take_bits(col_lower, 4, mode=mode)
+        """4:2 compressor implemented as two cascaded FAs, matching
+        :meth:`FourTwoCompressorAccumulator._compress_4_2`.
+
+        ``s1, c1 = FA(a, b, c)`` at ``l_inner = max(la, lb, lc) + 2``;
+        ``s2, c2 = FA(s1, d, 0)`` at ``l_outer = max(l_inner, ld) + 2``.
+        ``c1`` sits at the shallower ``l_inner`` level, ``s2`` and
+        ``c2`` at ``l_outer``.
+        """
+        taken = self._take_earliest(col_lower, 4)
         a, b, c, d = (t.expr for t in taken)
         s1, c1 = full_adder(a, b, c)
         s2, c2 = full_adder(s1, d, zero)
-        l_inner = max(t.level for t in taken[:3]) + 2
+        l_inner = max(taken[0].level, taken[1].level, taken[2].level) + 2
         l_outer = max(l_inner, taken[3].level) + 2
         col_lower.append(_LeveledBit(s2, l_outer, self._ord_counter))
         col_upper.append(_LeveledBit(c1, l_inner, self._ord_counter + 1))
@@ -248,6 +242,7 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
 
     @staticmethod
     def _column_heights(cols: DefaultDict[int, List[_LeveledBit]]) -> Dict[int, int]:
+        """Return a snapshot of ``{weight: height}`` for every column."""
         return {w: len(bits) for w, bits in cols.items()}
 
 
@@ -264,7 +259,6 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
     # delay matters, so we keep the original as the default and let
     # users opt into canonical for area-first flows.
     canonical_bit_selection: ClassVar[bool] = False
-    legacy_selection_mode: ClassVar[SelectionMode] = "fifo"
 
     def __init__(
         self,
@@ -287,64 +281,36 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
     def _accumulate_legacy(
         self, columns: Dict[int, List[Expr]]
     ) -> DefaultDict[int, List[Expr]]:
-        """Historical compressor-tree schedule.
-
-        This path is intentionally *not* the same schedule as the
-        canonical one. Each pass reduces a column in isolation into a
-        fresh ``next_cols`` buffer using FIFO grouping:
-        ``FA ... FA [HA] [leftover]``. Neither sums nor carries are fed
-        back into the same pass.
-        """
-        cols = self._wrap_columns(columns)
+        cols: DefaultDict[int, List[Expr]] = defaultdict(list)
+        for weight, bits in columns.items():
+            cols[weight].extend(bits)
 
         while True:
-            next_cols: DefaultDict[int, List[_LeveledBit]] = defaultdict(list)
-            quiescent = True
-
+            next_cols: DefaultDict[int, List[Expr]] = defaultdict(list)
+            reduced = True
             for weight in sorted(cols.keys()):
-                work_bits = list(cols[weight])
-
-                while len(work_bits) >= 3:
-                    quiescent = False
-                    taken = self._take_bits(work_bits, 3, mode="fifo")
-                    s, c = self._full_adder(
-                        taken[0].expr, taken[1].expr, taken[2].expr
-                    )
-                    new_lvl = max(t.level for t in taken) + 2
-                    next_cols[weight].append(_LeveledBit(s, new_lvl, self._ord_counter))
-                    next_cols[weight + 1].append(
-                        _LeveledBit(c, new_lvl, self._ord_counter + 1)
-                    )
-                    self._ord_counter += 2
-
-                if len(work_bits) == 2:
-                    quiescent = False
-                    taken = self._take_bits(work_bits, 2, mode="fifo")
-                    s, c = half_adder(taken[0].expr, taken[1].expr)
-                    new_lvl = max(t.level for t in taken) + 1
-                    next_cols[weight].append(_LeveledBit(s, new_lvl, self._ord_counter))
-                    next_cols[weight + 1].append(
-                        _LeveledBit(c, new_lvl, self._ord_counter + 1)
-                    )
-                    self._ord_counter += 2
-                elif len(work_bits) == 1:
-                    next_cols[weight].append(work_bits.pop())
-
-            if quiescent:
-                return self._unwrap_columns(cols)
-
+                bits = cols[weight]
+                if len(bits) > 2:
+                    reduced = False
+                    sum_bits, carry_bits = self._compress_column(bits)
+                    next_cols[weight].extend(sum_bits)
+                    next_cols[weight + 1].extend(carry_bits)
+                else:
+                    next_cols[weight].extend(bits)
             cols = next_cols
+            if reduced:
+                break
+
+        return cols
 
     def _accumulate_canonical(
         self, columns: Dict[int, List[Expr]]
     ) -> DefaultDict[int, List[Expr]]:
-        """Canonical compressor-tree schedule.
-
-        This mirrors
-        ``sprouthdl.ml_ppa.methods.scripted_policies.compressor_tree_policy``:
-        reduce each column greedily in-place using canonical earliest
-        bits, and immediately feed the generated sum back into the same
-        column. That changes the FA/HA schedule relative to legacy.
+        """Mirrors ``sprouthdl.ml_ppa.methods.scripted_policies.compressor_tree_policy``:
+        outer loop reduces each column in ascending weight order using
+        per-step earliest-arrival FAs, repeating until every column has
+        at most 2 bits. Sums from an FA are appended back to the *same*
+        column and become available for the next FA in the same pass.
         """
         cols = self._wrap_columns(columns)
         changed = True
@@ -352,9 +318,29 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
             changed = False
             for weight in sorted(list(cols.keys())):
                 while len(cols[weight]) > 2:
-                    self._apply_fa(cols[weight], cols[weight + 1], self._full_adder)
+                    self._apply_fa_canonical(
+                        cols[weight], cols[weight + 1], self._full_adder
+                    )
                     changed = True
         return self._unwrap_columns(cols)
+
+    def _compress_column(self, bits: List[Expr]) -> Tuple[List[Expr], List[Expr]]:
+        sum_bits: List[Expr] = []
+        carry_bits: List[Expr] = []
+        work_bits = list(bits)
+        while len(work_bits) >= 3:
+            x, y, z = work_bits[:3]
+            work_bits = work_bits[3:]
+            s, c = self._full_adder(x, y, z)
+            sum_bits.append(s)
+            carry_bits.append(c)
+        if len(work_bits) == 2:
+            s, c = half_adder(work_bits[0], work_bits[1])
+            sum_bits.append(s)
+            carry_bits.append(c)
+        elif len(work_bits) == 1:
+            sum_bits.append(work_bits[0])
+        return sum_bits, carry_bits
 
 
 class RippleCarryFinalAdder(FinalStageAdderBase):
