@@ -107,28 +107,59 @@ def ParallelScan_16_b(n: int) -> PrefixNodes:
     return nodes
 
 
-def multi_scan_n(n: int) -> PrefixNodes:
+# Widths for which a hand-crafted multi-scan / ZCG prefix graph exists.
+_MULTI_SCAN_SIZES = (8, 16, 24, 32)
+_ZCG_SIZES = (24, 32)
 
+
+def multi_scan_n(n: int) -> PrefixNodes:
+    """Hand-crafted multi-scan prefix graph.
+
+    When ``n`` is one of the explicitly-supported sizes (8, 16, 24, 32),
+    returns that template directly. Otherwise falls back to the next
+    *lower* supported size and returns its nodes untouched: the caller is
+    expected to run ``legalize_P(n, nodes)`` on the result, which
+    extends the smaller template to cover the extra bits by adding the
+    missing ``(i, 0)`` carry prefixes (and any splits they pull in).
+    Raises ``ValueError`` only when no lower supported size exists
+    (i.e. ``n < 8``).
+    """
     if n == 8:
         return ParallelScan_8_b(n)
-    elif n == 16:
+    if n == 16:
         return ParallelScan_16_b(n)
-    elif n == 24:
+    if n == 24:
         return get_multiscan_nodes_24()
-    elif n == 32:
+    if n == 32:
         return get_multiscan_nodes_32()
-    else:
-        raise ValueError(f"ParallelScan_n not defined for n={n}")
+    lower = [s for s in _MULTI_SCAN_SIZES if s < n]
+    if not lower:
+        raise ValueError(
+            f"ParallelScan_n not defined for n={n} and no lower supported size "
+            f"(supported: {_MULTI_SCAN_SIZES})"
+        )
+    return multi_scan_n(max(lower))
 
 
 def ZCG_n(n: int) -> PrefixNodes:
+    """Hand-crafted ZCG prefix graph.
 
+    Same fallback policy as :func:`multi_scan_n`: when ``n`` is not in
+    ``{24, 32}``, return the next lower supported template and let the
+    caller's ``legalize_P(n, nodes)`` extend it. Raises ``ValueError``
+    only when ``n < 24``.
+    """
     if n == 24:
         return prefix_nodes_to_ranges(zcg_24)
-    elif n == 32:
+    if n == 32:
         return prefix_nodes_to_ranges(zcg_32)
-    else:
-        raise ValueError(f"ZCG not defined for n={n}")
+    lower = [s for s in _ZCG_SIZES if s < n]
+    if not lower:
+        raise ValueError(
+            f"ZCG not defined for n={n} and no lower supported size "
+            f"(supported: {_ZCG_SIZES})"
+        )
+    return ZCG_n(max(lower))
 
 
 def prefix_nodes_to_ranges(nodes: Iterable[Tuple[int, int, int]]) -> Set[Tuple[int, int]]:

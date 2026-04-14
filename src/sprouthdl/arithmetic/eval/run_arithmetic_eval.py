@@ -46,14 +46,13 @@ from sprouthdl.sprouthdl import reset_shared_cache
 _OUT_DIR = Path(__file__).parent
 
 # Always-skipped final-stage adders (placeholders and the operator adapter).
+# MULTI_SCAN / ZCG have hard-coded prefix graphs only for n in {8,16,24,32} /
+# {24,32}; for unsupported widths they now fall back to the next lower
+# template and legalize_P extends it, so individual sub-minimum sizes fail
+# silently through _run_parallel's error path rather than via this list.
 _FSA_SKIP = {
     FSAOption.NONE,
     FSAOption.PLUS_OPERATOR,
-}
-# Extra skips for add/sub sweeps: MULTI_SCAN / ZCG have hard-coded prefix-graphs only for n in {8,16,24,32} / {24,32}, so every sweep width crashes.
-_FSA_SKIP_ADDLIKE = _FSA_SKIP | {
-    FSAOption.PREFIX_MULTI_SCAN,
-    FSAOption.PREFIX_ZCG,
 }
 # Skip Booth-unoptimised: was not competitive in the multiplier pareto front.
 _PPG_SKIP = {
@@ -201,7 +200,7 @@ def _run_parallel(desc: str, tasks: list, eval_fn, max_workers: int) -> list[dic
 
 
 def sweep_adders(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
-    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP_ADDLIKE]
+    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
     pairs = _width_pairs(bitwidths)
     tasks = [(fsa, a_w, b_w, signed)
              for (a_w, b_w), fsa, signed in product(pairs, fsa_options, [False, True])]
@@ -209,7 +208,7 @@ def sweep_adders(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
 
 
 def sweep_subtractors(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
-    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP_ADDLIKE]
+    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
     pairs = _width_pairs(bitwidths)
     tasks = [(fsa, a_w, b_w, signed)
              for (a_w, b_w), fsa, signed in product(pairs, fsa_options, [False, True])]
@@ -420,7 +419,7 @@ def main(
     pareto: bool = True,
 ) -> None:
     if bitwidths is None:
-        bitwidths = [1, 2, 4, 8, 16]
+        bitwidths = [1, 2, 4, 8, 16, 32]
     if output_dir is None:
         output_dir = _OUT_DIR
 
@@ -460,8 +459,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run arithmetic evaluation sweep")
     parser.add_argument("--format", choices=["csv", "json"], default="csv")
     parser.add_argument("--no-pareto", action="store_true", help="Store all rows, not just Pareto front")
-    parser.add_argument("--bitwidths", nargs="+", type=int, default=[1, 2, 4, 8, 16])
-    parser.add_argument("--workers", type=int, default=16)
+    parser.add_argument("--bitwidths", nargs="+", type=int, default=[1, 2, 4, 8, 16, 32])
+    parser.add_argument("--workers", type=int, default=50)
     args = parser.parse_args()
     main(
         bitwidths=args.bitwidths,
