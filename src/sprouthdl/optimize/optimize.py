@@ -22,7 +22,7 @@ import tempfile
 import time
 from dataclasses import make_dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from sprouthdl.sprouthdl import Expr, HDLType, Signal
 from sprouthdl.sprouthdl_module import Component, Module
@@ -959,3 +959,114 @@ def abc_optimized(
         return decorator(_fn)
     else:
         return decorator
+
+
+# ---------------------------------------------------------------------------
+# Arithmetic replacement optimization
+# ---------------------------------------------------------------------------
+
+def arithmetic_optimized(
+    _fn: Callable[..., Any] | None = None,
+    *,
+    objective: Literal["area", "delay", "adp"] = "area",
+    full_output_bit: bool = True,
+) -> Callable[..., Any]:
+    """Decorator that rewrites a function's ``+``, ``-``, ``*`` operators
+    with optimized StageBased hardware via ``replace_arithmetic_ops``.
+
+    Usage::
+
+        @arithmetic_optimized(objective="adp")
+        def opt_mac(a, b, c):
+            return a * b + c
+
+    At call time, ``Expr`` arguments are detected and the function is
+    converted into a ``Component`` with placeholder inputs.  Every ``+``,
+    ``-``, ``*`` and equality operator in the resulting expression graph is
+    replaced by the empirically best StageBased adder / subtractor /
+    multiplier for its specific bit-width and signedness, with MAC /
+    inner-product fusion applied where applicable.  The optimized sub-graph
+    is then spliced into the caller's design: the function returns ``Expr``
+    values that can be used exactly like ``fn``'s original outputs.
+
+    Unlike ``@abc_optimized`` / ``@flowy_optimized``, no AIG flattening and no
+    disk cache are involved -- the replacement is a fast database lookup that
+    produces structured Verilog directly.
+
+    Parameters
+    ----------
+    objective : {"area", "delay", "adp"}
+        Optimization target:
+
+        - ``"area"``:  minimize Yosys transistor count
+        - ``"delay"``: minimize AIG depth (proxy for critical-path delay)
+        - ``"adp"``:   minimize area-delay product
+    full_output_bit : bool
+        Keep the natural full-width output of each ``+``/``-``/``*`` (e.g.
+        a ``w``-bit + ``w``-bit add produces a ``(w+1)``-bit sum).  Set to
+        ``False`` to truncate to the operand width.
+    """
+    from sprouthdl.arithmetic.int_arithmetic_config import (
+        ArithmeticAutoConfig,
+        replace_arithmetic_ops,
+    )
+
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            fn_sig: inspect.Signature = inspect.signature(fn)
+            bound: inspect.BoundArguments = fn_sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+
+            logic_args: Dict[str, Tuple[int, bool]] = {}
+            other_args: Dict[str, Any] = {}
+            actual_logic_args: Dict[str, Expr] = {}
+
+            for param_name, value in bound.arguments.items():
+                param = fn_sig.parameters[param_name]
+                if param.kind == inspect.Parameter.VAR_POSITIONAL:
+                    for i, v in enumerate(value):
+                        varg_name = f"{param_name}_{chr(ord('a') + i)}"
+                        if isinstance(v, Expr):
+                            logic_args[varg_name] = (v.typ.width, v.typ.signed)
+                            actual_logic_args[varg_name] = v
+                        else:
+                            other_args[varg_name] = v
+                elif isinstance(value, Expr):
+                    logic_args[param_name] = (value.typ.width, value.typ.signed)
+                    actual_logic_args[param_name] = value
+                else:
+                    other_args[param_name] = value
+
+            if not logic_args:
+                return fn(*args, **kwargs)
+
+            # Build a Component wrapping fn()'s graph with placeholder inputs.
+            comp, output_names = _build_component(fn, logic_args, other_args)
+
+            # Rewrite +, -, * (and ==, !=) with optimized StageBased components.
+            replace_arithmetic_ops(
+                comp,
+                ArithmeticAutoConfig(
+                    objective=objective,
+                    full_output_bit=full_output_bit,
+                ),
+            )
+
+            # Splice into the caller's graph: turn comp.io ports into internal
+            # wires, drive the input wires from the caller's actual Expr args,
+            # and return the output wires as the optimized expressions.
+            comp.make_internal()
+            for name, expr in actual_logic_args.items():
+                sig: Signal = getattr(comp.io, name)
+                sig <<= expr
+
+            if len(output_names) == 1:
+                return getattr(comp.io, output_names[0])
+            return tuple(getattr(comp.io, oname) for oname in output_names)
+
+        return wrapper
+
+    if _fn is not None:
+        return decorator(_fn)
+    return decorator

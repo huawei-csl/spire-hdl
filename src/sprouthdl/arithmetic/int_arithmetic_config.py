@@ -13,7 +13,7 @@ from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib
 from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
 from sprouthdl.arithmetic.eval.auto_config import lookup_best_config
 from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder, StageBasedSubtractor
-from sprouthdl.sprouthdl import Const, Expr, Op2, SInt, Signal, UInt, cast, reset_shared_cache
+from sprouthdl.sprouthdl import Const, Expr, Op2, SInt, Signal, UInt, cast
 
 
 @dataclass
@@ -261,9 +261,6 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
     Modifies the expression graph in-place. Call before to_module().
     """
     from sprouthdl.sprouthdl_module import iter_values
-
-    # Prevent stale id() collisions in the global shared-wire cache
-    reset_shared_cache()
 
     # Collect output signals as walk starting points
     outputs = [sig for sig in iter_values(component.io)

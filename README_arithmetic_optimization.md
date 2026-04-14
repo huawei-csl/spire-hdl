@@ -106,6 +106,37 @@ self.io.y <<= adder_tree(
 
 Use the builders when you want direct control over where optimized hardware is instantiated (e.g., inside a loop, or mixed with hand-written RTL); use `replace_arithmetic_ops` when you prefer to author the design with plain operators and let the optimizer rewrite the whole graph — including MAC/inner-product fusion, which the builders do not perform.
 
+## `@arithmetic_optimized` decorator
+
+For local reuse of a small arithmetic block, the `@arithmetic_optimized` decorator offers the same one-liner ergonomics as [`@abc_optimized` / `@flowy_optimized`](README_optimization_decorators.md) but without going through an external synthesizer — the body of the decorated function is wrapped into a `Component`, `replace_arithmetic_ops` is run on it, and the optimized sub-graph is spliced back into the caller's design:
+
+```python
+from sprouthdl.sprouthdl import UInt
+from sprouthdl.sprouthdl_module import Module
+from sprouthdl.optimize import arithmetic_optimized
+
+@arithmetic_optimized(objective="adp")
+def opt_mac(a, b, c):
+    return a * b + c
+
+m = Module("Top", with_clock=False, with_reset=False)
+a = m.input(UInt(8), "a")
+b = m.input(UInt(8), "b")
+c = m.input(UInt(16), "c")
+y = m.output(UInt(17), "y")
+y <<= opt_mac(a, b, c)    # MAC fusion happens inside the decorator
+print(m.to_verilog())
+```
+
+MAC / inner-product fusion, bit-width-aware configuration lookup, and `==`/`!=` lowering all work the same as with `replace_arithmetic_ops` on a hand-built component, because the decorator just calls `replace_arithmetic_ops` under the hood.
+
+### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `objective` | `"area"` | `"area"` / `"delay"` / `"adp"` — see the table at the top of this file |
+| `full_output_bit` | `True` | Keep the natural full-width output of each `+`/`-`/`*`. Disable to truncate to operand width. |
+
 ## Replacement-based optimization details
 
 Each `+`, `-`, and `*` in the expression graph is independently replaced with the empirically best prefix-adder or stage-based multiplier configuration for its specific bit-width and signedness.  For widths not in the evaluation database, the nearest data point is selected using logarithmic interpolation.
