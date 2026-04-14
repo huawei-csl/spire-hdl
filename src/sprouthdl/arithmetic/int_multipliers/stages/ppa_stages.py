@@ -49,6 +49,7 @@ class WallaceTreeAccumulator(PartialProductAccumulatorBase):
 
             for weight in sorted(cols.keys()):
                 bits = list(cols[weight])
+                orig_height = len(bits)
 
                 while len(bits) >= 3:
                     x, y, z = bits.pop(), bits.pop(), bits.pop()
@@ -57,13 +58,13 @@ class WallaceTreeAccumulator(PartialProductAccumulatorBase):
                     next_cols[weight + 1].append(c)
                     progress = True
 
-                if len(bits) == 2:
+                if len(bits) == 2 and orig_height > 2:
                     s, c = half_adder(bits.pop(), bits.pop())
                     next_cols[weight].append(s)
                     next_cols[weight + 1].append(c)
                     progress = True
-                elif len(bits) == 1:
-                    next_cols[weight].append(bits.pop())
+                else:
+                    next_cols[weight].extend(bits)
 
             if not progress:
                 return cols
@@ -94,7 +95,7 @@ class WallaceTreeAccumulator(PartialProductAccumulatorBase):
                             cols[weight], cols[weight + 1], self._full_adder
                         )
                         progress = True
-                if rem == 2 and len(cols[weight]) >= 2:
+                if rem == 2 and h0 > 2 and len(cols[weight]) >= 2:
                     self._apply_ha_canonical(cols[weight], cols[weight + 1])
                     progress = True
             if not progress:
@@ -352,6 +353,7 @@ class FourTwoCompressorAccumulator(PartialProductAccumulatorBase):
 
             for weight in sorted(cols.keys()):
                 bits = list(cols[weight])
+                orig_height = len(bits)
 
                 while len(bits) >= 4:
                     a = bits.pop()
@@ -369,13 +371,13 @@ class FourTwoCompressorAccumulator(PartialProductAccumulatorBase):
                     next_cols[weight].append(s)
                     next_cols[weight + 1].append(c)
                     progress = True
-                elif len(bits) == 2:
+                elif len(bits) == 2 and orig_height > 2:
                     s, c = half_adder(bits.pop(), bits.pop())
                     next_cols[weight].append(s)
                     next_cols[weight + 1].append(c)
                     progress = True
-                elif len(bits) == 1:
-                    next_cols[weight].append(bits.pop())
+                else:
+                    next_cols[weight].extend(bits)
 
             if not progress:
                 return cols
@@ -409,7 +411,7 @@ class FourTwoCompressorAccumulator(PartialProductAccumulatorBase):
                         cols[weight], cols[weight + 1], self._full_adder
                     )
                     progress = True
-                elif rem == 2 and len(cols[weight]) >= 2:
+                elif rem == 2 and h0 > 2 and len(cols[weight]) >= 2:
                     self._apply_ha_canonical(cols[weight], cols[weight + 1])
                     progress = True
             if not progress:
