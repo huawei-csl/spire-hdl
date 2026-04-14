@@ -54,7 +54,7 @@ class WallaceTreeAccumulator(PartialProductAccumulatorBase):
                     if len(cols[weight]) >= 3:
                         self._apply_fa(cols[weight], cols[weight + 1], self._full_adder)
                         progress = True
-                if rem == 2 and len(cols[weight]) >= 2:
+                if rem == 2 and h0 > 2 and len(cols[weight]) >= 2:
                     self._apply_ha(cols[weight], cols[weight + 1])
                     progress = True
             if not progress:
@@ -203,7 +203,7 @@ class FourTwoCompressorAccumulator(PartialProductAccumulatorBase):
                 if rem == 3 and len(cols[weight]) >= 3:
                     self._apply_fa(cols[weight], cols[weight + 1], self._full_adder)
                     progress = True
-                elif rem == 2 and len(cols[weight]) >= 2:
+                elif rem == 2 and h0 > 2 and len(cols[weight]) >= 2:
                     self._apply_ha(cols[weight], cols[weight + 1])
                     progress = True
             if not progress:
