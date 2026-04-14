@@ -461,3 +461,126 @@ class FourTwoCompressorParallelAccumulator(FourTwoCompressorAccumulator):
         sum_bit = parity_abc ^ d ^ carry_in
         carry_bit = (parity_abc & d) | (parity_abc & carry_in) | (d & carry_in)
         return sum_bit, carry_bit, carry_chain_out
+
+
+class FiveTwoCompressorAccumulator(PartialProductAccumulatorBase):
+    """Reduction based on 5-input / 3-output compressors, built as two
+    cascaded full adders.
+
+    Commonly called a "5:2 compressor" in prior art — a true 5:2
+    compressor would take 5 data inputs plus 2 horizontal carry-ins
+    and produce 2 local outputs plus 2 horizontal carry-outs (three
+    cascaded full adders). This implementation drops the horizontal
+    chain, so it is really a 5:3 compressor locally: 5 bits in column
+    k reduce to 1 sum in column k and 2 carries in column k+1 — one
+    more input bit reduced per two-FA cost than the classic "4:2"
+    (which is a 4:3) cell.
+
+    Falls back to cascaded 4:2 / FA / HA compressions for columns
+    whose height is not a multiple of five.
+    """
+
+    canonical_bit_selection: ClassVar[bool] = False
+
+    def __init__(
+        self,
+        config: StageMultiplierConfig,
+        *,
+        canonical_bit_selection: Optional[bool] = None,
+    ) -> None:
+        super().__init__(config, canonical_bit_selection=canonical_bit_selection)
+        self._full_adder = (
+            full_adder_low_area
+            if self.config.optim_type == "area"
+            else full_adder_fast
+        )
+        self._zero = Const(False, Bool())
+
+    def accumulate(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
+        return self._accumulate_legacy(columns)
+
+    def _accumulate_legacy(
+        self, columns: Dict[int, List[Expr]]
+    ) -> DefaultDict[int, List[Expr]]:
+        cols: DefaultDict[int, List[Expr]] = defaultdict(list)
+        for weight, bits in columns.items():
+            cols[weight].extend(bits)
+
+        while True:
+            next_cols: DefaultDict[int, List[Expr]] = defaultdict(list)
+            progress = False
+
+            for weight in sorted(cols.keys()):
+                bits = list(cols[weight])
+                orig_height = len(bits)
+
+                while len(bits) >= 5:
+                    a = bits.pop()
+                    b = bits.pop()
+                    c = bits.pop()
+                    d = bits.pop()
+                    e = bits.pop()
+                    sum_bit, carry_low, carry_high = self._compress_5_2(a, b, c, d, e)
+                    next_cols[weight].append(sum_bit)
+                    next_cols[weight + 1].extend((carry_low, carry_high))
+                    progress = True
+
+                if len(bits) == 4:
+                    a = bits.pop()
+                    b = bits.pop()
+                    c = bits.pop()
+                    d = bits.pop()
+                    s1, c1 = self._full_adder(a, b, c)
+                    s2, c2 = self._full_adder(s1, d, self._zero)
+                    next_cols[weight].append(s2)
+                    next_cols[weight + 1].extend((c1, c2))
+                    progress = True
+                elif len(bits) == 3:
+                    x, y, z = bits.pop(), bits.pop(), bits.pop()
+                    s, c = self._full_adder(x, y, z)
+                    next_cols[weight].append(s)
+                    next_cols[weight + 1].append(c)
+                    progress = True
+                elif len(bits) == 2 and orig_height > 2:
+                    s, c = half_adder(bits.pop(), bits.pop())
+                    next_cols[weight].append(s)
+                    next_cols[weight + 1].append(c)
+                    progress = True
+                else:
+                    next_cols[weight].extend(bits)
+
+            if not progress:
+                return cols
+
+            cols = next_cols
+
+    def _compress_5_2(
+        self, a: Expr, b: Expr, c: Expr, d: Expr, e: Expr
+    ) -> Tuple[Expr, Expr, Expr]:
+        s1, c1 = self._full_adder(a, b, c)
+        s2, c2 = self._full_adder(s1, d, e)
+        return s2, c1, c2
+
+
+class FiveTwoCompressorParallelAccumulator(FiveTwoCompressorAccumulator):
+    """Variant of :class:`FiveTwoCompressorAccumulator` whose inner
+    5-input compressor is expressed as two stacked parallel
+    XOR + majority cells rather than two cascaded full adders.
+
+    Logically equivalent to the base class (same three output bits
+    for every input combination) — only the gate structure differs,
+    which the downstream synthesis tool may optimize differently.
+    Written out explicitly for symmetry with
+    :class:`FourTwoCompressorParallelAccumulator`.
+    """
+
+    def _compress_5_2(
+        self, a: Expr, b: Expr, c: Expr, d: Expr, e: Expr
+    ) -> Tuple[Expr, Expr, Expr]:
+        # First "FA" on (a, b, c) in parallel gates:
+        parity_abc = a ^ b ^ c
+        carry_abc = (a & b) | (a & c) | (b & c)
+        # Second "FA" on (parity_abc, d, e) in parallel gates:
+        sum_bit = parity_abc ^ d ^ e
+        carry_de = (parity_abc & d) | (parity_abc & e) | (d & e)
+        return sum_bit, carry_de, carry_abc
