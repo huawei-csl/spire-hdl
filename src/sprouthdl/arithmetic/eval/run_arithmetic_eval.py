@@ -45,9 +45,30 @@ from sprouthdl.sprouthdl import reset_shared_cache
 
 _OUT_DIR = Path(__file__).parent
 
-_FSA_SKIP = {FSAOption.NONE, FSAOption.PLUS_OPERATOR}
-_PPG_SKIP = {PPGOption.NONE}
-_PPA_SKIP = {PPAOption.NONE}
+# Always-skipped final-stage adders (placeholders and the operator adapter).
+_FSA_SKIP = {
+    FSAOption.NONE,
+    FSAOption.PLUS_OPERATOR,
+}
+# Extra skips for add/sub sweeps: MULTI_SCAN / ZCG have hard-coded prefix-graphs only for n in {8,16,24,32} / {24,32}, so every sweep width crashes.
+_FSA_SKIP_ADDLIKE = _FSA_SKIP | {
+    FSAOption.PREFIX_MULTI_SCAN,
+    FSAOption.PREFIX_ZCG,
+}
+# Skip Booth-unoptimised: was not competitive in the multiplier pareto front.
+_PPG_SKIP = {
+    PPGOption.NONE,
+    PPGOption.BOOTH_UNOPTIMISED,
+}
+# Skip the less performant options
+_PPA_SKIP = {
+    PPAOption.NONE,
+    PPAOption.FIVE_TWO_COMPRESSOR,
+    PPAOption.FIVE_TWO_COMPRESSOR_PARALLEL,
+    PPAOption.FOUR_TWO_COMPRESSOR_PARALLEL,
+    PPAOption.EAGER_WALLACE_TREE,
+    PPAOption.BDT_WALLACE_TREE,
+}
 
 _CSV_COLUMNS = [
     "op", "a_w", "b_w", "signed",
@@ -180,7 +201,7 @@ def _run_parallel(desc: str, tasks: list, eval_fn, max_workers: int) -> list[dic
 
 
 def sweep_adders(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
-    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
+    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP_ADDLIKE]
     pairs = _width_pairs(bitwidths)
     tasks = [(fsa, a_w, b_w, signed)
              for (a_w, b_w), fsa, signed in product(pairs, fsa_options, [False, True])]
@@ -188,7 +209,7 @@ def sweep_adders(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
 
 
 def sweep_subtractors(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
-    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
+    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP_ADDLIKE]
     pairs = _width_pairs(bitwidths)
     tasks = [(fsa, a_w, b_w, signed)
              for (a_w, b_w), fsa, signed in product(pairs, fsa_options, [False, True])]

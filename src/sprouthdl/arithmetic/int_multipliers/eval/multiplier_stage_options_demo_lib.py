@@ -4,7 +4,7 @@ from typing import List, NamedTuple, Self, Tuple, Type, TypeVar, Optional
 from sprouthdl.arithmetic.int_multipliers.multipliers.multipliers_ext_karatsuba import KaratsubaMultiplier, KaratsubaMultiplierFromOptimized4BitBlocks
 from sprouthdl.arithmetic.int_multipliers.multipliers.multipliers_ext_optimized import OptimizedMultiplierFrom4BitBlocks, OptimizedMultiplierFrom4BitBlocksStrong, OptimizedMultiplier, OptimizedSignMagnitudeMultiplier
 from sprouthdl.arithmetic.int_multipliers.multipliers.mutipliers_ext import StageBasedMultiplierBase, StageBasedMultiplier, StageBasedSignMagnitudeExtMultiplier, StageBasedSignMagnitudeExtToTwosComplementMultiplier, StageBasedSignMagnitudeExtToTwosComplementUpperMultiplier, StageBasedSignMagnitudeExtUpMultiplier, StageBasedSignMagnitudeMultiplier, StageBasedSignMagnitudeToTwosComplementMultiplier, StarMultiplier
-from sprouthdl.arithmetic.int_multipliers.stages.ppa_stages import CarrySaveAccumulator, DaddaTreeAccumulator, FiveTwoCompressorAccumulator, FiveTwoCompressorParallelAccumulator, FourTwoCompressorAccumulator, FourTwoCompressorParallelAccumulator, WallaceTreeAccumulator
+from sprouthdl.arithmetic.int_multipliers.stages.ppa_stages import BalancedDelayWallaceAccumulator, CarrySaveAccumulator, DaddaTreeAccumulator, EagerWallaceAccumulator, FiveTwoCompressorAccumulator, FiveTwoCompressorParallelAccumulator, FourTwoCompressorAccumulator, FourTwoCompressorParallelAccumulator, WallaceTreeAccumulator
 from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, MultiplierTestVectors, to_encoding
 from sprouthdl.arithmetic.int_multipliers.stages.ppg_baugh_wooley_stages import BaughWooleyPartialProductGenerator
 from sprouthdl.arithmetic.int_multipliers.stages.ppg_and_stages import AndPartialProductGenerator
@@ -23,7 +23,7 @@ class PPGOption(Enum):
     BAUGH_WOOLEY = BaughWooleyPartialProductGenerator
     BOOTH_UNOPTIMISED = BoothUnoptimizedPartialProductGenerator
     BOOTH_OPTIMISED = BoothOptimizedPartialProductGenerator
-    BOOTH_OPTIMISED_PRECOMPUTED_B = BoothPrecomputedBPartialProductGenerator # doesnt really help compared to BOOTH_OPTIMISED, but included for completeness
+    #BOOTH_OPTIMISED_PRECOMPUTED_B = BoothPrecomputedBPartialProductGenerator # doesnt really help compared to BOOTH_OPTIMISED, but included for completeness
     NONE = None
 
 
@@ -31,12 +31,14 @@ class PPGOption(Enum):
 class PPAOption(Enum):
     ACCUMULATOR_TREE = CompressorTreeAccumulator
     WALLACE_TREE = WallaceTreeAccumulator
+    EAGER_WALLACE_TREE = EagerWallaceAccumulator # was not really in the pareto front
+    BDT_WALLACE_TREE = BalancedDelayWallaceAccumulator # sometimes beats wallace tree for signed mult
     DADDA_TREE = DaddaTreeAccumulator
     CARRY_SAVE_TREE = CarrySaveAccumulator
     FOUR_TWO_COMPRESSOR = FourTwoCompressorAccumulator
-    FOUR_TWO_COMPRESSOR_PARALLEL = FourTwoCompressorParallelAccumulator
-    FIVE_TWO_COMPRESSOR = FiveTwoCompressorAccumulator
-    FIVE_TWO_COMPRESSOR_PARALLEL = FiveTwoCompressorParallelAccumulator
+    FOUR_TWO_COMPRESSOR_PARALLEL = FourTwoCompressorParallelAccumulator # seemed worse than the non-parallel version
+    FIVE_TWO_COMPRESSOR = FiveTwoCompressorAccumulator # worse than 4:2
+    FIVE_TWO_COMPRESSOR_PARALLEL = FiveTwoCompressorParallelAccumulator # worse than 4:2
     NONE = None
 
 # Final Stage Adder option values have type Type[FinalStageAdderBase]

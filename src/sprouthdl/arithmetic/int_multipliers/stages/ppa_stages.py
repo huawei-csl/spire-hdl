@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import heapq
 from collections import defaultdict
 from math import floor
 from typing import ClassVar, DefaultDict, Dict, List, Optional, Tuple
@@ -87,6 +88,153 @@ class WallaceTreeAccumulator(PartialProductAccumulatorBase):
             snapshot = self._column_heights(cols)
             progress = False
             for weight, h0 in sorted(snapshot.items()):
+                n_fa = h0 // 3
+                rem = h0 - n_fa * 3
+                for _ in range(n_fa):
+                    if len(cols[weight]) >= 3:
+                        self._apply_fa_canonical(
+                            cols[weight], cols[weight + 1], self._full_adder
+                        )
+                        progress = True
+                if rem == 2 and h0 > 2 and len(cols[weight]) >= 2:
+                    self._apply_ha_canonical(cols[weight], cols[weight + 1])
+                    progress = True
+            if not progress:
+                return self._unwrap_columns(cols)
+
+
+class BalancedDelayWallaceAccumulator(WallaceTreeAccumulator):
+    """Wallace reduction with cross-column priority-queue scheduling.
+
+    Canonical Wallace (both the snapshot and eager variants) picks
+    full-adder targets one *column* at a time in weight order. The
+    per-FA bit selection inside a column is already delay-optimal —
+    :meth:`_take_earliest` picks the three smallest-level bits, which
+    is equivalent to the greedy Balanced Delay Tree rule of Oklobdzija
+    et al. — but the *column* choice is not.
+
+    This variant maintains a min-heap keyed by
+    ``(min_fa_output_level, weight)`` where
+    ``min_fa_output_level = sorted_levels(cols[w])[2] + 2`` is the
+    output level of the next FA applied to column ``w`` if we took
+    its three earliest bits right now. At each step we pop the column
+    whose next FA lands at the lowest level, apply one FA there, then
+    re-push both the source column and the carry-receiving column
+    (``w + 1``) with their updated priorities.
+
+    The intuition: reducing the shallowest-output FA first keeps all
+    newly-generated carries at the lowest possible level, so when a
+    deeper column finally has to consume an upstream carry it sees
+    the *earliest* possible arrival time. Columns compete on merit
+    instead of following a fixed spatial order.
+
+    After the priority loop drains (all remaining columns have
+    fewer than 3 bits and would not benefit from an FA), a cleanup
+    pass issues half-adders on any column still above height 2,
+    mirroring :class:`CarrySaveAccumulator`'s tail loop.
+    """
+
+    canonical_bit_selection: ClassVar[bool] = True
+
+    @staticmethod
+    def _fa_output_level(bits: List[_LeveledBit]) -> Optional[int]:
+        """Return the output level if an FA were applied to the three
+        earliest-arriving bits of ``bits`` right now, or ``None`` if
+        the column has fewer than 3 bits."""
+        if len(bits) < 3:
+            return None
+        # Third-smallest level determines the FA output level because
+        # the FA sum/carry lands at ``max(picked) + 2`` and the three
+        # picked bits are the smallest-level ones.
+        levels = sorted(b.level for b in bits)
+        return levels[2] + 2
+
+    def _accumulate_canonical(
+        self, columns: Dict[int, List[Expr]]
+    ) -> DefaultDict[int, List[Expr]]:
+        cols = self._wrap_columns(columns)
+
+        # Seed the priority queue with every column that can fire an FA.
+        # Heap entries are ``(fa_output_level, weight, stale_guard)`` so
+        # popped entries whose priority no longer matches the column's
+        # current state are discarded rather than re-validated.
+        heap: List[Tuple[int, int, int]] = []
+
+        def push(weight: int) -> None:
+            lvl = self._fa_output_level(cols[weight])
+            if lvl is not None:
+                heapq.heappush(heap, (lvl, weight, len(cols[weight])))
+
+        for weight in sorted(cols.keys()):
+            push(weight)
+
+        while heap:
+            lvl, weight, stamp = heapq.heappop(heap)
+            # Stale entry: column has changed since this was pushed.
+            if stamp != len(cols[weight]):
+                continue
+            if self._fa_output_level(cols[weight]) != lvl:
+                continue
+            if len(cols[weight]) < 3:
+                continue
+            self._apply_fa_canonical(
+                cols[weight], cols[weight + 1], self._full_adder
+            )
+            push(weight)
+            push(weight + 1)
+
+        # Cleanup: drain any column still > 2 bits with FA/HA moves.
+        while True:
+            any_tall = False
+            for weight in sorted(list(cols.keys())):
+                while len(cols[weight]) > 2:
+                    any_tall = True
+                    if len(cols[weight]) >= 3:
+                        self._apply_fa_canonical(
+                            cols[weight], cols[weight + 1], self._full_adder
+                        )
+                    else:
+                        self._apply_ha_canonical(
+                            cols[weight], cols[weight + 1]
+                        )
+            if not any_tall:
+                break
+        return self._unwrap_columns(cols)
+
+
+class EagerWallaceAccumulator(WallaceTreeAccumulator):
+    """Wallace reduction with live column heights instead of a
+    per-iteration snapshot.
+
+    Identical to :class:`WallaceTreeAccumulator` except that
+    :meth:`_accumulate_canonical` reads ``h0 = len(cols[weight])`` on
+    the fly inside the column loop. Carries dropped into column
+    ``w + 1`` earlier in the same iteration are therefore visible when
+    we reach ``w + 1``, eliminating the one-iteration stall that the
+    snapshot version inherits from ``wallace_policy``.
+
+    Correctness is preserved by the ``_LeveledBit`` arrival-level
+    tracking: a freshly-dropped carry sits above the level-1 primary
+    bits in :meth:`_take_earliest`'s ordering and will only be picked
+    once the lower-level bits in the column are exhausted, so no bit
+    is ever consumed before it has actually arrived.
+
+    Motivated by the fact that at 8×8 the tallest PP column stalls for
+    one full iteration waiting for its ``w + 1`` neighbour to catch
+    the carries it just dropped; letting ``w + 1`` swallow them in the
+    same pass compresses one outer iteration out of the critical path.
+    """
+
+    canonical_bit_selection: ClassVar[bool] = True
+
+    def _accumulate_canonical(
+        self, columns: Dict[int, List[Expr]]
+    ) -> DefaultDict[int, List[Expr]]:
+        cols = self._wrap_columns(columns)
+        while True:
+            progress = False
+            for weight in sorted(cols.keys()):
+                h0 = len(cols[weight])  # live, not a pre-iteration snapshot
                 n_fa = h0 // 3
                 rem = h0 - n_fa * 3
                 for _ in range(n_fa):
