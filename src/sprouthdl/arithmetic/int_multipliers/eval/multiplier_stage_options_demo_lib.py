@@ -4,7 +4,7 @@ from typing import List, NamedTuple, Self, Tuple, Type, TypeVar, Optional
 from sprouthdl.arithmetic.int_multipliers.multipliers.multipliers_ext_karatsuba import KaratsubaMultiplier, KaratsubaMultiplierFromOptimized4BitBlocks
 from sprouthdl.arithmetic.int_multipliers.multipliers.multipliers_ext_optimized import OptimizedMultiplierFrom4BitBlocks, OptimizedMultiplierFrom4BitBlocksStrong, OptimizedMultiplier, OptimizedSignMagnitudeMultiplier
 from sprouthdl.arithmetic.int_multipliers.multipliers.mutipliers_ext import StageBasedMultiplierBase, StageBasedMultiplier, StageBasedSignMagnitudeExtMultiplier, StageBasedSignMagnitudeExtToTwosComplementMultiplier, StageBasedSignMagnitudeExtToTwosComplementUpperMultiplier, StageBasedSignMagnitudeExtUpMultiplier, StageBasedSignMagnitudeMultiplier, StageBasedSignMagnitudeToTwosComplementMultiplier, StarMultiplier
-from sprouthdl.arithmetic.int_multipliers.stages.ppa_stages import CarrySaveAccumulator, DaddaTreeAccumulator, FourTwoCompressorAccumulator, WallaceTreeAccumulator
+from sprouthdl.arithmetic.int_multipliers.stages.ppa_stages import CarrySaveAccumulator, DaddaTreeAccumulator, FourTwoCompressorAccumulator, FourTwoCompressorParallelAccumulator, WallaceTreeAccumulator
 from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, MultiplierTestVectors, to_encoding
 from sprouthdl.arithmetic.int_multipliers.stages.ppg_baugh_wooley_stages import BaughWooleyPartialProductGenerator
 from sprouthdl.arithmetic.int_multipliers.stages.ppg_and_stages import AndPartialProductGenerator
@@ -34,6 +34,7 @@ class PPAOption(Enum):
     DADDA_TREE = DaddaTreeAccumulator
     CARRY_SAVE_TREE = CarrySaveAccumulator
     FOUR_TWO_COMPRESSOR = FourTwoCompressorAccumulator
+    FOUR_TWO_COMPRESSOR_PARALLEL = FourTwoCompressorParallelAccumulator
     NONE = None
 
 # Final Stage Adder option values have type Type[FinalStageAdderBase]

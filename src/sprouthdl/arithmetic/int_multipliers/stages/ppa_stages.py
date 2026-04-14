@@ -421,3 +421,43 @@ class FourTwoCompressorAccumulator(PartialProductAccumulatorBase):
         s1, c1 = self._full_adder(a, b, c)
         s2, c2 = self._full_adder(s1, d, self._zero)
         return s2, c1, c2
+
+
+class FourTwoCompressorParallelAccumulator(FourTwoCompressorAccumulator):
+    """Variant of :class:`FourTwoCompressorAccumulator` that uses the
+    "true 4:2 compressor" gate pattern (parallel XOR + majority carry
+    with an explicit horizontal carry-in) in place of the default pair
+    of cascaded full adders.
+
+    With ``carry_in = 0`` — the value used when the inherited
+    reduction policy calls this method with four inputs — the output
+    bits are logically equivalent to the base class' cascaded-FA
+    implementation; only the gate structure differs. Keeping the
+    ``carry_in`` parameter on the signature leaves room for a future
+    reduction policy to thread a horizontal carry chain between
+    compressors in the same column, turning the 4-input / 3-output
+    structure into a true 4:2 compressor.
+
+    Forces the legacy reduction path because the canonical path has
+    its own hard-coded cascaded-FA cell in
+    :meth:`PartialProductAccumulatorBase._apply_c42_canonical` and
+    would bypass this override otherwise.
+    """
+
+    canonical_bit_selection: ClassVar[bool] = False
+
+    def _compress_4_2(
+        self,
+        a: Expr,
+        b: Expr,
+        c: Expr,
+        d: Expr,
+        carry_in: Optional[Expr] = None,
+    ) -> Tuple[Expr, Expr, Expr]:
+        if carry_in is None:
+            carry_in = self._zero
+        parity_abc = a ^ b ^ c
+        carry_chain_out = (a & b) | (a & c) | (b & c)
+        sum_bit = parity_abc ^ d ^ carry_in
+        carry_bit = (parity_abc & d) | (parity_abc & carry_in) | (d & carry_in)
+        return sum_bit, carry_bit, carry_chain_out
