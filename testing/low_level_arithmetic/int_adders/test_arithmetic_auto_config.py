@@ -227,20 +227,29 @@ def test_objectives_produce_different_configs():
 
 
 def test_swap_selection():
-    """For asymmetric commutative ops, auto-config should pick the best orientation."""
+    """Commutative ops: calling with (a,b) vs (b,a) must pick equal-cost
+    hardware, and for at least one asymmetric shape the swap flag must flip."""
     from sprouthdl.arithmetic.eval.auto_config import lookup_best_config
+    from itertools import product
 
-    # Check that both orientations are considered for 4x8 multiplier
-    cfg_4x8, swap_4x8 = lookup_best_config("*", 4, 8, signed=False, objective="area")
-    cfg_8x4, swap_8x4 = lookup_best_config("*", 8, 4, signed=False, objective="area")
-
-    # Both lookups should find the same best config (since both orientations are checked)
-    assert cfg_4x8["transistor_count"] == cfg_8x4["transistor_count"]
-    # But one of them should have swap=True
-    assert swap_4x8 != swap_8x4
-
-    print(f"\n4x8 mul area: tc={cfg_4x8['transistor_count']}, swap={swap_4x8}")
-    print(f"8x4 mul area: tc={cfg_8x4['transistor_count']}, swap={swap_8x4}")
+    widths = [1, 2, 4, 8, 16]
+    flips = 0
+    for op in ("*", "+"):
+        for signed in (False, True):
+            for objective in ("area", "delay", "adp"):
+                for a_w, b_w in product(widths, repeat=2):
+                    if a_w == b_w:
+                        continue
+                    cfg_ab, swap_ab = lookup_best_config(op, a_w, b_w, signed, objective)
+                    cfg_ba, swap_ba = lookup_best_config(op, b_w, a_w, signed, objective)
+                    if cfg_ab is None or cfg_ba is None:
+                        continue
+                    assert cfg_ab["transistor_count"] == cfg_ba["transistor_count"]
+                    assert cfg_ab["aig_depth"] == cfg_ba["aig_depth"]
+                    if swap_ab != swap_ba:
+                        flips += 1
+    assert flips > 0, "no observable swap flip across the full sweep"
+    print(f"\nobserved {flips} swap flips across asymmetric commutative shapes")
 
 
 # ---------------------------------------------------------------------------
