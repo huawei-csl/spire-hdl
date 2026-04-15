@@ -969,7 +969,6 @@ def arithmetic_optimized(
     _fn: Callable[..., Any] | None = None,
     *,
     objective: Literal["area", "delay", "adp"] = "area",
-    full_output_bit: bool = True,
 ) -> Callable[..., Any]:
     """Decorator that rewrites a function's ``+``, ``-``, ``*`` operators
     with optimized StageBased hardware via ``replace_arithmetic_ops``.
@@ -1001,10 +1000,6 @@ def arithmetic_optimized(
         - ``"area"``:  minimize Yosys transistor count
         - ``"delay"``: minimize AIG depth (proxy for critical-path delay)
         - ``"adp"``:   minimize area-delay product
-    full_output_bit : bool
-        Keep the natural full-width output of each ``+``/``-``/``*`` (e.g.
-        a ``w``-bit + ``w``-bit add produces a ``(w+1)``-bit sum).  Set to
-        ``False`` to truncate to the operand width.
     """
     from sprouthdl.arithmetic.int_arithmetic_config import (
         ArithmeticAutoConfig,
@@ -1047,10 +1042,7 @@ def arithmetic_optimized(
             # Rewrite +, -, * (and ==, !=) with optimized StageBased components.
             replace_arithmetic_ops(
                 comp,
-                ArithmeticAutoConfig(
-                    objective=objective,
-                    full_output_bit=full_output_bit,
-                ),
+                ArithmeticAutoConfig(objective=objective),
             )
 
             # Splice into the caller's graph: turn comp.io ports into internal

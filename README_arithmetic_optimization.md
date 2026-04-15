@@ -135,7 +135,6 @@ MAC / inner-product fusion, bit-width-aware configuration lookup, and `==`/`!=` 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `objective` | `"area"` | `"area"` / `"delay"` / `"adp"` — see the table at the top of this file |
-| `full_output_bit` | `True` | Keep the natural full-width output of each `+`/`-`/`*`. Disable to truncate to operand width. |
 
 ## Replacement-based optimization details
 
