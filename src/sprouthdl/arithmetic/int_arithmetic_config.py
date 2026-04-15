@@ -45,8 +45,7 @@ def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig | ArithmeticAu
 
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, swap = lookup_best_arithmetic_config(
-            "*", a.typ.width, b.typ.width, signed,
-            mult_cfg.objective, mult_cfg.full_output_bit,
+            "*", a.typ.width, b.typ.width, signed, mult_cfg.objective,
         )
         if swap:
             a, b = b, a
@@ -60,7 +59,17 @@ def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig | ArithmeticAu
             optim_type=arith_cfg.optim_type,
         )
     if mult_cfg.use_operator:
-        return a * b
+        signed_a = (mult_cfg.encodings is not None and is_signed(mult_cfg.encodings.a)) or getattr(a.typ, "signed", False)
+        signed_b = (mult_cfg.encodings is not None and is_signed(mult_cfg.encodings.b)) or getattr(b.typ, "signed", False)
+        if signed_a:
+            a = cast(a, SInt(a.typ.width))
+        if signed_b:
+            b = cast(b, SInt(b.typ.width))
+        result = a * b
+        # Structural multipliers always return UInt; match that interface.
+        if result.typ.signed and mult_cfg.encodings is not None:
+            result = cast(result, UInt(result.typ.width))
+        return result
 
     assert mult_cfg.multiplier_opt is not None, "multiplier_opt must be provided for explicit multipliers"
     assert mult_cfg.encodings is not None, "encodings must be provided for explicit multipliers"
@@ -86,8 +95,7 @@ def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig | ArithmeticAutoConfig)
 
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, swap = lookup_best_arithmetic_config(
-            "+", a.typ.width, b.typ.width, signed,
-            adder_cfg.objective, adder_cfg.full_output_bit,
+            "+", a.typ.width, b.typ.width, signed, adder_cfg.objective,
         )
         if swap:
             a, b = b, a
@@ -96,10 +104,17 @@ def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig | ArithmeticAutoConfig)
             encoding=encoding,
             optim_type=arith_cfg.optim_type,
             fsa_opt=arith_cfg.fsa_opt,
-            full_output_bit=arith_cfg.full_output_bit,
         )
     if adder_cfg.use_operator:
-        return a + b
+        if is_signed(adder_cfg.encoding) or getattr(a.typ, "signed", False):
+            a = cast(a, SInt(a.typ.width))
+        if is_signed(adder_cfg.encoding) or getattr(b.typ, "signed", False):
+            b = cast(b, SInt(b.typ.width))
+        result = a + b
+        # Structural adders always return UInt; match that interface.
+        if result.typ.signed and adder_cfg.encoding is not None:
+            result = cast(result, UInt(result.typ.width))
+        return result
 
     assert adder_cfg.fsa_opt is not None, "fsa_opt must be provided for explicit adders"
     signed = is_signed(adder_cfg.encoding)
@@ -134,15 +149,13 @@ def build_subtractor(a: Expr, b: Expr, sub_cfg: SubtractorConfig | ArithmeticAut
 
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, _ = lookup_best_arithmetic_config(
-            "-", a.typ.width, b.typ.width, signed,
-            sub_cfg.objective, sub_cfg.full_output_bit,
+            "-", a.typ.width, b.typ.width, signed, sub_cfg.objective,
         )
         encoding = Encoding.twos_complement if signed else Encoding.unsigned
         sub_cfg = SubtractorConfig(
             encoding=encoding,
             optim_type=arith_cfg.optim_type,
             fsa_opt=arith_cfg.fsa_opt,
-            full_output_bit=arith_cfg.full_output_bit,
         )
     if sub_cfg.use_operator:
         return a - b
@@ -182,12 +195,18 @@ def adder_tree(values: Sequence[Expr], adder_cfg: AdderConfig | ArithmeticAutoCo
 
 @dataclass
 class ArithmeticConfig:
-    """Unified configuration for replacing arithmetic operators with StageBased components."""
+    """Unified configuration for replacing arithmetic operators with StageBased components.
+
+    The output width of the replacement is inferred from each Op2 node's
+    declared type during :func:`replace_arithmetic_ops`, so there is no
+    ``full_output_bit`` knob on this struct — use :class:`AdderConfig` /
+    :class:`SubtractorConfig` directly if you need to construct a
+    truncated adder via :func:`build_adder` / :func:`build_subtractor`.
+    """
 
     encoding: Encoding = Encoding.unsigned
     optim_type: Literal["area", "speed"] = "area"
     fsa_opt: FSAOption = FSAOption.PREFIX_BRENT_KUNG
-    full_output_bit: bool = True
     # multiplier-specific
     multiplier_opt: MultiplierOption = MultiplierOption.STAGE_BASED_MULTIPLIER
     ppg_opt: PPGOption = PPGOption.AND
@@ -207,7 +226,6 @@ class ArithmeticAutoConfig:
     """
 
     objective: Literal["area", "delay", "adp"] = "area"
-    full_output_bit: bool = True
 
 
 def lookup_best_arithmetic_config(
@@ -216,14 +234,13 @@ def lookup_best_arithmetic_config(
     b_w: int,
     signed: bool,
     objective: Literal["area", "delay", "adp"] = "area",
-    full_output_bit: bool = True,
 ):
     """Return ``(ArithmeticConfig, swap)`` for the empirically best configuration."""
     entry, swap = lookup_best_config(op, a_w, b_w, signed, objective)
     encoding = Encoding.twos_complement if signed else Encoding.unsigned
 
     if entry is None:
-        return ArithmeticConfig(encoding=encoding, full_output_bit=full_output_bit), False
+        return ArithmeticConfig(encoding=encoding), False
 
     optim_type = entry.get("optim_type", "area") or "area"
 
@@ -232,7 +249,6 @@ def lookup_best_arithmetic_config(
             encoding=encoding,
             optim_type=optim_type,
             fsa_opt=FSAOption[entry["fsa_opt"]],
-            full_output_bit=full_output_bit,
             multiplier_opt=MultiplierOption.STAGE_BASED_MULTIPLIER,
             ppg_opt=PPGOption[entry["ppg_opt"]],
             ppa_opt=PPAOption[entry["ppa_opt"]],
@@ -242,7 +258,6 @@ def lookup_best_arithmetic_config(
             encoding=encoding,
             optim_type=optim_type,
             fsa_opt=FSAOption[entry["fsa_opt"]],
-            full_output_bit=full_output_bit,
         )
     return cfg, swap
 
@@ -504,10 +519,8 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
 
         # Resolve per-node config when using auto mode
         if isinstance(config, ArithmeticAutoConfig):
-    
             node_cfg, swap = lookup_best_arithmetic_config(
-                node.op, a_w, b_w, signed_a or signed_b,
-                config.objective, config.full_output_bit,
+                node.op, a_w, b_w, signed_a or signed_b, config.objective,
             )
             if swap:
                 a_expr, b_expr = b_expr, a_expr
@@ -516,13 +529,19 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
         else:
             node_cfg = config
 
+        # Structurally infer whether the replacement needs the extra top
+        # (carry-out) bit: sprouthdl's Op2<+/-> always produces
+        # ``max(a_w, b_w) + 1``, but hand-constructed DAGs may use the
+        # truncated width. Reading it from the node type is always right.
+        effective_full_bit = node.typ.width > max(a_w, b_w)
+
         if node.op == "+":
             repl = StageBasedPrefixAdder(
                 a_w=a_w, b_w=b_w,
                 signed_a=signed_a, signed_b=signed_b,
                 optim_type=node_cfg.optim_type,
                 fsa_cls=node_cfg.fsa_opt.value,
-                full_output_bit=node_cfg.full_output_bit,
+                full_output_bit=effective_full_bit,
             ).make_internal()
             repl.io.a <<= a_expr
             repl.io.b <<= b_expr
@@ -534,7 +553,7 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
                 signed_a=signed_a, signed_b=signed_b,
                 optim_type=node_cfg.optim_type,
                 fsa_cls=node_cfg.fsa_opt.value,
-                full_output_bit=node_cfg.full_output_bit,
+                full_output_bit=effective_full_bit,
             ).make_internal()
             repl.io.a <<= a_expr
             repl.io.b <<= b_expr
