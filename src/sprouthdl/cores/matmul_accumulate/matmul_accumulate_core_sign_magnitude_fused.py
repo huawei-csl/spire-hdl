@@ -11,7 +11,7 @@ from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Enco
 from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import StageBasedMultiplierIO, TwoInputAritConfig
 
 from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core_sign_magnitude import SignMagnitudeEncoderConfig
-from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, cast, fit_width, s_ext
+from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt
 from sprouthdl.sprouthdl_module import Component, Module
 from sprouthdl.arithmetic.int_arithmetic_config import (
     AdderConfig,

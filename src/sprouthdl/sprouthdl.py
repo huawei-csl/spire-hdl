@@ -330,10 +330,19 @@ class Signal(Expr):
         return f"Signal(name={self.name!r}, kind={self.kind}, typ=<{self.typ.width}{'s' if self.typ.signed else 'u'}>)"
 
 
-# helper which generates signal for casting, doesnt use sign-extend currently
 def cast(expr: ExprLike, to_type: HDLType) -> Signal:
+    """Cast an expression to a specific type including sign extension (if source type is signed) or truncation as needed."""
     s = _create_new_shared_wire(to_type)
     s <<= fit_width(as_expr(expr), to_type)
+    return s
+
+def reinterpret(expr: ExprLike, to_type: HDLType) -> Signal:
+    """Reinterpret an expression as a different type without changing bits. Widths must match."""
+    e = as_expr(expr)
+    if e.typ.width != to_type.width:
+        raise ValueError("reinterpret requires same width")
+    s = _create_new_shared_wire(to_type)
+    s._driver = e
     return s
 
 # explicit register
@@ -512,6 +521,7 @@ def mul_result_type(a: Expr, b: Expr) -> HDLType:
 
 
 def fit_width(e: Expr, t: HDLType) -> Expr:
+    """Fits wdith including sign-extension or truncation as needed."""
     if e.typ.width == t.width:
         return e
     if e.typ.width > t.width:

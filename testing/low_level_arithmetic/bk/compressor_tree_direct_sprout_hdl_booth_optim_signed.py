@@ -6,7 +6,7 @@ from typing import Dict, Literal, Optional, Tuple, List
 import numpy as np
 from sprouthdl.helpers import get_yosys_transistor_count, run_vectors
 from sprouthdl.sprouthdl_module import gen_spec
-from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, SInt, Signal, UInt, cast, fit_width, mux, mux_if
+from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, SInt, Signal, UInt, cast
 from sprouthdl.sprouthdl_module import Module
 
 # abstract Component Class
