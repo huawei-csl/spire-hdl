@@ -5,7 +5,7 @@ from typing import Callable, ClassVar, Dict, List, Optional, Set, Tuple
 from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import FinalStageAdderBase
 from sprouthdl.arithmetic.prefix_adders.prefix_adder_topologies import P_brent_kung, P_han_carlson, P_kogge_stone, P_ladner_fischer, P_ripple_carry, P_sklansky, P_sparse_kogge_stone_2, P_sparse_kogge_stone_4, Pair, analyze_prefix_matrix, legalize_P
 from sprouthdl.arithmetic.prefix_adders.prefix_adder_specials import ZCG_n, multi_scan_n
-from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, UInt, cast
+from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, UInt, fit_type
 
 
 def _exists(nodes: Set[Pair], i: int, j: int) -> bool:
@@ -45,11 +45,11 @@ class PlusOperatorAdderFinalStage(FinalStageAdderBase):
                 row_a.append(bits[0])
                 row_b.append(bits[1])
 
-        a_unit = cast(Concat(row_a), UInt(working_width))
-        b_unit = cast(Concat(row_b), UInt(working_width))
+        a_unit = fit_type(Concat(row_a), UInt(working_width))
+        b_unit = fit_type(Concat(row_b), UInt(working_width))
         sum_unit = a_unit + b_unit
         if carry_in is not None:
-            cin = cast(Concat([carry_in]), UInt(working_width))
+            cin = fit_type(Concat([carry_in]), UInt(working_width))
             sum_unit = sum_unit + cin
         return [sum_unit[i] for i in range(sum_unit.typ.width)]
 

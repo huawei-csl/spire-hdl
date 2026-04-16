@@ -478,28 +478,28 @@ def _decode_operand_expr(x: Expr) -> Dict[str, Expr]:
     exp_sign_d4 = exp_bits_d4[3]
     mag_tail_d4 = exp_bits_d4[0:3]
     mag_with_hidden_d4 = cat(mag_tail_d4, _const_uint(1, 1))
-    mag_d4 = cast(fit_width(mag_with_hidden_d4, UInt(EXP_INT_WIDTH)), SInt(EXP_INT_WIDTH))
+    mag_d4 = fit_type(fit_width(mag_with_hidden_d4, UInt(EXP_INT_WIDTH)), SInt(EXP_INT_WIDTH))
     exp_d4 = mux(exp_sign_d4, _const_sint(0) - mag_d4, mag_d4)
 
     exp_bits_d3 = x[2:5]
     exp_sign_d3 = exp_bits_d3[2]
     mag_tail_d3 = exp_bits_d3[0:2]
     mag_with_hidden_d3 = cat(mag_tail_d3, _const_uint(1, 1))
-    mag_d3 = cast(fit_width(mag_with_hidden_d3, UInt(EXP_INT_WIDTH)), SInt(EXP_INT_WIDTH))
+    mag_d3 = fit_type(fit_width(mag_with_hidden_d3, UInt(EXP_INT_WIDTH)), SInt(EXP_INT_WIDTH))
     exp_d3 = mux(exp_sign_d3, _const_sint(0) - mag_d3, mag_d3)
 
     exp_bits_d2 = x[3:5]
     exp_sign_d2 = exp_bits_d2[1]
     mag_tail_d2 = exp_bits_d2[0:1]
     mag_with_hidden_d2 = cat(mag_tail_d2, _const_uint(1, 1))
-    mag_d2 = cast(fit_width(mag_with_hidden_d2, UInt(EXP_INT_WIDTH)), SInt(EXP_INT_WIDTH))
+    mag_d2 = fit_type(fit_width(mag_with_hidden_d2, UInt(EXP_INT_WIDTH)), SInt(EXP_INT_WIDTH))
     exp_d2 = mux(exp_sign_d2, _const_sint(0) - mag_d2, mag_d2)
 
     exp_sign_d1 = x[3]
     exp_d1 = mux(exp_sign_d1, _const_sint(-1), _const_sint(1))
 
     mant_m = mant3
-    exp_dml = cast(fit_width(mant_m, UInt(EXP_INT_WIDTH)), SInt(EXP_INT_WIDTH))
+    exp_dml = fit_type(fit_width(mant_m, UInt(EXP_INT_WIDTH)), SInt(EXP_INT_WIDTH))
     exp_dml = exp_dml - _const_sint(23)
 
     exp = mux(is_d4, exp_d4, exp)

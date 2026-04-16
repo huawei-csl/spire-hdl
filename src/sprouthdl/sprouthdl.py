@@ -330,7 +330,7 @@ class Signal(Expr):
         return f"Signal(name={self.name!r}, kind={self.kind}, typ=<{self.typ.width}{'s' if self.typ.signed else 'u'}>)"
 
 
-def cast(expr: ExprLike, to_type: HDLType) -> Signal:
+def fit_type(expr: ExprLike, to_type: HDLType) -> Signal:
     """Cast an expression to a specific type including sign extension (if source type is signed) or truncation as needed."""
     s = _create_new_shared_wire(to_type)
     s <<= fit_width(as_expr(expr), to_type)
@@ -532,12 +532,12 @@ def fit_width(e: Expr, t: HDLType) -> Expr:
 def s_ext(expr: Expr, width: int) -> Expr:
     if expr.typ.width >= width:
         raise ValueError("s_ext: target width must be greater than expr width")
-    return fit_width(cast(expr, SInt(expr.typ.width)), SInt(width))
+    return fit_width(fit_type(expr, SInt(expr.typ.width)), SInt(width))
 
 def z_ext(expr: Expr, width: int) -> Expr:
     if expr.typ.width >= width:
         raise ValueError("z_ext: target width must be greater than expr width")
-    return fit_width(cast(expr, UInt(expr.typ.width)), UInt(width))
+    return fit_width(fit_type(expr, UInt(expr.typ.width)), UInt(width))
 
 # -----------------------------
 

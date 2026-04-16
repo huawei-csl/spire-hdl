@@ -3,7 +3,7 @@ from typing import DefaultDict, List
 
 from sprouthdl.helpers import get_yosys_transistor_count, run_vectors
 from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, MultiplierTestVectorsInt, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO
-from sprouthdl.sprouthdl import Bool, Const, Expr, SInt, cast
+from sprouthdl.sprouthdl import Bool, Const, Expr, SInt, fit_type
 from sprouthdl.sprouthdl_module import Module
 
 class BoothOptimizedPartialProductGenerator(PartialProductGeneratorBase):
@@ -39,7 +39,7 @@ class BoothOptimizedPartialProductGenerator(PartialProductGeneratorBase):
         mag2_neg = mag2_inv
 
         if use_precompute_v2:
-            mag1_invs = -cast(a, SInt(wa + 1))
+            mag1_invs = -fit_type(a, SInt(wa + 1))
             mag2_invs = mag1_invs << 1
             mag1_neg = [mag1_invs[i] for i in range(wa + 1)]
             mag2_neg = [mag2_invs[i] for i in range(wa + 1)]

@@ -13,7 +13,7 @@ from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib
 from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
 from sprouthdl.arithmetic.eval.auto_config import lookup_best_config
 from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder, StageBasedSubtractor
-from sprouthdl.sprouthdl import Const, Expr, Op2, SInt, Signal, UInt, cast
+from sprouthdl.sprouthdl import Const, Expr, Op2, SInt, Signal, UInt, fit_type
 
 
 @dataclass
@@ -62,13 +62,13 @@ def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig | ArithmeticAu
         signed_a = (mult_cfg.encodings is not None and is_signed(mult_cfg.encodings.a)) or getattr(a.typ, "signed", False)
         signed_b = (mult_cfg.encodings is not None and is_signed(mult_cfg.encodings.b)) or getattr(b.typ, "signed", False)
         if signed_a:
-            a = cast(a, SInt(a.typ.width))
+            a = fit_type(a, SInt(a.typ.width))
         if signed_b:
-            b = cast(b, SInt(b.typ.width))
+            b = fit_type(b, SInt(b.typ.width))
         result = a * b
         # Structural multipliers always return UInt; match that interface.
         if result.typ.signed and mult_cfg.encodings is not None:
-            result = cast(result, UInt(result.typ.width))
+            result = fit_type(result, UInt(result.typ.width))
         return result
 
     assert mult_cfg.multiplier_opt is not None, "multiplier_opt must be provided for explicit multipliers"
@@ -107,13 +107,13 @@ def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig | ArithmeticAutoConfig)
         )
     if adder_cfg.use_operator:
         if is_signed(adder_cfg.encoding) or getattr(a.typ, "signed", False):
-            a = cast(a, SInt(a.typ.width))
+            a = fit_type(a, SInt(a.typ.width))
         if is_signed(adder_cfg.encoding) or getattr(b.typ, "signed", False):
-            b = cast(b, SInt(b.typ.width))
+            b = fit_type(b, SInt(b.typ.width))
         result = a + b
         # Structural adders always return UInt; match that interface.
         if result.typ.signed and adder_cfg.encoding is not None:
-            result = cast(result, UInt(result.typ.width))
+            result = fit_type(result, UInt(result.typ.width))
         return result
 
     assert adder_cfg.fsa_opt is not None, "fsa_opt must be provided for explicit adders"
@@ -421,9 +421,9 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
         if node.op in ("==", "!="):
             max_w = max(a_w, b_w)
             if a_w < max_w:
-                a_expr = cast(a_expr, UInt(max_w))
+                a_expr = fit_type(a_expr, UInt(max_w))
             if b_w < max_w:
-                b_expr = cast(b_expr, UInt(max_w))
+                b_expr = fit_type(b_expr, UInt(max_w))
             xor_bits = [a_expr[i] ^ b_expr[i] for i in range(max_w)]
             level = xor_bits
             while len(level) > 1:
@@ -437,7 +437,7 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
             result = ~level[0] if node.op == "==" else level[0]
 
             if result.typ.width != node.typ.width or result.typ.signed != node.typ.signed:
-                result = cast(result, node.typ)
+                result = fit_type(result, node.typ)
             replacements[id(node)] = result
             continue
 
@@ -484,16 +484,16 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
                 vec_a, vec_b = [], []
                 for ma, mb in mul_pairs:
                     if ma.typ.width < max_mul_w:
-                        ma = cast(ma, SInt(max_mul_w) if any_signed else UInt(max_mul_w))
+                        ma = fit_type(ma, SInt(max_mul_w) if any_signed else UInt(max_mul_w))
                     if mb.typ.width < max_mul_w:
-                        mb = cast(mb, SInt(max_mul_w) if any_signed else UInt(max_mul_w))
+                        mb = fit_type(mb, SInt(max_mul_w) if any_signed else UInt(max_mul_w))
                     vec_a.append(ma)
                     vec_b.append(mb)
 
                 result = fused_inner_product(vec_a, vec_b, c_resolved, fused_cfg, encoding)
 
                 if result.typ.width != node.typ.width or result.typ.signed != node.typ.signed:
-                    result = cast(result, node.typ)
+                    result = fit_type(result, node.typ)
                 replacements[id(node)] = result
                 # Mark all consumed nodes so they don't get replaced individually
                 for m in muls:
@@ -572,10 +572,10 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
             ):
                 max_w = max(eff_a_w, eff_b_w)
                 if eff_a_w < max_w:
-                    eff_a = cast(eff_a, SInt(max_w) if signed_a else UInt(max_w))
+                    eff_a = fit_type(eff_a, SInt(max_w) if signed_a else UInt(max_w))
                     eff_a_w = max_w
                 if eff_b_w < max_w:
-                    eff_b = cast(eff_b, SInt(max_w) if signed_b else UInt(max_w))
+                    eff_b = fit_type(eff_b, SInt(max_w) if signed_b else UInt(max_w))
                     eff_b_w = max_w
 
             repl = node_cfg.multiplier_opt.value(
@@ -593,7 +593,7 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
 
         # Match the original Op2 type (width/signedness)
         if result.typ.width != node.typ.width or result.typ.signed != node.typ.signed:
-            result = cast(result, node.typ)
+            result = fit_type(result, node.typ)
 
         replacements[id(node)] = result
 

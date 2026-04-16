@@ -15,7 +15,7 @@ from sprouthdl.arithmetic.int_multipliers.stages.ppg_booth_precomputed_b_stages 
     precompute_booth_b_decode,
 )
 from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core import MatmulAccumulateCore, MatmulAccumulateIO, MMAcDims, MMAcWidths
-from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, cast, fit_width, s_ext
+from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, fit_type, fit_width, s_ext
 from sprouthdl.sprouthdl_module import Component, Module
 
 
