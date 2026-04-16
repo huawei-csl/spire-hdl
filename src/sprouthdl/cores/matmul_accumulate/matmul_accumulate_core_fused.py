@@ -10,7 +10,7 @@ from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib
 from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
 from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import StageBasedMultiplierIO, TwoInputAritConfig
 from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core import MatmulAccumulateCore, MatmulAccumulateIO, MMAcDims, MMAcWidths
-from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, cast, fit_width, s_ext
+from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, fit_type, fit_width, s_ext
 from sprouthdl.sprouthdl_module import Component, Module
 
 

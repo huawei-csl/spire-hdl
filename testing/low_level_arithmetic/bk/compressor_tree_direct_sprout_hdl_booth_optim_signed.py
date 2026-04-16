@@ -6,7 +6,7 @@ from typing import Dict, Literal, Optional, Tuple, List
 import numpy as np
 from sprouthdl.helpers import get_yosys_transistor_count, run_vectors
 from sprouthdl.sprouthdl_module import gen_spec
-from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, SInt, Signal, UInt, cast, fit_width, mux, mux_if
+from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, SInt, Signal, UInt, fit_type
 from sprouthdl.sprouthdl_module import Module
 
 # abstract Component Class
@@ -96,7 +96,7 @@ class MultiplierCompressorTree(Component):
                 # a_signedv = Signal('a_signed', SInt(wa+1), kind='wire')
                 # a_signedv <<= a
                 # mag1_invs = -a_signedv
-                mag1_invs = -cast(a, SInt(wa+1))
+                mag1_invs = -fit_type(a, SInt(wa+1))
                 mag2_invs = mag1_invs << 1
 
                 mag1_invs_v = [mag1_invs[i] for i in range(wa+1)]

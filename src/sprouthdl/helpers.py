@@ -357,22 +357,26 @@ def extract_yosys_metrics_from_verilog_file(filename: str, deepsyn=False) -> dic
     return extract_yosys_metrics_from_verilog(verilog_lines, deepsyn=deepsyn)
 
 
-def get_yosys_metrics(m: Module, n_iter_optimizations: Optional[int] = None, deepsyn=False, suppress_stderr: bool = True) -> int:
-    with _suppress_output(stderr=suppress_stderr):
-        print("Exporting AAG...")
-        aag_lines = AigerExporter(m).get_aag()
-        print("Exporting AAG done")
+def get_yosys_metrics(m: Module, n_iter_optimizations: Optional[int] = None, deepsyn=False, suppress_stderr: bool = True, via_aig=True) -> int:
+    if via_aig:
+        with _suppress_output(stderr=suppress_stderr):
+            print("Exporting AAG...")
+            aag_lines = AigerExporter(m).get_aag()
+            print("Exporting AAG done")
 
-        if n_iter_optimizations is None or n_iter_optimizations > 0:
-            aag_lines = optimize_aag(aag_lines, n_iter_optimizations=n_iter_optimizations)
+            if n_iter_optimizations is None or n_iter_optimizations > 0:
+                aag_lines = optimize_aag(aag_lines, n_iter_optimizations=n_iter_optimizations)
 
-        print("Optimizing AAG done")
-    stat = extract_yosys_metrics(aag_lines, deepsyn=deepsyn)
+            print("Optimizing AAG done")
+        stat = extract_yosys_metrics(aag_lines, deepsyn=deepsyn)
+    else:
+        with _suppress_output(stderr=suppress_stderr):
+            stat = extract_yosys_metrics_from_verilog(m.to_verilog_lines(), deepsyn=deepsyn)
     return stat
 
 def get_transistor_count_from_stats(stats: dict) -> int:
     return stats["estimated_num_transistors"]
 
-def get_yosys_transistor_count(m: Module, n_iter_optimizations: Optional[int] = None, deepsyn=False) -> int:
-    stats = get_yosys_metrics(m, n_iter_optimizations=n_iter_optimizations, deepsyn=deepsyn)
+def get_yosys_transistor_count(m: Module, n_iter_optimizations: Optional[int] = None, deepsyn=False, via_aig=True) -> int:
+    stats = get_yosys_metrics(m, n_iter_optimizations=n_iter_optimizations, deepsyn=deepsyn, via_aig=via_aig)
     return get_transistor_count_from_stats(stats)

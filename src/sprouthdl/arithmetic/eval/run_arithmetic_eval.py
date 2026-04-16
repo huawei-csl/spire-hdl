@@ -37,14 +37,37 @@ from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core_fused import (
     MultiplierConfig as FusedMultiplierConfig,
     fused_inner_product,
 )
-from sprouthdl.helpers import get_aig_stats, get_yosys_metrics
+from sprouthdl.helpers import (
+    extract_yosys_metrics_from_verilog,
+    get_aig_stats,
+)
 from sprouthdl.sprouthdl import reset_shared_cache
 
 _OUT_DIR = Path(__file__).parent
 
-_FSA_SKIP = {FSAOption.NONE, FSAOption.PLUS_OPERATOR}
-_PPG_SKIP = {PPGOption.NONE}
-_PPA_SKIP = {PPAOption.NONE}
+# Always-skipped final-stage adders (placeholders and the operator adapter).
+# MULTI_SCAN / ZCG have hard-coded prefix graphs only for n in {8,16,24,32} /
+# {24,32}; for unsupported widths they now fall back to the next lower
+# template and legalize_P extends it, so individual sub-minimum sizes fail
+# silently through _run_parallel's error path rather than via this list.
+_FSA_SKIP = {
+    FSAOption.NONE,
+    FSAOption.PLUS_OPERATOR,
+}
+# Skip Booth-unoptimised: was not competitive in the multiplier pareto front.
+_PPG_SKIP = {
+    PPGOption.NONE,
+    PPGOption.BOOTH_UNOPTIMISED,
+}
+# Skip the less performant options
+_PPA_SKIP = {
+    PPAOption.NONE,
+    PPAOption.FIVE_TWO_COMPRESSOR,
+    PPAOption.FIVE_TWO_COMPRESSOR_PARALLEL,
+    PPAOption.FOUR_TWO_COMPRESSOR_PARALLEL,
+    PPAOption.EAGER_WALLACE_TREE,
+    PPAOption.BDT_WALLACE_TREE,
+}
 
 _CSV_COLUMNS = [
     "op", "a_w", "b_w", "signed",
@@ -80,6 +103,18 @@ def _pareto_filter(rows: list[dict]) -> list[dict]:
     return result
 
 
+def _yosys_metrics(module) -> dict:
+    """Yosys transistor count via the read_verilog path on `module.to_verilog()`.
+
+    Uses `extract_yosys_metrics_from_verilog` rather than `get_yosys_metrics`
+    because the former matches what downstream consumers actually see when
+    they take `to_verilog()` and run it through their own yosys flow. The
+    `get_yosys_metrics(module)` alternative goes Module -> AIG -> read_aiger + aigverse 
+    rewrite, which can pick a different post-techmap cell mix.
+    """
+    return extract_yosys_metrics_from_verilog(module.to_verilog().splitlines())
+
+
 # ---------------------------------------------------------------------------
 # Single-config evaluators (run in worker processes)
 # ---------------------------------------------------------------------------
@@ -91,7 +126,7 @@ def eval_adder(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool) -> dict:
         optim_type="area", fsa_cls=fsa_opt.value, full_output_bit=True,
     )
     module = adder.to_module(f"adder_{fsa_opt.name}_{a_w}x{b_w}")
-    ym = get_yosys_metrics(module)
+    ym = _yosys_metrics(module)
     aig = get_aig_stats(module)
     return {
         "op": "add", "a_w": a_w, "b_w": b_w, "signed": "signed" if signed else "unsigned",
@@ -108,7 +143,7 @@ def eval_subtractor(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool) -> dic
         optim_type="area", fsa_cls=fsa_opt.value, full_output_bit=True,
     )
     module = sub.to_module(f"sub_{fsa_opt.name}_{a_w}x{b_w}")
-    ym = get_yosys_metrics(module)
+    ym = _yosys_metrics(module)
     aig = get_aig_stats(module)
     return {
         "op": "sub", "a_w": a_w, "b_w": b_w, "signed": "signed" if signed else "unsigned",
@@ -131,7 +166,7 @@ def eval_multiplier(
     module = multiplier.to_module(
         f"mul_{ppg_opt.name}_{ppa_opt.name}_{fsa_opt.name}_{a_w}x{b_w}_{encoding.name}_{optim_type}"
     )
-    ym = get_yosys_metrics(module)
+    ym = _yosys_metrics(module)
     aig = get_aig_stats(module)
     return {
         "op": "mul", "a_w": a_w, "b_w": b_w,
@@ -216,7 +251,7 @@ def eval_mac(
     module = fused.to_module(
         f"mac_{ppg_opt.name}_{ppa_opt.name}_{fsa_opt.name}_{n_bits}b_c{c_bits}_{encoding.name}_{optim_type}"
     )
-    ym = get_yosys_metrics(module)
+    ym = _yosys_metrics(module)
     aig = get_aig_stats(module)
     return {
         "op": "mac", "a_w": n_bits, "b_w": n_bits, "signed": "signed" if is_signed(encoding) else "unsigned",
@@ -279,7 +314,7 @@ def eval_inner_product(
     y = m.output(io_type(result.typ.width), "y")
     y <<= result
 
-    ym = get_yosys_metrics(m)
+    ym = _yosys_metrics(m)
     aig = get_aig_stats(m)
     return {
         "op": f"dot{n_terms}", "a_w": n_bits, "b_w": n_bits,
@@ -384,7 +419,7 @@ def main(
     pareto: bool = True,
 ) -> None:
     if bitwidths is None:
-        bitwidths = [1, 2, 4, 8, 16]
+        bitwidths = [1, 2, 4, 8, 16, 32]
     if output_dir is None:
         output_dir = _OUT_DIR
 
@@ -424,8 +459,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run arithmetic evaluation sweep")
     parser.add_argument("--format", choices=["csv", "json"], default="csv")
     parser.add_argument("--no-pareto", action="store_true", help="Store all rows, not just Pareto front")
-    parser.add_argument("--bitwidths", nargs="+", type=int, default=[1, 2, 4, 8, 16])
-    parser.add_argument("--workers", type=int, default=16)
+    parser.add_argument("--bitwidths", nargs="+", type=int, default=[1, 2, 4, 8, 16, 32])
+    parser.add_argument("--workers", type=int, default=50)
     args = parser.parse_args()
     main(
         bitwidths=args.bitwidths,

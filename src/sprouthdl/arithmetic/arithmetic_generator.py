@@ -62,7 +62,7 @@ from sprouthdl.cores.matmul_accumulate.matmul_test_vectors import (
 )
 from sprouthdl.arithmetic.int_multipliers.multipliers.mutipliers_ext import StageBasedMultiplierBase
 from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
-from sprouthdl.helpers import get_yosys_metrics, run_vectors_on_simulator
+from sprouthdl.helpers import get_aig_stats, get_yosys_metrics, run_vectors_on_simulator
 from sprouthdl.sprouthdl_verilog_testbench import TestbenchGenSimulator
 from sprouthdl.sprouthdl_aiger import AigerExporter
 from sprouthdl.sprouthdl_module import Module
@@ -209,6 +209,10 @@ class GenerationActions:
     yosys_stats: bool = False
     yosys_deepsyn: bool = False
     yosys_opt_iterations: int | None = None
+    yosys_via_aig: bool = False
+    aig_stats: bool = False
+    aig_opt_iterations: int | None = None
+    aig_simple: bool = False
 
 
 @dataclass
@@ -224,12 +228,25 @@ class GenerationResult:
     testbench_out: Path | None = None
     testbench_data_out: Path | None = None
     yosys_stats: dict[str, Any] | None = None
+    aig_stats: dict[str, Any] | None = None
 
     @property
     def transistor_count(self) -> int | None:
         if self.yosys_stats is None:
             return None
         return int(self.yosys_stats["estimated_num_transistors"])
+
+    @property
+    def aig_num_gates(self) -> int | None:
+        if self.aig_stats is None:
+            return None
+        return int(self.aig_stats["num_gates"])
+
+    @property
+    def aig_depth(self) -> int | None:
+        if self.aig_stats is None:
+            return None
+        return int(self.aig_stats["depth"])
 
 
 # Helpers: Internal utilities and shared logic #######################################################################
@@ -298,13 +315,14 @@ def _apply_actions(
     *,
     actions: GenerationActions,
     with_clock: bool,
-) -> tuple[int | None, Path | None, Path | None, Path | None, Path | None, dict[str, Any] | None]:
+) -> tuple[int | None, Path | None, Path | None, Path | None, Path | None, dict[str, Any] | None, dict[str, Any] | None]:
     sim_failures = None
     verilog_out = None
     aag_out = None
     testbench_out = None
     testbench_data_out = None
     yosys_stats = None
+    aig_stats = None
 
     if actions.simulate or actions.testbench_out is not None:
         if vectors is None:
@@ -345,9 +363,17 @@ def _apply_actions(
             module,
             n_iter_optimizations=actions.yosys_opt_iterations,
             deepsyn=actions.yosys_deepsyn,
+            via_aig=actions.yosys_via_aig,
         )
 
-    return sim_failures, verilog_out, aag_out, testbench_out, testbench_data_out, yosys_stats
+    if actions.aig_stats:
+        aig_stats = get_aig_stats(
+            module,
+            n_iter_optimizations=actions.aig_opt_iterations,
+            simple=actions.aig_simple,
+        )
+
+    return sim_failures, verilog_out, aag_out, testbench_out, testbench_data_out, yosys_stats, aig_stats
 
 
 def _finalize(
@@ -359,7 +385,7 @@ def _finalize(
     input_encoding: Encoding | None = None,
     output_encoding: Encoding | None = None,
 ) -> GenerationResult:
-    sim_failures, verilog_out, aag_out, testbench_out, testbench_data_out, yosys_stats = _apply_actions(
+    sim_failures, verilog_out, aag_out, testbench_out, testbench_data_out, yosys_stats, aig_stats = _apply_actions(
         module, vectors, actions=actions, with_clock=with_clock,
     )
     return GenerationResult(
@@ -374,6 +400,7 @@ def _finalize(
         testbench_out=testbench_out,
         testbench_data_out=testbench_data_out,
         yosys_stats=yosys_stats,
+        aig_stats=aig_stats,
     )
 
 
@@ -799,6 +826,23 @@ def _add_common_action_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="AIG optimization iterations before stats (default uses internal project default)",
     )
+    parser.add_argument(
+        "--yosys-via-aig",
+        action="store_true",
+        help="Collect Yosys stats via an intermediate AIG export (default: measure on the Verilog directly)",
+    )
+    parser.add_argument("--aig-stats", action="store_true", help="Collect AIG stats (num gates, depth, size, ...)")
+    parser.add_argument(
+        "--aig-opt-iterations",
+        type=int,
+        default=None,
+        help="AIG optimization iterations before stats (default uses internal project default)",
+    )
+    parser.add_argument(
+        "--aig-simple",
+        action="store_true",
+        help="Use the simple AIG optimization pass for stats (default: elaborate pass)",
+    )
     parser.add_argument("--json-out", type=str, default=None, help="Optional path to save result JSON")
 
 
@@ -971,6 +1015,10 @@ def _actions_from_args(args: argparse.Namespace) -> GenerationActions:
         yosys_stats=args.yosys_stats,
         yosys_deepsyn=args.yosys_deepsyn,
         yosys_opt_iterations=args.yosys_opt_iterations,
+        yosys_via_aig=args.yosys_via_aig,
+        aig_stats=args.aig_stats,
+        aig_opt_iterations=args.aig_opt_iterations,
+        aig_simple=args.aig_simple,
     )
 
 
@@ -986,9 +1034,13 @@ def _result_to_dict(result: GenerationResult) -> dict[str, Any]:
         "testbench_out": str(result.testbench_out) if result.testbench_out is not None else None,
         "testbench_data_out": str(result.testbench_data_out) if result.testbench_data_out is not None else None,
         "transistor_count": result.transistor_count,
+        "aig_num_gates": result.aig_num_gates,
+        "aig_depth": result.aig_depth,
     }
     if result.yosys_stats is not None:
         data["yosys_stats"] = result.yosys_stats
+    if result.aig_stats is not None:
+        data["aig_stats"] = result.aig_stats
     return data
 
 

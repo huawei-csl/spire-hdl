@@ -99,7 +99,7 @@ optimized_module = flowy_optimize(my_module, nb_runs=10, direct=True)
 
 ## Caching
 
-Both decorators share the same two-level cache:
+Both decorators above share the same two-level cache:
 
 1. **In-memory** -- keyed by a SHA-256 hash of the Verilog content + non-logic arguments + optimizer parameters.  Instant on repeated calls within the same process.
 2. **Disk** -- stored in `.sprouthdl_cache/v1/` as JSON files containing the optimized AAG lines and port spec.  Survives across runs.
@@ -112,3 +112,35 @@ from sprouthdl.optimize import set_cache_dir, clear_optimization_cache
 set_cache_dir("/my/cache/path")   # override default location
 clear_optimization_cache()         # clear in-memory cache
 ```
+
+---
+
+## `@arithmetic_optimized` -- Structural arithmetic replacement
+
+For local reuse of a small arithmetic block, the `@arithmetic_optimized` decorator offers the same one-liner ergonomics as `@abc_optimized` / `@flowy_optimized` but without going through an external synthesizer — the body of the decorated function is wrapped into a `Component`, `replace_arithmetic_ops` is run on it, and the optimized sub-graph is spliced back into the caller's design:
+
+```python
+from sprouthdl.sprouthdl import UInt
+from sprouthdl.sprouthdl_module import Module
+from sprouthdl.optimize import arithmetic_optimized
+
+@arithmetic_optimized(objective="adp")
+def opt_mac(a, b, c):
+    return a * b + c
+
+m = Module("Top", with_clock=False, with_reset=False)
+a = m.input(UInt(8), "a")
+b = m.input(UInt(8), "b")
+c = m.input(UInt(16), "c")
+y = m.output(UInt(17), "y")
+y <<= opt_mac(a, b, c)    # MAC fusion happens inside the decorator
+print(m.to_verilog())
+```
+
+MAC / inner-product fusion, bit-width-aware configuration lookup, and `==`/`!=` lowering all work the same as with `replace_arithmetic_ops` on a hand-built component, because the decorator just calls `replace_arithmetic_ops` under the hood.
+
+### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `objective` | `"area"` | `"area"` / `"delay"` / `"adp"` — see [README_arithmetic_optimization.md](README_arithmetic_optimization.md) for details |

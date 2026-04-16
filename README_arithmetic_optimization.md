@@ -106,6 +106,8 @@ self.io.y <<= adder_tree(
 
 Use the builders when you want direct control over where optimized hardware is instantiated (e.g., inside a loop, or mixed with hand-written RTL); use `replace_arithmetic_ops` when you prefer to author the design with plain operators and let the optimizer rewrite the whole graph — including MAC/inner-product fusion, which the builders do not perform.
 
+For the `@arithmetic_optimized` decorator (same one-liner ergonomics but using structural replacement instead of an external synthesizer), see [README_optimization_decorators.md](README_optimization_decorators.md).
+
 ## Replacement-based optimization details
 
 Each `+`, `-`, and `*` in the expression graph is independently replaced with the empirically best prefix-adder or stage-based multiplier configuration for its specific bit-width and signedness.  For widths not in the evaluation database, the nearest data point is selected using logarithmic interpolation.

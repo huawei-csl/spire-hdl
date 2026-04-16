@@ -438,8 +438,17 @@ class _AigerExprEval(ExprVisitor[List[int]]):
         elif op == "nand":
             bits = aig.bv_not(aig.bv_and(a, b))
         elif op == "+":
+            # bv_add zero-extends shorter operands. For signed operands with
+            # w_out wider than the inputs, we must sign-extend first so the
+            # carry propagation matches two's-complement addition.
+            if signed:
+                a = aig._sext(a, w_out)
+                b = aig._sext(b, w_out)
             bits, _ = aig.bv_add(a, b, w_out=w_out)
         elif op == "-":
+            if signed:
+                a = aig._sext(a, w_out)
+                b = aig._sext(b, w_out)
             bits, _ = aig.bv_sub(a, b, w_out=w_out)
         elif op == "*":
             signed_a = getattr(e.a.typ, "signed", False)

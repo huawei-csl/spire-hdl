@@ -15,7 +15,7 @@ from sprouthdl.arithmetic.int_arithmetic_config import (
     build_multiplier,
 )
 from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import is_signed
-from sprouthdl.sprouthdl import Expr, HDLType, SInt, Signal, UInt, cast
+from sprouthdl.sprouthdl import Expr, HDLType, SInt, Signal, UInt, fit_type
 from sprouthdl.sprouthdl_module import Component, Module
 
 
@@ -41,7 +41,7 @@ def inner_product(
         mult_k = build_multiplier(s0, s1, mult_cfg)
         mult_k_list.append(mult_k)
 
-    summands = mult_k_list + [-cast(alpha, SInt(alpha.typ.width)), -cast(beta, SInt(beta.typ.width))]
+    summands = mult_k_list + [-fit_type(alpha, SInt(alpha.typ.width)), -fit_type(beta, SInt(beta.typ.width))]
 
     # same with sprout operators
     # for k in range(0, dim_k//2):

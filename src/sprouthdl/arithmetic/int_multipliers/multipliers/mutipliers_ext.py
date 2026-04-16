@@ -30,7 +30,7 @@ class StageBasedMultiplierBase(Component):
         self.b_encoding = b_encoding
         self.aw = a_w
         self.bw = b_w
-        self.optim_type = optim_type  
+        self.optim_type = optim_type
         self.ppg_cls = ppg_cls
         self.ppa_cls = ppa_cls
         self.fsa_cls = fsa_cls
