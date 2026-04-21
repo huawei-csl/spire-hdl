@@ -334,24 +334,40 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
 
     def _collect_mul_chain(node: Op2) -> tuple[list[Op2], Expr] | None:
         """Walk a + chain collecting single-consumer * children.
-        Returns (mul_nodes, c_term) or None."""
+        Returns (mul_nodes, c_term) or None.
+
+        Single-consumer is checked at BOTH the wrapper (the child of the + node
+        as seen here — may be a Signal wrapping the *) and the underlying *
+        itself.  ``Expr.__add__`` routes the right-hand operand through
+        ``as_expr`` which wraps it in a CSE Signal on its first sighting, while
+        the left-hand ``self`` is kept raw — so the same ``*`` node can appear
+        as a direct child in one ``+`` and as a Signal-wrapped child in
+        another.  Only checking the wrapper's ref_count would miss that case
+        and falsely fuse a shared multiplier.
+        """
         muls: list[Op2] = []
         current: Expr = node
         while isinstance(current, Op2) and current.op == "+":
             a, b = current.a, current.b
             mul_a = _unwrap_mul(a)
             mul_b = _unwrap_mul(b)
-            if mul_a is not None and ref_count.get(id(a), 0) == 1:
+            if (mul_a is not None
+                    and ref_count.get(id(a), 0) == 1
+                    and ref_count.get(id(mul_a), 0) == 1):
                 muls.append(mul_a)
                 current = b
-            elif mul_b is not None and ref_count.get(id(b), 0) == 1:
+            elif (mul_b is not None
+                    and ref_count.get(id(b), 0) == 1
+                    and ref_count.get(id(mul_b), 0) == 1):
                 muls.append(mul_b)
                 current = a
             else:
                 break
         # Check if the remaining term is also a single-consumer *
         mul_c = _unwrap_mul(current)
-        if mul_c is not None and ref_count.get(id(current), 0) == 1:
+        if (mul_c is not None
+                and ref_count.get(id(current), 0) == 1
+                and ref_count.get(id(mul_c), 0) == 1):
             muls.append(mul_c)
             current = Const(0, UInt(1))  # zero accumulate
         return (muls, current) if len(muls) >= 1 else None
