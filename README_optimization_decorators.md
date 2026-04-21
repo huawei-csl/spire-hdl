@@ -144,3 +144,20 @@ MAC / inner-product fusion, bit-width-aware configuration lookup, and `==`/`!=` 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `objective` | `"area"` | `"area"` / `"delay"` / `"adp"` — see [README_arithmetic_optimization.md](README_arithmetic_optimization.md) for details |
+
+---
+
+## Stacking decorators
+
+The optimizations are complementary and may be nested.  The easiest way is to stack the decorators directly (other combinations — e.g. running `replace_arithmetic_ops` on a hand-built component and then feeding the result through `abc_optimize` — work too):
+
+```python
+@abc_optimized(abc_script="strash; balance; rewrite -l; refactor -l; balance")
+@arithmetic_optimized(objective="area")
+def opt_mac(a, b, c):
+    return a * b + c
+```
+
+On an 8×8 → 17-bit MAC, `@arithmetic_optimized` alone lands at 682 AIG gates and `@abc_optimized` alone at 743; stacking both drops to 611 — better than either on its own, because the arithmetic rewriter picks good structural blocks and ABC then cleans up the flattened AIG.
+
+**Order matters.** `@abc_optimized` has to be the *outer* decorator: the inner one must run first so that `+`/`-`/`*`/`==`/`!=` operators still exist to be matched against the arithmetic configuration database.  Once ABC has flattened the design to an AIG, there is nothing left for the arithmetic rewriter to recognize.
