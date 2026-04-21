@@ -44,8 +44,8 @@ Complex arithmetic (multipliers) sees large reductions because the starting AIG 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `abc_script` | `"strash; &get -n; &deepsyn -T 10; &put"` | ABC commands to run |
-| `use_mem_cache` | `True` | In-memory cache across calls |
-| `use_disk_cache` | `True` | Persistent disk cache (`.sprouthdl_cache/`) |
+| `cache_read` | `"both"` | Which caches to consult: `"none"` / `"mem"` / `"disk"` / `"both"` |
+| `cache_write` | `"both"` | Which caches to populate: same values |
 | `cache_dir` | `None` | Override cache directory |
 
 ### Lower-level function
@@ -84,8 +84,8 @@ def optimized_mult(a, b):
 | `mockturtle_chain_len` | `10` | Chain length |
 | `direct` | `False` | `True` = local execution, `False` = Docker |
 | `pareto_point` | `None` | Select a specific Pareto-front design (0 = best area) |
-| `use_mem_cache` | `True` | In-memory cache |
-| `use_disk_cache` | `True` | Persistent disk cache |
+| `cache_read` | `"both"` | Which caches to consult: `"none"` / `"mem"` / `"disk"` / `"both"` |
+| `cache_write` | `"both"` | Which caches to populate: same values |
 
 ### Lower-level function
 
@@ -112,6 +112,17 @@ from sprouthdl.optimize import set_cache_dir, clear_optimization_cache
 set_cache_dir("/my/cache/path")   # override default location
 clear_optimization_cache()         # clear in-memory cache
 ```
+
+Reads and writes are independently gated by `cache_read` and `cache_write`.  Each takes one of `"none"`, `"mem"`, `"disk"`, `"both"`.
+
+| Intent | `cache_read` | `cache_write` |
+|---|---|---|
+| Read + write both caches (default) | `"both"` | `"both"` |
+| Force recompile, but populate both caches for later | `"none"` | `"both"` |
+| Mem in-process, never persist | `"mem"` | `"mem"` |
+| Use disk cache, don't pollute it | `"both"` | `"mem"` |
+| Force recompile, populate disk only | `"none"` | `"disk"` |
+| Fully bypass cache | `"none"` | `"none"` |
 
 ---
 

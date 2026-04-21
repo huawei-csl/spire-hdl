@@ -32,7 +32,7 @@ from sprouthdl.optimize import (
 ABC_SCRIPT = "strash; balance; rewrite -l; refactor -l; balance"
 
 
-@abc_optimized(abc_script=ABC_SCRIPT, use_disk_cache=False)
+@abc_optimized(abc_script=ABC_SCRIPT, cache_read="mem", cache_write="mem")
 @arithmetic_optimized(objective="area")
 def stacked_mac(a, b, c):
     return a * b + c
@@ -43,7 +43,7 @@ def arith_only_mac(a, b, c):
     return a * b + c
 
 
-@abc_optimized(abc_script=ABC_SCRIPT, use_disk_cache=False)
+@abc_optimized(abc_script=ABC_SCRIPT, cache_read="mem", cache_write="mem")
 def abc_only_mac(a, b, c):
     return a * b + c
 

@@ -537,6 +537,34 @@ def _build_component(
     return comp, output_names
 
 
+CacheSpec = Literal["none", "mem", "disk", "both"]
+
+
+def _parse_cache_spec(spec: CacheSpec) -> Tuple[bool, bool]:
+    """Return ``(mem, disk)`` enabled flags for a cache spec string."""
+    if spec == "none":
+        return False, False
+    if spec == "mem":
+        return True, False
+    if spec == "disk":
+        return False, True
+    if spec == "both":
+        return True, True
+    raise ValueError(
+        f"Invalid cache spec {spec!r}: must be 'none', 'mem', 'disk', or 'both'."
+    )
+
+
+def _resolve_rw_flags(
+    cache_read: CacheSpec,
+    cache_write: CacheSpec,
+) -> Tuple[bool, bool, bool, bool]:
+    """Return ``(read_mem, read_disk, write_mem, write_disk)``."""
+    read_mem, read_disk = _parse_cache_spec(cache_read)
+    write_mem, write_disk = _parse_cache_spec(cache_write)
+    return read_mem, read_disk, write_mem, write_disk
+
+
 def _cache_lookup(
     cache_key_hex: str,
     use_mem_cache: bool = True,
@@ -579,8 +607,8 @@ def _optimize_and_cache(
     logic_args: Dict[str, Tuple[int, bool]],
     other_args: Dict[str, Any],
     optimize_kwargs: Dict[str, Any],
-    use_mem_cache: bool = True,
-    use_disk_cache: bool = True,
+    cache_read: CacheSpec = "both",
+    cache_write: CacheSpec = "both",
     explicit_cache_dir: str | Path | None = None,
     nb_runs: int = 1,
     nb_workers: int = 10,
@@ -603,8 +631,14 @@ def _optimize_and_cache(
     merged_kwargs.pop("nb_workers", None)
     merged_kwargs.pop("nb_runs", None) # needs to be deleted, just here for compatibility with some existing caches
 
-    # Resolve cache directory (see _resolve_cache_dir for priority)
-    cache_dir: Path | None = _resolve_cache_dir(fn, explicit_cache_dir) if use_disk_cache else None
+    read_mem, read_disk, write_mem, write_disk = _resolve_rw_flags(cache_read, cache_write)
+
+    # Resolve cache directory (see _resolve_cache_dir for priority).
+    # Needed if either read OR write touches disk.
+    cache_dir: Path | None = (
+        _resolve_cache_dir(fn, explicit_cache_dir)
+        if (read_disk or write_disk) else None
+    )
 
     # Compute cache key from verilog content
     verilog_content: str = module.to_verilog()
@@ -615,7 +649,7 @@ def _optimize_and_cache(
         cache_key_hex = f"{base_cache_key}_pareto_{pareto_point}"
 
     # Check caches before running expensive optimization
-    cached = _cache_lookup(cache_key_hex, use_mem_cache, use_disk_cache, cache_dir)
+    cached = _cache_lookup(cache_key_hex, read_mem, read_disk, cache_dir)
     if cached is not None:
         return cached
 
@@ -639,7 +673,7 @@ def _optimize_and_cache(
 
     cache_metadata = {"base_cache_key": base_cache_key}
     _store_cache(cache_key_hex, aag_lines, spec, output_names,
-                 use_mem_cache, use_disk_cache, cache_dir, metadata=cache_metadata)
+                 write_mem, write_disk, cache_dir, metadata=cache_metadata)
     return aag_lines, spec, output_names
 
 
@@ -728,9 +762,13 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
          (only if it already exists)
       3. Global setting via ``set_cache_dir()`` or ``"cache_dir"`` in
          ``flowy_config.json`` (default: ``".sprouthdl_cache"``)
+
+    Cache read/write controls (``cache_read`` / ``cache_write``):
+      Each takes one of ``"none"``, ``"mem"``, ``"disk"``, ``"both"``.
+      Defaults are ``"both"`` for each — read+write both caches.
     """
-    use_mem_cache: bool = kw.pop("use_mem_cache", True)
-    use_disk_cache: bool = kw.pop("use_disk_cache", True)
+    cache_read: CacheSpec = kw.pop("cache_read", "both")
+    cache_write: CacheSpec = kw.pop("cache_write", "both")
     cache_dir: str | Path | None = kw.pop("cache_dir", None)
     # Pop multi-run and pareto params so they don't affect the base cache key
     nb_runs: int = kw.pop("nb_runs", 1)
@@ -776,7 +814,7 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
             # Build component, check caches (mem + disk), optimize on miss
             aag_lines, spec, output_names = _optimize_and_cache(
                 fn, logic_args, other_args, kw,
-                use_mem_cache=use_mem_cache, use_disk_cache=use_disk_cache,
+                cache_read=cache_read, cache_write=cache_write,
                 explicit_cache_dir=cache_dir,
                 nb_runs=nb_runs, nb_workers=nb_workers,
                 pareto_point=pareto_point,
@@ -864,8 +902,8 @@ def abc_optimized(
     _fn: Callable[..., Any] | None = None,
     *,
     abc_script: str = "strash; &get -n; &deepsyn -T 10; &put",
-    use_mem_cache: bool = True,
-    use_disk_cache: bool = True,
+    cache_read: CacheSpec = "both",
+    cache_write: CacheSpec = "both",
     cache_dir: str | Path | None = None,
 ) -> Callable[..., Any]:
     """Decorator that optimizes a function's logic through ABC (via yosys/pyosys).
@@ -878,6 +916,10 @@ def abc_optimized(
 
     At call time, Expr arguments are detected and the function is converted to
     a Component, optimized via ``abc_optimize``, and the result is cached.
+
+    Cache read/write controls (``cache_read`` / ``cache_write``):
+      Each takes one of ``"none"``, ``"mem"``, ``"disk"``, ``"both"``.
+      Defaults are ``"both"`` for each — read+write both caches.
     """
     from sprouthdl.sprouthdl_aiger import AigerExporter, AigerImporter
     from sprouthdl.sprouthdl_module import IOCollector
@@ -917,10 +959,14 @@ def abc_optimized(
             module: Module = comp.to_module("mydesign_comb")
             original_spec: Dict[str, HDLType] = module.get_spec()
 
+            read_mem, read_disk, write_mem, write_disk = _resolve_rw_flags(
+                cache_read, cache_write,
+            )
+
             # Cache key includes the abc script
             optimize_kwargs = {"abc_script": abc_script}
             resolved_cache_dir: Path | None = (
-                _resolve_cache_dir(fn, cache_dir) if use_disk_cache else None
+                _resolve_cache_dir(fn, cache_dir) if (read_disk or write_disk) else None
             )
             verilog_content: str = module.to_verilog()
             cache_key_hex: str = _compute_disk_cache_key(
@@ -928,7 +974,7 @@ def abc_optimized(
             )
 
             cached = _cache_lookup(
-                cache_key_hex, use_mem_cache, use_disk_cache, resolved_cache_dir,
+                cache_key_hex, read_mem, read_disk, resolved_cache_dir,
             )
             if cached is not None:
                 return _instantiate_from_cache(
@@ -946,7 +992,7 @@ def abc_optimized(
 
             _store_cache(
                 cache_key_hex, aag_lines, spec, output_names,
-                use_mem_cache, use_disk_cache, resolved_cache_dir,
+                write_mem, write_disk, resolved_cache_dir,
             )
 
             return _instantiate_from_cache(
