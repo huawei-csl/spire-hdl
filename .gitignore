@@ -27,3 +27,4 @@ data/*
 .claude
 *.env
 benchmarks/*
+tests/*/*.v

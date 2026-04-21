@@ -389,6 +389,11 @@ class Module:
 
         if collect_signals:
             self.collect_signals()
+            # Post-construction structural CSE (Common Subexpression Elimination): collapse any
+            # duplicate subtrees. Then re-collect so the freshly-created shared wires land in self._signals for emission.
+            from sprouthdl.sprouthdl_cse import apply_structural_cse
+            if apply_structural_cse(self):
+                self.collect_signals()
 
         # Basic checks
         for s in self._signals:
