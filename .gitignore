@@ -28,3 +28,4 @@ data/*
 *.env
 benchmarks/*
 tests/*/*.v
+issue/*
