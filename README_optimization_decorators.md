@@ -172,3 +172,22 @@ def opt_mac(a, b, c):
 On an 8×8 → 17-bit MAC, `@arithmetic_optimized` alone lands at 682 AIG gates and `@abc_optimized` alone at 700; stacking both drops to 611 — better than either on its own, because the arithmetic rewriter picks good structural blocks and ABC then cleans up the flattened AIG.
 
 **Order matters.** `@abc_optimized` has to be the *outer* decorator: the inner one must run first so that `+`/`-`/`*`/`==`/`!=` operators still exist to be matched against the arithmetic configuration database.  Once ABC has flattened the design to an AIG, there is nothing left for the arithmetic rewriter to recognize.
+
+### Adding `@flowy_optimized` on top
+
+`@flowy_optimized` can be stacked as the *outermost* decorator above `@abc_optimized` + `@arithmetic_optimized` to add stochastic mockturtle search on top of the realatively deterministic pipeline — which can occasionally break below the floor at the cost of higher variance:
+
+```python
+@flowy_optimized(
+    direct=True, iterations=1,
+    mockturtle_chains=10, mockturtle_chain_len=20, mockturtle_chain_workers=10,
+    nb_runs=1, selection_metric="aig_count",
+    cache_read="none",  # each call explores a fresh point
+)
+@abc_optimized(
+    abc_script="strash; &get -n; &deepsyn -T 30; &put", cache_read="none",
+)
+@arithmetic_optimized(objective="area")
+def opt_mult(a, b):
+    return a * b
+```

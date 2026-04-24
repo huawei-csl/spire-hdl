@@ -54,6 +54,17 @@ print(m.to_verilog())
 
 The `Module` API checks that every output has a driver and every register has a next-state assignment before emitting Verilog (see [`sprouthdl_module.py`](src/sprouthdl/sprouthdl_module.py)).
 
+**Registers** are created either via the standalone `Register` class or `Module.reg(...)`. Both take a `typ` and an optional reset value via the `init=` keyword (note: the keyword is `init`, not `reset_value` / `reset`). Assign the next-state expression with `<<=`:
+
+```python
+from sprouthdl.sprouthdl import Register, UInt
+
+m = Module("Counter", with_clock=True, with_reset=True)
+cnt = Register(UInt(8), init=0, name="cnt")       # or: cnt = m.reg(UInt(8), "cnt", init=0)
+cnt <<= cnt + 1                                   # next-state = cnt + 1
+m.output(UInt(8), "q") <<= cnt
+```
+
 ### 2. Simulate the design
 
 ```python
