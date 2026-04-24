@@ -2,6 +2,8 @@
   <img src="imgs/spire-hdl.png" alt="SpireHDL" width="250">
 </div>
 
+<br>
+
 A modern Python HDL that compiles concise, composable hardware descriptions to synthesizable Verilog and AIG/AAG netlists — with synthesis optimization and a cycle-accurate simulator built in.
 
 - **Designed for humans and agents to be effective** — a small, regular surface that reads well to engineers and LLMs alike
