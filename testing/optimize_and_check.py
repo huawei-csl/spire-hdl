@@ -1,15 +1,15 @@
 from aigverse import Aig, DepthAig
-from sprouthdl.sprouthdl import UInt
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult import build_f16_mul, build_fp_mul, run_vectors_aby
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult_sn import build_fp_mul_sn
-from sprouthdl.sprouthdl_aiger import AigerExporter, AigerImporter, export_module_to_aiger
-from sprouthdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag, read_aag_into_aig
+from spirehdl.spirehdl import UInt
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul, build_fp_mul, run_vectors_aby
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter, export_module_to_aiger
+from spirehdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag, read_aag_into_aig
 
 from aigverse import aig_resubstitution, sop_refactoring, aig_cut_rewriting, balancing
 
-from sprouthdl.sprouthdl_module import IOCollector
-from sprouthdl.arithmetic.floating_point.fp_encoding import fp_decode
-from sprouthdl.arithmetic.floating_point.fp_mul_testvectors import build_f16_subnormal_ext_vectors, build_f16_subnormal_vectors, build_f16_vectors
+from spirehdl.spirehdl_module import IOCollector
+from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
+from spirehdl.arithmetic.floating_point.fp_mul_testvectors import build_f16_subnormal_ext_vectors, build_f16_subnormal_vectors, build_f16_vectors
 
 
 def get_size_mult(ew: int, subnormals=False) -> int:

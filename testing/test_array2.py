@@ -1,10 +1,10 @@
 from typing import Optional
 
 import numpy as np
-from sprouthdl.aggregate.aggregate_array import Array  # your renamed class
-from sprouthdl.sprouthdl import Expr, ExprLike, Const, UInt, Wire, fit_width, reset_shared_cache
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.aggregate.aggregate_array import Array  # your renamed class
+from spirehdl.spirehdl import Expr, ExprLike, Const, UInt, Wire, fit_width, reset_shared_cache
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
 
 
 def inner_product(vec_a: Array, vec_b: Array) -> Expr:

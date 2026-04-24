@@ -4,14 +4,14 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from aigverse import aig_cut_rewriting, aig_resubstitution, sop_refactoring
 import numpy as np
-from testing.low_level_arithmetic.compressor_tree.compressor_tree_sprout_hdl import gen_compressor_tree_graph_and_sprout_module
-from sprouthdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag
-from sprouthdl.helpers import optimize_aag, run_vectors
-from sprouthdl.sprouthdl import Bool, Concat, Const, Expr, Op2, SInt, UInt
-from sprouthdl.sprouthdl_aiger import AigerExporter, AigerImporter
-from sprouthdl.sprouthdl_module import IOCollector
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
+from testing.low_level_arithmetic.compressor_tree.compressor_tree_spire_hdl import gen_compressor_tree_graph_and_sprout_module
+from spirehdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag
+from spirehdl.helpers import optimize_aag, run_vectors
+from spirehdl.spirehdl import Bool, Concat, Const, Expr, Op2, SInt, UInt
+from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
+from spirehdl.spirehdl_module import IOCollector
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
 
 
 import matplotlib.pyplot as plt

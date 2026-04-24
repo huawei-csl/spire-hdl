@@ -14,11 +14,11 @@ from __future__ import annotations
 import random
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-from sprouthdl.sprouthdl import Expr, HDLType, Signal, UInt, reset_shared_cache
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_aiger import AigerExporter
-from sprouthdl.sprouthdl_simulator import Simulator
-from sprouthdl.optimize import abc_optimized, clear_optimization_cache
+from spirehdl.spirehdl import Expr, HDLType, Signal, UInt, reset_shared_cache
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_aiger import AigerExporter
+from spirehdl.spirehdl_simulator import Simulator
+from spirehdl.optimize import abc_optimized, clear_optimization_cache
 
 
 # ---------------------------------------------------------------------------

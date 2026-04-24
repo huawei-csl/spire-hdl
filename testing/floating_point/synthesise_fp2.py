@@ -1,10 +1,10 @@
-from testing.low_level_arithmetic.compressor_tree.compressor_tree_sprout_hdl import gen_compressor_tree_graph_and_sprout_module
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult_sn import build_fp_mul_sn
+from testing.low_level_arithmetic.compressor_tree.compressor_tree_spire_hdl import gen_compressor_tree_graph_and_sprout_module
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
 
-from sprouthdl.optimize import flowy_optimize
+from spirehdl.optimize import flowy_optimize
 
-from sprouthdl.helpers import get_aig_stats, get_yosys_metrics, get_yosys_transistor_count
-from sprouthdl.sprouthdl_module import Component, Module
+from spirehdl.helpers import get_aig_stats, get_yosys_metrics, get_yosys_transistor_count
+from spirehdl.spirehdl_module import Component, Module
 
 def main():
 

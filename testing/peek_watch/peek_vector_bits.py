@@ -1,6 +1,6 @@
-from sprouthdl.sprouthdl import Bool, UInt
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator  # your simulator with peek/watch
+from spirehdl.spirehdl import Bool, UInt
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator  # your simulator with peek/watch
 
 m = Module("VecBits", with_clock=False, with_reset=False)
 v = m.input(UInt(8), "v")

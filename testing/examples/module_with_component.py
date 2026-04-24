@@ -6,8 +6,8 @@ showing the integration between Module-based and Component-based design.
 """
 
 from dataclasses import dataclass
-from sprouthdl.sprouthdl_module import Module, Component
-from sprouthdl.sprouthdl import UInt, Signal
+from spirehdl.spirehdl_module import Module, Component
+from spirehdl.spirehdl import UInt, Signal
 
 
 # Define a reusable Adder Component

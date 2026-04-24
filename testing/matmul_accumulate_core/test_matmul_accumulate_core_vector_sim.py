@@ -4,21 +4,21 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel, TestVectors
-from sprouthdl.helpers import refactor_module_to_aig, run_vectors_on_simulator, sim_and_switch_count
-from sprouthdl.sprouthdl import Op2
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
-from sprouthdl.sprouthdl_verilog_testbench import TestbenchGenSimulator, write_vector_data_file
-from sprouthdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
-from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core import (
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel, TestVectors
+from spirehdl.helpers import refactor_module_to_aig, run_vectors_on_simulator, sim_and_switch_count
+from spirehdl.spirehdl import Op2
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
+from spirehdl.spirehdl_verilog_testbench import TestbenchGenSimulator, write_vector_data_file
+from spirehdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
+from spirehdl.cores.matmul_accumulate.matmul_accumulate_core import (
     MMAcCfg,
     MMAcDims,
     MMAcWidths,

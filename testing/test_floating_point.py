@@ -9,27 +9,27 @@ repo_root = pathlib.Path(__file__).resolve().parents[1]
 sys.path.append(str(repo_root / "src"))
 sys.path.append(str(repo_root))
 
-from sprouthdl.arithmetic.floating_point.fp_encoding import fp_decode
-from sprouthdl.arithmetic.floating_point.fp_mul_testvectors import (
+from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
+from spirehdl.arithmetic.floating_point.fp_mul_testvectors import (
     build_f16_subnormal_vectors,
     build_f16_vectors,
 )
 
-from sprouthdl.aggregate.aggregate_floating_point import FloatingPoint, FloatingPointType
-from sprouthdl.aggregate.aggregate_register import AggregateRegister
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult import build_f16_mul
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spirehdl.aggregate.aggregate_floating_point import FloatingPoint, FloatingPointType
+from spirehdl.aggregate.aggregate_register import AggregateRegister
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
-from sprouthdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
-from sprouthdl.sprouthdl import Const, Expr, UInt, as_expr, reset_shared_cache
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spirehdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
+from spirehdl.spirehdl import Const, Expr, UInt, as_expr, reset_shared_cache
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
 
 
 def _eval_expr(e: Expr) -> int:

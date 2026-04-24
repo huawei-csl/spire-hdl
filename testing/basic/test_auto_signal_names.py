@@ -1,5 +1,5 @@
-from sprouthdl.sprouthdl import Register, UInt, Wire
-from sprouthdl.sprouthdl_module import Module
+from spirehdl.spirehdl import Register, UInt, Wire
+from spirehdl.spirehdl_module import Module
 
 
 def test_unnamed_wire_and_register_infer_python_variable_names():

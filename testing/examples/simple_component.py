@@ -9,8 +9,8 @@ This is the simplest possible example showing how to:
 """
 
 from dataclasses import dataclass
-from sprouthdl.sprouthdl_module import Component
-from sprouthdl.sprouthdl import UInt, Signal
+from spirehdl.spirehdl_module import Component
+from spirehdl.spirehdl import UInt, Signal
 
 
 class SimpleAdder(Component):

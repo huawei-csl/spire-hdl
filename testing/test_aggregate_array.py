@@ -1,5 +1,5 @@
-from sprouthdl.aggregate.hdl_aggregate import HDLAggregate
-from sprouthdl.sprouthdl import (
+from spirehdl.aggregate.hdl_aggregate import HDLAggregate
+from spirehdl.spirehdl import (
     UInt,
     Wire,
     Expr,
@@ -7,10 +7,10 @@ from sprouthdl.sprouthdl import (
     as_expr,
     reset_shared_cache,
 )
-from sprouthdl.aggregate.aggregate_array import Array
-from sprouthdl.sprouthdl import UInt
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.spirehdl import UInt
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
 from testing.test_aggregate_register_and_array import DummyAgg
 
 

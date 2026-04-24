@@ -1,12 +1,12 @@
 from aigverse import equivalence_checking
-from sprouthdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig
-from sprouthdl.sprouthdl import UInt
-from sprouthdl.sprouthdl_aiger import AigerExporter, AigerImporter
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult import run_vectors_aby
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult_sn import build_fp_mul_sn
-from sprouthdl.arithmetic.floating_point.fp_encoding import fp_decode
-from sprouthdl.arithmetic.floating_point.fp_mul_testvectors import build_f16_subnormal_ext_vectors, build_f16_subnormal_vectors
-from sprouthdl.sprouthdl_module import IOCollector
+from spirehdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig
+from spirehdl.spirehdl import UInt
+from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import run_vectors_aby
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
+from spirehdl.arithmetic.floating_point.fp_mul_testvectors import build_f16_subnormal_ext_vectors, build_f16_subnormal_vectors
+from spirehdl.spirehdl_module import IOCollector
 
 
 def main():

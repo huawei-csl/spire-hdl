@@ -1,19 +1,19 @@
 import tempfile
 
 from aigverse import equivalence_checking, read_verilog_into_aig
-from sprouthdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag, file_to_lines, read_aag_into_aig
-from sprouthdl.sprouthdl import UInt
-from sprouthdl.sprouthdl_aiger import AigerExporter, AigerImporter
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult import run_vectors_aby
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult_sn import build_fp_mul_sn
-from sprouthdl.sprouthdl_module import IOCollector
+from spirehdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag, file_to_lines, read_aag_into_aig
+from spirehdl.spirehdl import UInt
+from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import run_vectors_aby
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spirehdl.spirehdl_module import IOCollector
 
 # import pyosys as ys, tempfile, os
 import os
 from pyosys import libyosys as ys
 
-from sprouthdl.arithmetic.floating_point.fp_encoding import fp_decode
-from sprouthdl.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors
+from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
+from spirehdl.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors
 
 
 

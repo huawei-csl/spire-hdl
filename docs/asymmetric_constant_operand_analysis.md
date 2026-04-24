@@ -224,7 +224,7 @@ Inequality subtraction helps depth (-4 to -5) but **hurts area** (+88 to +114 TC
 
 Investigated detecting `a * b + c` patterns in the graph and replacing with a fused MAC, which feeds the accumulate operand directly into the multiplier's column reduction (saving one full FSA stage).
 
-Sprout-HDL already has a `FusedMacComponent` / `fused_inner_product` infrastructure.
+SpireHDL already has a `FusedMacComponent` / `fused_inner_product` infrastructure.
 
 ### Results: fused MAC vs separate auto-replaced mul+add
 

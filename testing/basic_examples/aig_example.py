@@ -1,7 +1,7 @@
 from aigverse import Aig
-from sprouthdl.aig.aig_aigerverse import conv_aag_into_aig
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult import build_f16_mul
-from sprouthdl.sprouthdl_aiger import export_module_to_aiger
+from spirehdl.aig.aig_aigerverse import conv_aag_into_aig
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul
+from spirehdl.spirehdl_aiger import export_module_to_aiger
 
 
 from aigverse import aig_resubstitution, sop_refactoring, aig_cut_rewriting, balancing

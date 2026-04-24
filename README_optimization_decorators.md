@@ -1,13 +1,13 @@
 # Circuit Optimization Decorators
 
-Sprout-HDL provides two decorators that optimize combinational logic at the AIG level.  Decorate any Python function that builds logic from `Expr` arguments, and the framework automatically converts it to a circuit, runs the chosen optimizer, caches the result, and splices the optimized logic back into your design.
+SpireHDL provides two decorators that optimize combinational logic at the AIG level.  Decorate any Python function that builds logic from `Expr` arguments, and the framework automatically converts it to a circuit, runs the chosen optimizer, caches the result, and splices the optimized logic back into your design.
 
 ## `@abc_optimized` -- ABC / DeepSyn via Yosys
 
 Runs an [ABC](https://github.com/berkeley-abc/abc) script through Yosys/PyOsys.  The script is passed as a string argument.
 
 ```python
-from sprouthdl.optimize import abc_optimized
+from spirehdl.optimize import abc_optimized
 
 @abc_optimized(abc_script="strash; &get -n; &deepsyn -T 10; &put")
 def my_mult(a, b):
@@ -53,7 +53,7 @@ Complex arithmetic (multipliers) sees large reductions because the starting AIG 
 `abc_optimize(module, abc_script)` takes a `Module` or `Component` and returns optimized AAG lines directly, without the decorator/caching machinery.
 
 ```python
-from sprouthdl.optimize import abc_optimize
+from spirehdl.optimize import abc_optimize
 
 aag_lines = abc_optimize(my_module, "strash; &get -n; &deepsyn -T 30; &put")
 ```
@@ -65,7 +65,7 @@ aag_lines = abc_optimize(my_module, "strash; &get -n; &deepsyn -T 30; &put")
 Uses the [Flowy](https://github.com/lsils/flowy) framework for reinforcement-learning-guided circuit optimization with MockTurtle.  Supports multi-run optimization and Pareto-front design selection.
 
 ```python
-from sprouthdl.optimize import flowy_optimized
+from spirehdl.optimize import flowy_optimized
 
 @flowy_optimized(direct=True, iterations=1, mockturtle_chains=1,
                  mockturtle_chain_len=2, mockturtle_chain_workers=1)
@@ -90,7 +90,7 @@ def optimized_mult(a, b):
 ### Lower-level function
 
 ```python
-from sprouthdl.optimize import flowy_optimize
+from spirehdl.optimize import flowy_optimize
 
 optimized_module = flowy_optimize(my_module, nb_runs=10, direct=True)
 ```
@@ -102,12 +102,12 @@ optimized_module = flowy_optimize(my_module, nb_runs=10, direct=True)
 Both decorators above share the same two-level cache:
 
 1. **In-memory** -- keyed by a SHA-256 hash of the Verilog content + non-logic arguments + optimizer parameters.  Instant on repeated calls within the same process.
-2. **Disk** -- stored in `.sprouthdl_cache/v1/` as JSON files containing the optimized AAG lines and port spec.  Survives across runs.
+2. **Disk** -- stored in `.spirehdl_cache/v1/` as JSON files containing the optimized AAG lines and port spec.  Survives across runs.
 
-Use `clear_optimization_cache()` to reset the in-memory cache, or delete `.sprouthdl_cache/` for the disk cache.
+Use `clear_optimization_cache()` to reset the in-memory cache, or delete `.spirehdl_cache/` for the disk cache.
 
 ```python
-from sprouthdl.optimize import set_cache_dir, clear_optimization_cache
+from spirehdl.optimize import set_cache_dir, clear_optimization_cache
 
 set_cache_dir("/my/cache/path")   # override default location
 clear_optimization_cache()         # clear in-memory cache
@@ -131,9 +131,9 @@ Reads and writes are independently gated by `cache_read` and `cache_write`.  Eac
 For local reuse of a small arithmetic block, the `@arithmetic_optimized` decorator offers the same one-liner ergonomics as `@abc_optimized` / `@flowy_optimized` but without going through an external synthesizer — the body of the decorated function is wrapped into a `Component`, `replace_arithmetic_ops` is run on it, and the optimized sub-graph is spliced back into the caller's design:
 
 ```python
-from sprouthdl.sprouthdl import UInt
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.optimize import arithmetic_optimized
+from spirehdl.spirehdl import UInt
+from spirehdl.spirehdl_module import Module
+from spirehdl.optimize import arithmetic_optimized
 
 @arithmetic_optimized(objective="adp")
 def opt_mac(a, b, c):

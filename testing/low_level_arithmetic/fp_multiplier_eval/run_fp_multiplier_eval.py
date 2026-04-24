@@ -23,8 +23,8 @@ import os
 import math
 import uuid
 
-from sprouthdl.arithmetic.floating_point.sprout_hdl_hif8 import hif8_to_float
-from sprouthdl.arithmetic.floating_point.fp_encoding import fp_decode
+from spirehdl.arithmetic.floating_point.spire_hdl_hif8 import hif8_to_float
+from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
 
 
 try:
@@ -34,19 +34,19 @@ except Exception:  # pragma: no cover - optional dependency for sigma linspace
 from tqdm import tqdm
 
 
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_ext_stat_helper import ParquetCollector, _flatten_op_nodes
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_ext_stat_helper import ParquetCollector, _flatten_op_nodes
 
-from sprouthdl.helpers import get_aig_stats, get_switch_count, get_yosys_metrics, get_yosys_transistor_count, refactor_module_to_aig, run_vectors
-from sprouthdl.sprouthdl import Op2, reset_shared_cache
-from sprouthdl.sprouthdl_aiger import AigerExporter, AigerImporter
-from sprouthdl.sprouthdl_module import gen_spec
-from sprouthdl.sprouthdl_module import IOCollector
+from spirehdl.helpers import get_aig_stats, get_switch_count, get_yosys_metrics, get_yosys_transistor_count, refactor_module_to_aig, run_vectors
+from spirehdl.spirehdl import Op2, reset_shared_cache
+from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
+from spirehdl.spirehdl_module import gen_spec
+from spirehdl.spirehdl_module import IOCollector
 import matplotlib
 matplotlib.use("Agg")  # headless plotting
 import matplotlib.pyplot as plt
 
 # FP module builders
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult_sn import build_fp_mul_sn
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
 
 # FP testvector generator
 from testing.low_level_arithmetic.fp_multiplier_eval.testvector_generation_fp import FPMultiplierTestVectors, IEEEFormat, HiF8Format, FPDist
@@ -139,7 +139,7 @@ def get_module(cfg: FPConfig):
         assert cfg.EW is not None and cfg.FW is not None, "EW/FW must be set for IEEE format"
         module = build_fp_mul_sn(f"F{1+cfg.EW+cfg.FW}Mul", EW=int(cfg.EW), FW=int(cfg.FW), subnormals=bool(cfg.subnormals))
     elif cfg.kind == FPFormatKind.HIF8:
-        from sprouthdl.arithmetic.floating_point.sprout_hdl_hif8 import build_hif8_mul_logic
+        from spirehdl.arithmetic.floating_point.spire_hdl_hif8 import build_hif8_mul_logic
         module = build_hif8_mul_logic("HiFP8Mul_Logic_Ref")
     else:
         raise ValueError(f"Unsupported format kind: {cfg.kind}")
@@ -337,7 +337,7 @@ def plot_input_output_histograms(cfg: FPConfig, vecs: list[tuple], sigma: float 
             assert cfg.EW is not None and cfg.FW is not None
             decode_val = functools.partial(fp_decode, EW=int(cfg.EW), FW=int(cfg.FW))
         else:
-            from sprouthdl.arithmetic.floating_point.sprout_hdl_hif8 import hif8_to_float
+            from spirehdl.arithmetic.floating_point.spire_hdl_hif8 import hif8_to_float
             decode_val = hif8_to_float
     else:
         decode_val = decoder

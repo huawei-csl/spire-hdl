@@ -1,10 +1,10 @@
 
-from sprouthdl.aggregate.aggregate_record import AggregateRecord
-from sprouthdl.aggregate.aggregate_array import Array
-from sprouthdl.sprouthdl import SInt, UInt, Wire, Signal
+from spirehdl.aggregate.aggregate_record import AggregateRecord
+from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.spirehdl import SInt, UInt, Wire, Signal
 
 
-from sprouthdl.sprouthdl import (
+from spirehdl.spirehdl import (
     UInt,
     Wire,
     Signal,
@@ -14,8 +14,8 @@ from sprouthdl.sprouthdl import (
     Slice,
     HDLType,
 )
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
 
 
 def test_aggregate_record_basic():

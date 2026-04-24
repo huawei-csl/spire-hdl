@@ -1,8 +1,8 @@
-from sprouthdl.sprouthdl import Bool, UInt
-from sprouthdl.sprouthdl_state import Encoding, State, state
-from sprouthdl.sprouthdl_control_structures import case_, default, if_, switch_
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator, _sid
+from spirehdl.spirehdl import Bool, UInt
+from spirehdl.spirehdl_state import Encoding, State, state
+from spirehdl.spirehdl_control_structures import case_, default, if_, switch_
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator, _sid
 
 
 class BinaryFSM(State, encoding=Encoding.BINARY):

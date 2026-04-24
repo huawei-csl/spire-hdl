@@ -18,11 +18,11 @@ from typing import DefaultDict, Dict, List, Tuple, Type
 
 import pytest
 
-from sprouthdl.sprouthdl import (
+from spirehdl.spirehdl import (
     Bool, Concat, Const, Expr, Op1, Op2, Resize, Signal, SInt, Slice,
     Ternary, UInt, reset_shared_cache,
 )
-from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
     CompressorTreeAccumulator,
     PartialProductAccumulatorBase,
     SelectionMode,
@@ -30,7 +30,7 @@ from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core impo
     StageBasedMultiplierIO,
     StageMultiplierConfig,
 )
-from sprouthdl.arithmetic.int_multipliers.stages.ppa_stages import (
+from spirehdl.arithmetic.int_multipliers.stages.ppa_stages import (
     CarrySaveAccumulator,
     DaddaTreeAccumulator,
     FourTwoCompressorAccumulator,
@@ -38,7 +38,7 @@ from sprouthdl.arithmetic.int_multipliers.stages.ppa_stages import (
     FiveTwoCompressorAccumulator,
     WallaceTreeAccumulator,
 )
-from sprouthdl.arithmetic.int_multipliers.stages.ppg_and_stages import (
+from spirehdl.arithmetic.int_multipliers.stages.ppg_and_stages import (
     AndPartialProductGenerator,
 )
 

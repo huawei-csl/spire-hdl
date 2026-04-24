@@ -1,6 +1,6 @@
-from sprouthdl.sprouthdl import UInt
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.spirehdl import UInt
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
 
 # 4-bit accumulator: acc <<= acc + din
 m = Module("Accu", with_clock=True, with_reset=True)

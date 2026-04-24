@@ -15,17 +15,17 @@ sys.path.append(ROOT)
 
 import numpy as np
 
-from sprouthdl.arithmetic.floating_point.fp_encoding import fp_decode, fp_encode
-from sprouthdl.arithmetic.floating_point.fp_mul_testvectors import (
+from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode, fp_encode
+from spirehdl.arithmetic.floating_point.fp_mul_testvectors import (
     FpMulTestVectors,
     FpMulTestVectorsExhaustive,
     _should_skip,
 )
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult import run_vectors_aby
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult_sn import FpMulSN, build_fp_mul_sn
-from sprouthdl.helpers import run_vectors_on_simulator
-from sprouthdl.sprouthdl_simulator import Simulator
-from sprouthdl.arithmetic.floating_point.fp_mul_testvectors import (
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import run_vectors_aby
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import FpMulSN, build_fp_mul_sn
+from spirehdl.helpers import run_vectors_on_simulator
+from spirehdl.spirehdl_simulator import Simulator
+from spirehdl.arithmetic.floating_point.fp_mul_testvectors import (
     build_bf16_subnormal_ext_vectors,
     build_bf16_subnormal_vectors,
     build_bf16_vectors,
@@ -36,7 +36,7 @@ from sprouthdl.arithmetic.floating_point.fp_mul_testvectors import (
 
 
 def _sn_normal_vectors(EW, FW):
-    from sprouthdl.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors
+    from spirehdl.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors
     return build_fp_vectors(EW, FW, subnormals=True)
 
 

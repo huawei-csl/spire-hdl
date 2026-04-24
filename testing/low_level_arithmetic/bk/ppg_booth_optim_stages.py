@@ -1,10 +1,10 @@
 from collections import defaultdict
 from typing import DefaultDict, List
 
-from sprouthdl.helpers import get_yosys_transistor_count, run_vectors
-from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, MultiplierTestVectorsInt, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO
-from sprouthdl.sprouthdl import Bool, Const, Expr, SInt, fit_type
-from sprouthdl.sprouthdl_module import Module
+from spirehdl.helpers import get_yosys_transistor_count, run_vectors
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, MultiplierTestVectorsInt, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO
+from spirehdl.spirehdl import Bool, Const, Expr, SInt, fit_type
+from spirehdl.spirehdl_module import Module
 
 class BoothOptimizedPartialProductGenerator(PartialProductGeneratorBase):
     supported_signatures = (

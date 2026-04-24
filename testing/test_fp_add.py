@@ -15,11 +15,11 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(os.path.join(ROOT, "src"))
 sys.path.append(ROOT)
 
-from sprouthdl.arithmetic.floating_point.fp_add_testvectors import (
+from spirehdl.arithmetic.floating_point.fp_add_testvectors import (
     FpAddTestVectors,
     FpAddTestVectorsExhaustive,
 )
-from sprouthdl.arithmetic.floating_point.fp_encoding import (
+from spirehdl.arithmetic.floating_point.fp_encoding import (
     bits_inf,
     bits_max_sub,
     bits_min_normal,
@@ -29,10 +29,10 @@ from sprouthdl.arithmetic.floating_point.fp_encoding import (
     fp_decode,
     fp_encode,
 )
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_add import FpAdd, build_fp_add
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult import run_vectors_aby
-from sprouthdl.helpers import run_vectors_on_simulator
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.arithmetic.floating_point.spire_hdl_float_add import FpAdd, build_fp_add
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import run_vectors_aby
+from spirehdl.helpers import run_vectors_on_simulator
+from spirehdl.spirehdl_simulator import Simulator
 
 
 # -- Hand-picked vectors ----------------------------------------------------

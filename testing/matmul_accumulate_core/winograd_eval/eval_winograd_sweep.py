@@ -15,15 +15,15 @@ from typing import Any, Optional
 
 from tqdm import tqdm
 
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
-from sprouthdl.helpers import get_yosys_metrics
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
+from spirehdl.helpers import get_yosys_metrics
 
 
 class Architecture(str, Enum):
@@ -48,9 +48,9 @@ def run_single_evaluation(config: EvalConfig) -> Optional[dict[str, Any]]:
     """
     try:
         # Import the appropriate module based on architecture
-        from sprouthdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
+        from spirehdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
         if config.architecture == Architecture.WINOGRAD:
-            from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core_winograd import (
+            from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_winograd import (
                 MMAcCfg,
                 MMAcDims,
                 MMAcWidths,
@@ -58,7 +58,7 @@ def run_single_evaluation(config: EvalConfig) -> Optional[dict[str, Any]]:
                 max_y_width_unsigned,
             )
         else:
-            from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core import (
+            from spirehdl.cores.matmul_accumulate.matmul_accumulate_core import (
                 MMAcCfg,
                 MMAcDims,
                 MMAcWidths,

@@ -1,9 +1,9 @@
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import AdderTestVectors, Encoding, is_signed
-from sprouthdl.arithmetic.prefix_adders.adders import RippleCarryFinalAdder, StageBasedPrefixAdder
-from sprouthdl.helpers import run_vectors, run_vectors_on_simulator
-from sprouthdl.sprouthdl_simulator import Simulator
-from sprouthdl.sprouthdl_verilog_testbench import TestbenchGenSimulator, write_vector_data_file
-from sprouthdl.various.vcd_writer import write_vcd
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import AdderTestVectors, Encoding, is_signed
+from spirehdl.arithmetic.prefix_adders.adders import RippleCarryFinalAdder, StageBasedPrefixAdder
+from spirehdl.helpers import run_vectors, run_vectors_on_simulator
+from spirehdl.spirehdl_simulator import Simulator
+from spirehdl.spirehdl_verilog_testbench import TestbenchGenSimulator, write_vector_data_file
+from spirehdl.various.vcd_writer import write_vcd
 
 
 def int_adders_tb_sim():

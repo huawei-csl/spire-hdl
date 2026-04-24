@@ -1,5 +1,5 @@
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl import Bool, UInt, SInt, mux, cat
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl import Bool, UInt, SInt, mux, cat
 
 # declare Moudule
 m = Module("LogicDemo", with_clock=False, with_reset=False)

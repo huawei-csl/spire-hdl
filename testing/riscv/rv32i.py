@@ -1,12 +1,12 @@
 # rv32i_sprout.py
-# Minimal RV32I (single-cycle) core in SproutHDL + tiny assembler + simple simulation.
+# Minimal RV32I (single-cycle) core in SpireHDL + tiny assembler + simple simulation.
 
 from typing import List, Tuple, Dict
 
-from sprouthdl.helpers import get_yosys_transistor_count
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl import UInt, Bool, Const, mux, cat, fit_width
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.helpers import get_yosys_transistor_count
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl import UInt, Bool, Const, mux, cat, fit_width
+from spirehdl.spirehdl_simulator import Simulator
 
 
 

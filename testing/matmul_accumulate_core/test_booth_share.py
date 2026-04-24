@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption, PPAOption, PPGOption
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel
-from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core import MMAcDims, MMAcWidths, max_y_width_unsigned
-from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core_fused_precomputed_b_stages import MMAcFusedCfg, MatmulAccumulateComponent, MultiplierConfig
-from sprouthdl.helpers import get_yosys_metrics
-from sprouthdl.sprouthdl_analyzer import _Analyzer
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption, PPAOption, PPGOption
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel
+from spirehdl.cores.matmul_accumulate.matmul_accumulate_core import MMAcDims, MMAcWidths, max_y_width_unsigned
+from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_fused_precomputed_b_stages import MMAcFusedCfg, MatmulAccumulateComponent, MultiplierConfig
+from spirehdl.helpers import get_yosys_metrics
+from spirehdl.spirehdl_analyzer import _Analyzer
+from spirehdl.spirehdl_simulator import Simulator
 
 
 def run_test(dim: int, share: bool, seed: int = 42):

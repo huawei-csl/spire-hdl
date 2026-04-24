@@ -2,12 +2,12 @@
 from collections import OrderedDict
 from typing import Dict, Tuple
 
-from sprouthdl.aig.aig_aigerverse import _get_aag_sym
-from sprouthdl.sprouthdl_aiger import AigerExporter, AigerImporter
-from sprouthdl.sprouthdl_module import IOCollector
+from spirehdl.aig.aig_aigerverse import _get_aag_sym
+from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
+from spirehdl.spirehdl_module import IOCollector
 
 # If these live elsewhere, fix the imports:
-# from sprout_hdl import UInt, Bool, Module
+# from spire_hdl import UInt, Bool, Module
 # from your_aiger_bindings import AigerExporter, AigerImporter
 # from your_aag_helpers import conv_aag_into_aig, _get_aag_sym
 # from your_collectors import IOCollector
@@ -15,7 +15,7 @@ from sprouthdl.sprouthdl_module import IOCollector
 
 def _as_uint_width(w: int):
     # map Bool → UInt(1), UInt/SInt(w) → UInt(w)
-    from sprouthdl.sprouthdl import UInt
+    from spirehdl.spirehdl import UInt
 
     return UInt(int(w))
 

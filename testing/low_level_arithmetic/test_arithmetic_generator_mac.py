@@ -6,17 +6,17 @@ import sys
 
 import pytest
 
-from sprouthdl.arithmetic.arithmetic_generator import (
+from spirehdl.arithmetic.arithmetic_generator import (
     GenerationActions,
     MacGeneratorConfig,
     generate_mac,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     PPAOption,
     PPGOption,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
 
 
 def test_generate_mac_api_with_artifacts_and_sim(tmp_path: Path):
@@ -106,7 +106,7 @@ def test_cli_mac_smoke(tmp_path: Path):
     cmd = [
         sys.executable,
         "-m",
-        "sprouthdl.arithmetic.arithmetic_generator",
+        "spirehdl.arithmetic.arithmetic_generator",
         "mac",
         "--n-bits",
         "4",

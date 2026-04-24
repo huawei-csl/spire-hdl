@@ -9,7 +9,7 @@ Shows:
 - Recursive expression generation with Horner polynomial form
 """
 
-from sprouthdl.sprouthdl import Bool, Const, SInt, Signal, mux
+from spirehdl.spirehdl import Bool, Const, SInt, Signal, mux
 
 
 def recursive_horner(x, coeffs):

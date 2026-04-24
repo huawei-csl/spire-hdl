@@ -1,21 +1,21 @@
 import pytest
 from dataclasses import dataclass
 
-from sprouthdl.arithmetic.int_arithmetic_config import (
+from spirehdl.arithmetic.int_arithmetic_config import (
     ArithmeticAutoConfig,
     replace_arithmetic_ops,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import (
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import (
     AdderTestVectors,
     Encoding,
     MultiplierTestVectors,
     SubtractorTestVectors,
 )
-from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import StageBasedMultiplierIO
-from sprouthdl.helpers import get_yosys_metrics, get_aig_stats, run_vectors_on_simulator
-from sprouthdl.sprouthdl import Signal, UInt, reset_shared_cache
-from sprouthdl.sprouthdl_module import Component
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import StageBasedMultiplierIO
+from spirehdl.helpers import get_yosys_metrics, get_aig_stats, run_vectors_on_simulator
+from spirehdl.spirehdl import Signal, UInt, reset_shared_cache
+from spirehdl.spirehdl_module import Component
+from spirehdl.spirehdl_simulator import Simulator
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +208,7 @@ def test_all_objectives(objective):
 
 def test_objectives_produce_different_configs():
     """Area vs delay objectives should potentially pick different configs for multipliers."""
-    from sprouthdl.arithmetic.eval.auto_config import lookup_best_config
+    from spirehdl.arithmetic.eval.auto_config import lookup_best_config
 
     # 16-bit unsigned multiplier has clear area vs delay tradeoff
     area_cfg, _ = lookup_best_config("*", 16, 16, signed=False, objective="area")
@@ -229,7 +229,7 @@ def test_objectives_produce_different_configs():
 def test_swap_selection():
     """Commutative ops: calling with (a,b) vs (b,a) must pick equal-cost
     hardware, and for at least one asymmetric shape the swap flag must flip."""
-    from sprouthdl.arithmetic.eval.auto_config import lookup_best_config
+    from spirehdl.arithmetic.eval.auto_config import lookup_best_config
     from itertools import product
 
     widths = [1, 2, 4, 8, 16]
@@ -459,7 +459,7 @@ def test_mac_depth_improvement():
     reset_shared_cache()
 
     comp_sep = _Mac(N_BITS)
-    from sprouthdl.arithmetic.int_arithmetic_config import ArithmeticConfig
+    from spirehdl.arithmetic.int_arithmetic_config import ArithmeticConfig
     replace_arithmetic_ops(comp_sep, ArithmeticConfig())
     mod_sep = comp_sep.to_module("MAC_sep")
     aig_sep = get_aig_stats(mod_sep)
@@ -556,7 +556,7 @@ def test_inner_product_depth():
     reset_shared_cache()
 
     comp_fixed = _Dot4(N_BITS)
-    from sprouthdl.arithmetic.int_arithmetic_config import ArithmeticConfig
+    from spirehdl.arithmetic.int_arithmetic_config import ArithmeticConfig
     replace_arithmetic_ops(comp_fixed, ArithmeticConfig())
     mod_fixed = comp_fixed.to_module("Dot4_fixed")
     aig_fixed = get_aig_stats(mod_fixed)

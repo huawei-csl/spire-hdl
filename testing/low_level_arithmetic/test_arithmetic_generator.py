@@ -4,20 +4,20 @@ from pathlib import Path
 import subprocess
 import sys
 
-from sprouthdl.arithmetic.arithmetic_generator import (
+from spirehdl.arithmetic.arithmetic_generator import (
     AdderGeneratorConfig,
     GenerationActions,
     MultiplierGeneratorConfig,
     generate_adder,
     generate_multiplier,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
 
 
 def test_generate_multiplier_api_with_artifacts_and_sim(tmp_path: Path):
@@ -113,7 +113,7 @@ def test_cli_multiplier_smoke(tmp_path: Path):
     cmd = [
         sys.executable,
         "-m",
-        "sprouthdl.arithmetic.arithmetic_generator",
+        "spirehdl.arithmetic.arithmetic_generator",
         "multiplier",
         "--n-bits",
         "4",

@@ -10,8 +10,8 @@ This example demonstrates:
 
 import abc
 from dataclasses import dataclass
-from sprouthdl.sprouthdl_module import Component, Module
-from sprouthdl.sprouthdl import Bool, UInt, Signal
+from spirehdl.spirehdl_module import Component, Module
+from spirehdl.spirehdl import Bool, UInt, Signal
 
 
 # Example 1: Simple Adder Component
@@ -163,7 +163,7 @@ if __name__ == "__main__":
     print("=" * 60)
     
     # Simulate the adder
-    from sprouthdl.sprouthdl_simulator import Simulator
+    from spirehdl.spirehdl_simulator import Simulator
     
     # Create a fresh adder for simulation
     sim_adder = Adder(width=8)

@@ -48,7 +48,7 @@ preserving the separate loop schedules that produce correct hardware.
 ### Before
 
 ```python
-from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
     PartialProductAccumulatorBase,
 )
 
@@ -62,7 +62,7 @@ class MyPPA(PartialProductAccumulatorBase):
 ### After
 
 ```python
-from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
     PartialProductAccumulatorBase,
     SelectionMode,
 )
@@ -82,7 +82,7 @@ To override the PPA's default mode, use `functools.partial`:
 
 ```python
 from functools import partial
-from sprouthdl.arithmetic.int_multipliers.multipliers.mutipliers_ext import (
+from spirehdl.arithmetic.int_multipliers.multipliers.mutipliers_ext import (
     StageBasedMultiplier,
 )
 

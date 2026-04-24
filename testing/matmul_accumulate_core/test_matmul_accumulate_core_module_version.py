@@ -5,23 +5,23 @@ from typing import Iterable, List, Literal, Sequence
 
 import numpy as np
 
-from sprouthdl.aggregate.aggregate_array import Array
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
-from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
-from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spirehdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
     RippleCarryFinalAdder,
 )
-from sprouthdl.helpers import get_yosys_metrics
-from sprouthdl.sprouthdl import Expr, UInt
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.helpers import get_yosys_metrics
+from spirehdl.spirehdl import Expr, UInt
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
 
 
 @dataclass

@@ -5,21 +5,21 @@ from typing import Callable, Iterable, List, Literal, Sequence
 
 import numpy as np
 
-from sprouthdl.aggregate.aggregate_array import Array
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel, is_signed
-from sprouthdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
-from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core_winograd import AdderConfig, MMAcCfg, MMAcDims, MMAcWidths, MatmulAccumulateComponent, MultiplierConfig, build_matmul_accumulate, max_y_width_unsigned
-from sprouthdl.helpers import get_yosys_metrics
-from sprouthdl.sprouthdl import Expr, SInt, Signal, UInt
-from sprouthdl.sprouthdl_module import Component, Module
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel, is_signed
+from spirehdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
+from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_winograd import AdderConfig, MMAcCfg, MMAcDims, MMAcWidths, MatmulAccumulateComponent, MultiplierConfig, build_matmul_accumulate, max_y_width_unsigned
+from spirehdl.helpers import get_yosys_metrics
+from spirehdl.spirehdl import Expr, SInt, Signal, UInt
+from spirehdl.spirehdl_module import Component, Module
+from spirehdl.spirehdl_simulator import Simulator
 
 
 def test_mmac_core_basic_simulation():

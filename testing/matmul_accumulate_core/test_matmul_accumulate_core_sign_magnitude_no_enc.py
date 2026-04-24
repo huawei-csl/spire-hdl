@@ -2,24 +2,24 @@ from __future__ import annotations
 
 import numpy as np
 
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel, is_signed
-from sprouthdl.arithmetic.int_arithmetic_config import AdderConfig
-from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core import MMAcDims, MMAcWidths, max_y_width_unsigned
-from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core_sign_magnitude import (
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel, is_signed
+from spirehdl.arithmetic.int_arithmetic_config import AdderConfig
+from spirehdl.cores.matmul_accumulate.matmul_accumulate_core import MMAcDims, MMAcWidths, max_y_width_unsigned
+from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_sign_magnitude import (
     MMAcEncodedCfg,
     MatmulAccumulateComponent,
     MultiplierConfig,
     SignMagnitudeEncoderConfig,
 )
-from sprouthdl.helpers import get_yosys_metrics
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.helpers import get_yosys_metrics
+from spirehdl.spirehdl_simulator import Simulator
 
 
 def test_mmac_core_sign_magnitude_pipeline():

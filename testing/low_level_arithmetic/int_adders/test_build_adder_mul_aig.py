@@ -1,7 +1,7 @@
 """Round-trip tests for ``build_adder`` / ``build_multiplier`` through the
 AIG bit-level simulator.
 
-These tests were added after a bug where ``sprouthdl_aiger.visit_op2`` did
+These tests were added after a bug where ``spirehdl_aiger.visit_op2`` did
 not sign-extend operands for ``+``/``-`` when the result width exceeded
 the operand widths. The existing adder/multiplier tests exercised only the
 SProut ``Simulator`` (which carries HDLType metadata through the graph),
@@ -23,26 +23,26 @@ from __future__ import annotations
 
 import pytest
 
-from sprouthdl.arithmetic.int_arithmetic_config import (
+from spirehdl.arithmetic.int_arithmetic_config import (
     AdderConfig,
     MultiplierConfig,
     build_adder,
     build_multiplier,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     PPAOption,
     PPGOption,
     MultiplierOption,
     TwoInputAritEncodings,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
-from sprouthdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
     StageBasedMultiplierIO,
 )
-from sprouthdl.helpers import refactor_module_to_aig, run_vectors
-from sprouthdl.sprouthdl import Signal, SInt, UInt, reset_shared_cache
-from sprouthdl.sprouthdl_module import Component
+from spirehdl.helpers import refactor_module_to_aig, run_vectors
+from spirehdl.spirehdl import Signal, SInt, UInt, reset_shared_cache
+from spirehdl.spirehdl_module import Component
 
 
 N_BITS = 8

@@ -2,25 +2,25 @@ from __future__ import annotations
 
 import numpy as np
 
-from sprouthdl.aggregate.aggregate_floating_point import FloatingPointType
-from sprouthdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
-from sprouthdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spirehdl.aggregate.aggregate_floating_point import FloatingPointType
+from spirehdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
+from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
-from sprouthdl.cores.matmul_accumulate.matmul_accumulate_core_float import (
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_float import (
     FpMMAcCfg,
     FpMMAcDims,
     FpMatmulAccumulateComponent,
 )
-from sprouthdl.arithmetic.floating_point.fp_encoding import fp_decode, fp_encode
-from sprouthdl.cores.matmul_accumulate.matmul_test_vectors import generate_fp_matmul_vectors
-from sprouthdl.helpers import get_yosys_metrics, run_vectors_on_simulator
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode, fp_encode
+from spirehdl.cores.matmul_accumulate.matmul_test_vectors import generate_fp_matmul_vectors
+from spirehdl.helpers import get_yosys_metrics, run_vectors_on_simulator
+from spirehdl.spirehdl_simulator import Simulator
 
 
 def _float16_matmul_accumulate(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:

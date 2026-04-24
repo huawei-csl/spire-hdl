@@ -1,6 +1,6 @@
-# Sprout-HDL Examples
+# SpireHDL Examples
 
-This directory contains examples demonstrating various features of Sprout-HDL.
+This directory contains examples demonstrating various features of SpireHDL.
 
 ## Basic Examples
 
@@ -72,7 +72,7 @@ IO ports are defined using Signal objects with specific attributes:
 Example:
 ```python
 from dataclasses import dataclass
-from sprouthdl.sprouthdl import Signal, UInt
+from spirehdl.spirehdl import Signal, UInt
 
 @dataclass
 class IO:

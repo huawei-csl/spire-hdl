@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import random
 
-from sprouthdl.sprouthdl import UInt, reset_shared_cache
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_aiger import AigerExporter
-from sprouthdl.sprouthdl_simulator import Simulator
-from sprouthdl.optimize import (
+from spirehdl.spirehdl import UInt, reset_shared_cache
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_aiger import AigerExporter
+from spirehdl.spirehdl_simulator import Simulator
+from spirehdl.optimize import (
     abc_optimized,
     arithmetic_optimized,
     clear_optimization_cache,

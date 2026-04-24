@@ -1,12 +1,12 @@
 from attr import dataclass
 
 
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, MultiplierTestVectorsExhaustive, to_encoding
-from sprouthdl.helpers import get_aig_stats, get_yosys_metrics, run_vectors
-from sprouthdl.sprouthdl import Signal, UInt
-from sprouthdl.sprouthdl_module import Component
-from sprouthdl.sprouthdl_simulator import Simulator
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import MultiplierTestVectors
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, MultiplierTestVectorsExhaustive, to_encoding
+from spirehdl.helpers import get_aig_stats, get_yosys_metrics, run_vectors
+from spirehdl.spirehdl import Signal, UInt
+from spirehdl.spirehdl_module import Component
+from spirehdl.spirehdl_simulator import Simulator
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import MultiplierTestVectors
 
 # Example 1: Simple Adder Component
 # ==================================

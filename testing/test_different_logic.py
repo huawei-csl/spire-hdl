@@ -6,17 +6,17 @@ from typing import Callable, Dict, List, Tuple
 
 # --- your libs (adjust paths as needed) ---
 from aigverse import equivalence_checking, simulate, write_aiger
-from sprouthdl.aig.aig_aigerverse import _get_aag_sym, file_to_lines, read_aag_into_aig, conv_aag_into_aig
-from sprouthdl.helpers import run_vectors
-from sprouthdl.sprouthdl import UInt, Bool, reset_shared_cache
-from sprouthdl.sprouthdl_aiger import AigerExporter, AigerImporter
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
-from sprouthdl.sprouthdl_module import IOCollector
-from sprouthdl.aig.aig_yosys import verilog_to_aag_via_yosys
-from sprouthdl.arithmetic.floating_point.fp_encoding import fp_decode
-from sprouthdl.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors  # generic EW,FW vectors/decoder
-from sprouthdl.arithmetic.floating_point.sprout_hdl_float_mult_sn import build_fp_mul_sn
+from spirehdl.aig.aig_aigerverse import _get_aag_sym, file_to_lines, read_aag_into_aig, conv_aag_into_aig
+from spirehdl.helpers import run_vectors
+from spirehdl.spirehdl import UInt, Bool, reset_shared_cache
+from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
+from spirehdl.spirehdl_module import IOCollector
+from spirehdl.aig.aig_yosys import verilog_to_aag_via_yosys
+from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
+from spirehdl.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors  # generic EW,FW vectors/decoder
+from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
 
 # Pyosys
 

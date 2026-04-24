@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from typing import List
-from sprouthdl.aggregate.aggregate_register import AggregateRegister
-from sprouthdl.aggregate.hdl_aggregate import HDLAggregate
-from sprouthdl.sprouthdl import (
+from spirehdl.aggregate.aggregate_register import AggregateRegister
+from spirehdl.aggregate.hdl_aggregate import HDLAggregate
+from spirehdl.spirehdl import (
     UInt,
     Wire,
     Expr,
@@ -11,9 +11,9 @@ from sprouthdl.sprouthdl import (
     as_expr,
     reset_shared_cache,
 )
-from sprouthdl.aggregate.aggregate_fixed_point import FixedPoint, FixedPointType
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator  # your HDLAggregate fixed-point type
+from spirehdl.aggregate.aggregate_fixed_point import FixedPoint, FixedPointType
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator  # your HDLAggregate fixed-point type
 
 
 # -------------------------------------------------------------------

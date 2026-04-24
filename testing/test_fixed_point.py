@@ -1,18 +1,18 @@
 from __future__ import annotations
-from sprouthdl.aggregate.aggregate_register import AggregateRegister
-from sprouthdl.aggregate.aggregate_fixed_point import ARITHQuant, FixedPoint, FixedPointType
-from sprouthdl.sprouthdl import HDLType, UInt, as_expr, fit_width
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.aggregate.aggregate_register import AggregateRegister
+from spirehdl.aggregate.aggregate_fixed_point import ARITHQuant, FixedPoint, FixedPointType
+from spirehdl.spirehdl import HDLType, UInt, as_expr, fit_width
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
 
 
-from sprouthdl.sprouthdl import (
+from spirehdl.spirehdl import (
     Expr,
     Const,
     reset_shared_cache,
 )
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
 
 
 def test_sim_aggregate_register():

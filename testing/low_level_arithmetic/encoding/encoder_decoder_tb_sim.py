@@ -1,16 +1,16 @@
-from sprouthdl.arithmetic.encoding.sign_magnitude import (
+from spirehdl.arithmetic.encoding.sign_magnitude import (
     SignMagnitudeToTwosComplementDecoder,
     TwosComplementToSignMagnitudeEncoder,
 )
-from sprouthdl.arithmetic.int_multipliers.eval.testvector_generation import (
+from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import (
     Encoding,
     EncoderDecoderTestVectors,
 )
-from sprouthdl.helpers import run_vectors, run_vectors_on_simulator
-from sprouthdl.sprouthdl_module import Module
-from sprouthdl.sprouthdl_simulator import Simulator
-from sprouthdl.sprouthdl_verilog_testbench import TestbenchGenSimulator
-from sprouthdl.various.vcd_writer import write_vcd
+from spirehdl.helpers import run_vectors, run_vectors_on_simulator
+from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_simulator import Simulator
+from spirehdl.spirehdl_verilog_testbench import TestbenchGenSimulator
+from spirehdl.various.vcd_writer import write_vcd
 
 
 def _run_component(module: Module, vecs, base_filename: str, *, test_name: str, with_clk: bool = False) -> None:
