@@ -26,7 +26,7 @@ from spirehdl.spirehdl_simulator import Simulator
 
 @dataclass
 class MultiplierConfig:
-    """Configuration for choosing between Sprout operator and explicit multiplier."""
+    """Configuration for choosing between SpireHDL operator and explicit multiplier."""
 
     use_operator: bool = False
     multiplier_opt: MultiplierOption | None = None
@@ -60,7 +60,7 @@ class MultiplierConfig:
 
 @dataclass
 class AdderConfig:
-    """Configuration for choosing between Sprout operator and explicit adder."""
+    """Configuration for choosing between SpireHDL operator and explicit adder."""
 
     use_operator: bool = False
     signed: bool = False
@@ -179,7 +179,7 @@ def test_mmac_core_basic_simulation():
     b_width = 8
     c_width = 20
 
-    # use sprout operators
+    # use SpireHDL operators
     #mult_cfg = MultiplierConfig(use_operator=True)
     #add_cfg = AdderConfig(use_operator=True, full_output_bit=True)
 

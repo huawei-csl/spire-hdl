@@ -11,10 +11,10 @@ For cores, generators (e.g. arithmetic units), evaluation scripts, and extra too
 SpireHDL revolves around a small set of core modules:
 
 - **[`spirehdl/spirehdl.py`](src/spirehdl/spirehdl.py)** – the expression DSL.  It provides bit-precise types such as `Bool`, `UInt`, and `SInt`, shared-expression caching, and the overloaded arithmetic / bitwise operators that make the Python syntax feel like an HDL.
-- **[`spirehdl/spirehdl_module.py`](src/spirehdl/spirehdl_module.py)** – structural modeling helpers.  The `Module` class constructs ports, wires, and registers, produces Verilog, and exposes analysis utilities.  The `Component` base class lets you package reusable sub-designs and convert them to or from Sprout modules.  `IOCollector` can rebuild packed ports from bit-level signals when importing external netlists.
+- **[`spirehdl/spirehdl_module.py`](src/spirehdl/spirehdl_module.py)** – structural modeling helpers.  The `Module` class constructs ports, wires, and registers, produces Verilog, and exposes analysis utilities.  The `Component` base class lets you package reusable sub-designs and convert them to or from SpireHDL modules.  `IOCollector` can rebuild packed ports from bit-level signals when importing external netlists.
 - **[`spirehdl/spirehdl_simulator.py`](src/spirehdl/spirehdl_simulator.py)** – a lightweight simulator that can drive inputs, tick clocks, inspect outputs or internal expressions, and capture probes for debugging—all without leaving Python.
 
-Supporting packages add reusable arithmetic building blocks and importer utilities for external netlists when you need to mix handwritten Sprout code with pre-existing IP; see [`mutipliers_ext.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/mutipliers_ext.py) and [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py) for examples.
+Supporting packages add reusable arithmetic building blocks and importer utilities for external netlists when you need to mix handwritten SpireHDL code with pre-existing IP; see [`mutipliers_ext.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/mutipliers_ext.py) and [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py) for examples.
 
 ## Installation
 
@@ -80,7 +80,7 @@ The simulator keeps track of inputs, wires, outputs, and registers, supports `ev
 
 ### 3. Integrate with external tooling
 
-Modules can be exported to Verilog, AIG, or AAG for downstream synthesis, equivalence checking, or integration into larger verification environments.  Import helpers then let you bring optimized or third-party netlists back into Sprout for continued composition and simulation (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py) and [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
+Modules can be exported to Verilog, AIG, or AAG for downstream synthesis, equivalence checking, or integration into larger verification environments.  Import helpers then let you bring optimized or third-party netlists back into SpireHDL for continued composition and simulation (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py) and [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
 
 ## Modules and components in detail
 
@@ -145,11 +145,11 @@ print(module.to_verilog())  # one top module, built from internal components
 
 ### Hierarchical design with components
 
-Components are ideal for assembling hierarchical designs: they let you instantiate another component, adapt its IO, and even swap in a pre-synthesized netlist without leaving Python.  One common pattern wraps a reusable building block with `make_internal()` so that auxiliary logic can surround the core implementation while exposing a compact public interface (see [`mutipliers_ext.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/mutipliers_ext.py)).  A related flow imports an external AIG module, converts it into a `Component`, and calls `from_module(..., make_internal=True)` so the imported logic behaves like a native Sprout block inside a larger generator ([`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).  These techniques extend to Verilog importers and make it straightforward to mix Sprout-authored code with IP produced by external flows.
+Components are ideal for assembling hierarchical designs: they let you instantiate another component, adapt its IO, and even swap in a pre-synthesized netlist without leaving Python.  One common pattern wraps a reusable building block with `make_internal()` so that auxiliary logic can surround the core implementation while exposing a compact public interface (see [`mutipliers_ext.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/mutipliers_ext.py)).  A related flow imports an external AIG module, converts it into a `Component`, and calls `from_module(..., make_internal=True)` so the imported logic behaves like a native SpireHDL block inside a larger generator ([`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).  These techniques extend to Verilog importers and make it straightforward to mix SpireHDL-authored code with IP produced by external flows.
 
 ## Aggregate data types
 
-Sprout includes structured, bit-packable aggregates for cleaner interfaces and bulk assignments ([`aggregate/`](src/spirehdl/aggregate)):
+SpireHDL includes structured, bit-packable aggregates for cleaner interfaces and bulk assignments ([`aggregate/`](src/spirehdl/aggregate)):
 
 - `HDLAggregate` defines the base “pack to bits” API that powers all aggregates ([`hdl_aggregate.py`](src/spirehdl/aggregate/hdl_aggregate.py)).
 - `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or aggregates ([`aggregate_array.py`](src/spirehdl/aggregate/aggregate_array.py)).
@@ -187,7 +187,7 @@ The simulator supports both combinational and sequential designs:
 - `step()` advances the clock, committing register next-state expressions while honoring asynchronous resets.
 - `watch()` and `peek_next()` provide scope-style visibility for debugging complex pipelines.
 
-These capabilities align with the standard Sprout development flow: express a design, validate it in Python, then export it to your synthesis or verification stack.
+These capabilities align with the standard SpireHDL development flow: express a design, validate it in Python, then export it to your synthesis or verification stack.
 
 ## Slices
 We follow the indexing of python also in SpireHDL signals. For example `sig[4:7]` creates a new expression containing of bits 4 and 5 (counted from lsb) of the original expression `sig`.

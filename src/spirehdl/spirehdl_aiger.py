@@ -1,4 +1,3 @@
-# sprout_to_aiger.py
 # Export a SpireHDL Module to an AIG in AIGER ASCII (.aag) format
 # Works with your 'spire_hdl.py' DSL (duck-typing; no hard import required).
 # Tested conceptually with arithmetic & logic-heavy designs (incl. float16/bfloat16 MACs).
@@ -690,7 +689,7 @@ class AigerExporter:
 def export_module_to_aiger(module: Any, file_path: str) -> None:
     """
     Usage:
-        from sprout_to_aiger import export_module_to_aiger
+        from spirehdl.spirehdl_aiger import export_module_to_aiger
         export_module_to_aiger(my_module, "out.aag")
     """
     AigerExporter(module).write_aag(file_path)
@@ -701,7 +700,7 @@ class SpireHDLAdapter(AbstractAdapter):
     """
     Build a SpireHDL Module from an AAG.
     - graph must be a Module instance.
-    - nodes are Sprout expressions (Signal or Expr); we don’t force wires for every AND.
+    - nodes are SpireHDL expressions (Signal or Expr); we don’t force wires for every AND.
     """
     def __init__(self, module: Module):
         super().__init__(module)
@@ -727,11 +726,11 @@ class SpireHDLAdapter(AbstractAdapter):
         return y
 
     def buf(self, node):
-        # no-op in Sprout; expressions can be reused freely
+        # no-op in SpireHDL; expressions can be reused freely
         return node
 
     def const(self, value: bool):
-        # Leverage Sprout’s int→Const coercion (1-bit)
+        # Leverage SpireHDL’s int→Const coercion (1-bit)
         #return 1 if value else 0
         return Const(1, Bool()) if value else Const(0, Bool())
 
@@ -746,7 +745,7 @@ class AigerImporter:
     def __init__(self, lines: List[str]):
         self.lines = lines 
 
-    def get_sprout_module(self, name: str | None = None) -> Module:
+    def get_spirehdl_module(self, name: str | None = None) -> Module:
         if name is None:
             name = "ImportedModule"
         m = conv_aag_into_graph(self.lines,
@@ -776,13 +775,13 @@ def main_small_tst():
 
     # import back to SpireHDL Module
     importer = AigerImporter(aag_lines)
-    sprout_module = importer.get_sprout_module()
+    spirehdl_module = importer.get_spirehdl_module()
 
     # print hdl
     print("Original Module Verilog:")
     print(m.to_verilog())
     print("\nImported Module Verilog:")
-    print(sprout_module.to_verilog())
+    print(spirehdl_module.to_verilog())
 
 
 if __name__ == "__main__":

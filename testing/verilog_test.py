@@ -45,7 +45,7 @@ def main():
         aig = conv_aag_into_aig(aag)
 
         aag_sym = _get_aag_sym(aag)
-        m2 = AigerImporter(aag[:-2]+aag_sym).get_sprout_module()
+        m2 = AigerImporter(aag[:-2]+aag_sym).get_spirehdl_module()
 
         aag2 = AigerExporter(m2).get_aag()
         aig2 = conv_aag_into_aig(aag2)
@@ -186,9 +186,9 @@ def main():
     aag_back = file_to_lines(aag_path)
     aig_back = read_aag_into_aig(aag_path)
 
-    m_back = AigerImporter(aag_back).get_sprout_module()
+    m_back = AigerImporter(aag_back).get_spirehdl_module()
     collector = IOCollector()
-    sprout_collected = collector.group(
+    spirehdl_collected = collector.group(
         m_back,
         {
             "a": UInt(bits_tot),

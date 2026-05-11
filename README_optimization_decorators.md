@@ -37,7 +37,7 @@ Gate counts (AIG AND-gates) before and after optimization:
 | 16-bit multiplier | 15,552 | 2,620 (-83%) | 2,621 (-83%) | 2,621 (-83%) |
 | 8-bit adder | 67 | 79 (+18%) | 79 (+18%) | 79 (+18%) |
 
-Complex arithmetic (multipliers) sees large reductions because the starting AIG from Sprout's expression tree is deliberately naive.  Simple circuits like adders may not benefit (or even grow slightly) due to overhead in the Yosys synthesis pipeline.
+Complex arithmetic (multipliers) sees large reductions because the starting AIG from SpireHDL's expression tree is deliberately naive.  Simple circuits like adders may not benefit (or even grow slightly) due to overhead in the Yosys synthesis pipeline.
 
 ### Parameters
 

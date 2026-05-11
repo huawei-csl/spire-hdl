@@ -95,7 +95,7 @@ if __name__ == "__main__":
 #
 # Conclusion:
 #   Precomputing the Booth b-decode (use1/use2/neg per group) for each B[k,j] and
-#   sharing it across all dim_m rows reduces the sprout IR operator count by ~5%
+#   sharing it across all dim_m rows reduces the SpireHDL IR operator count by ~5%
 #   (−2,160 op nodes) and cuts Op1 (NOT/INV) nodes by 56% (1,280 → 560), since the
 #   decode expressions are counted once instead of dim_m times.
 #

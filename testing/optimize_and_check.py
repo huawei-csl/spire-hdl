@@ -22,10 +22,10 @@ def get_size_mult(ew: int, subnormals=False) -> int:
 
     aag = AigerExporter(m).get_aag()
     aag_sym = _get_aag_sym(aag)
-    m_right_back = AigerImporter(aag[:-2]+aag_sym).get_sprout_module()
+    m_right_back = AigerImporter(aag[:-2]+aag_sym).get_spirehdl_module()
 
     collector = IOCollector()
-    sprout_collected = collector.group(
+    spirehdl_collected = collector.group(
         m_right_back,
         {
             "a": UInt(16),
@@ -61,16 +61,16 @@ def get_size_mult(ew: int, subnormals=False) -> int:
 
     aag = conv_aig_into_aag(aig)
 
-    sprout = AigerImporter(aag[:-2]+aag_sym).get_sprout_module()
+    spirehdl = AigerImporter(aag[:-2]+aag_sym).get_spirehdl_module()
 
     collector = IOCollector()
-    sprout_collected = collector.group(sprout, {
+    spirehdl_collected = collector.group(spirehdl, {
         "a": UInt(16),
         "b": UInt(16),
         "y": UInt(16),
     })
 
-    aag2 = AigerExporter(sprout).get_aag()
+    aag2 = AigerExporter(spirehdl).get_aag()
     aig2 = conv_aag_into_aig(aag2, Aig())
 
     from aigverse import equivalence_checking
@@ -79,9 +79,9 @@ def get_size_mult(ew: int, subnormals=False) -> int:
     run_vectors_aby(m, build_f16_vectors(), label="float16 default cases", decoder=lambda b: fp_decode(b, ew, fw))
     run_vectors_aby(m, build_f16_subnormal_vectors(), label="float16 subnormal cases", decoder=lambda b: fp_decode(b, ew, fw))
 
-    run_vectors_aby(sprout, build_f16_vectors(), label="float16 default cases", decoder=lambda b: fp_decode(b, ew, fw))
-    run_vectors_aby(sprout, build_f16_subnormal_vectors(), label="float16 subnormal cases", decoder=lambda b: fp_decode(b, ew, fw))
-    run_vectors_aby(sprout, build_f16_subnormal_ext_vectors(), label="float16 subnormal ext cases", decoder=lambda b: fp_decode(b, ew, fw))
+    run_vectors_aby(spirehdl, build_f16_vectors(), label="float16 default cases", decoder=lambda b: fp_decode(b, ew, fw))
+    run_vectors_aby(spirehdl, build_f16_subnormal_vectors(), label="float16 subnormal cases", decoder=lambda b: fp_decode(b, ew, fw))
+    run_vectors_aby(spirehdl, build_f16_subnormal_ext_vectors(), label="float16 subnormal ext cases", decoder=lambda b: fp_decode(b, ew, fw))
 
     return aig.size(), DepthAig(aig).num_levels()
 

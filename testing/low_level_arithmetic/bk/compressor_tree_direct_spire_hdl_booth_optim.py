@@ -350,7 +350,7 @@ class MultiplierTestVectors:
         return spec, vecs, None
 
 
-def gen_sprout_module(class_instance: MultiplierCompressorTree) -> Module:
+def gen_spirehdl_module(class_instance: MultiplierCompressorTree) -> Module:
     m = Module(f"Mul{class_instance.n_bits}_ct", with_clock=False, with_reset=False)
     m.component = class_instance
     for sig in class_instance.io.__dict__.values():
@@ -367,7 +367,7 @@ def main():
     n_bits = 4
     signed = False
     mult = MultiplierCompressorTree(a_w=n_bits, b_w=n_bits, signed_a=signed, signed_b=signed)
-    m = gen_sprout_module(mult)
+    m = gen_spirehdl_module(mult)
     # get size in # t transistors
     #print(m.to_verilog())
 

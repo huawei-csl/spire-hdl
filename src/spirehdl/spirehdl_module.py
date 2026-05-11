@@ -107,7 +107,7 @@ class Component(abc.ABC):
     def from_aag_lines(self, aag_lines: List[str], group=True, make_internal=True) -> Self:
         from spirehdl.spirehdl_aiger import AigerImporter
 
-        m = AigerImporter(aag_lines).get_sprout_module()
+        m = AigerImporter(aag_lines).get_spirehdl_module()
         self.from_module(m, make_internal=make_internal, group=group)
 
     def make_internal(self) -> Self:
@@ -559,7 +559,7 @@ class IOCollector:
 
     def group(self, m: Module, spec: Dict[str, Any]) -> Dict[str, Any]:
         """
-        spec: { base_name -> sprout type (e.g., UInt(16)) }
+        spec: { base_name -> SpireHDL type (e.g., UInt(16)) }
         Returns a mapping { base_name -> aggregated Signal } for convenience.
         """
         out: Dict[str, Any] = {}

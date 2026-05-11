@@ -1,4 +1,3 @@
-# sprout_prefix_adder.py
 from dataclasses import dataclass
 import random
 from typing import Any, Dict, List, Set, Tuple, Iterable, Optional, TypeAlias

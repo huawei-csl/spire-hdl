@@ -65,8 +65,8 @@ def roundtrip_and_group(
             # _get_aag_sym not available; proceed without it
             pass
 
-    # 4) Import back to Sprout
-    m2 = AigerImporter(aag_for_import).get_sprout_module()
+    # 4) Import back to SpireHDL
+    m2 = AigerImporter(aag_for_import).get_spirehdl_module()
 
     # 5) Build grouping spec from original ports
     group_spec = _build_group_spec_from_ports(m)

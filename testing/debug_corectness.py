@@ -21,7 +21,7 @@ def main():
     aig = conv_aag_into_aig(aag)
 
     aag_sym = _get_aag_sym(aag)
-    m2 = AigerImporter(aag[:-2]+aag_sym).get_sprout_module()
+    m2 = AigerImporter(aag[:-2]+aag_sym).get_spirehdl_module()
 
     aag2 = AigerExporter(m2).get_aag()
     aig2 = conv_aag_into_aig(aag2)

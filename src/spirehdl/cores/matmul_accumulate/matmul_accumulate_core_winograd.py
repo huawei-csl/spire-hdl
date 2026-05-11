@@ -43,7 +43,7 @@ def inner_product(
 
     summands = mult_k_list + [-fit_type(alpha, SInt(alpha.typ.width)), -fit_type(beta, SInt(beta.typ.width))]
 
-    # same with sprout operators
+    # same with SpireHDL operators
     # for k in range(0, dim_k//2):
     #     mult_k = (a_list[2*k] + b_list[2*k+1]) * (a_list[2*k+1] + b_list[2*k])
     #     mult_k_list.append(mult_k)
@@ -133,7 +133,7 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
             beta_k = adder_tree(beta_ks, self.cfg.add_cfg)
             betas.append(beta_k)
             
-        # same with sprout operators
+        # same with SpireHDL operators
         # alphas = []
         # for i in range(self.cfg.dims.dim_m):
         #     alphas.append(sum([self.A[i, 2*k] * self.A[i, 2*k + 1] for k in range(self.cfg.dims.dim_k//2)]))

@@ -39,8 +39,8 @@ def write_temp_verilog(m: Module, top_name: str | None = None) -> str:
     return path
 
 
-def sprout_to_aig_via_exporter(m: Module):
-    """Sprout → AAGER lines (ASCII) and AIG object (via read_aag_into_aig)."""
+def spirehdl_to_aig_via_exporter(m: Module):
+    """SpireHDL → AAGER lines (ASCII) and AIG object (via read_aag_into_aig)."""
     aag_lines = AigerExporter(m).get_aag()
     # If you want an AIG object as well:
     fd, tmp = tempfile.mkstemp(suffix=".aag")
@@ -51,12 +51,12 @@ def sprout_to_aig_via_exporter(m: Module):
     return aag_lines, aig
 
 
-def roundtrip_aiger_back_to_sprout(aag_lines: List[str], *, name="Imported") -> Module:
-    """Import AAG (with symbols kept) back into Sprout."""
+def roundtrip_aiger_back_to_spirehdl(aag_lines: List[str], *, name="Imported") -> Module:
+    """Import AAG (with symbols kept) back into SpireHDL."""
     # Keep symbol table (last lines); leave as-is if already present
     aag_sym = _get_aag_sym(aag_lines)
     aag_for_import = aag_lines[:-2] + aag_sym if aag_sym else aag_lines
-    return AigerImporter(aag_for_import).get_sprout_module(name)
+    return AigerImporter(aag_for_import).get_spirehdl_module(name)
 
 
 # -----------------------------
@@ -271,11 +271,11 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
     print("Sim (original) …")
     run_vectors(m, vectors, decoder=decoder)
 
-    # 2) Sprout → AIGER (exporter) → AIG
-    aag_lines, aig_exp = sprout_to_aig_via_exporter(m)
+    # 2) SpireHDL → AIGER (exporter) → AIG
+    aag_lines, aig_exp = spirehdl_to_aig_via_exporter(m)
 
-    # optional agi to sprout module
-    # m2 = roundtrip_aiger_back_to_sprout(aag_lines, name=m.name+"_exp")
+    # optional agi to SpireHDL module
+    # m2 = roundtrip_aiger_back_to_spirehdl(aag_lines, name=m.name+"_exp")
 
     # 3) Verilog → Pyosys → AIGER → AIG
     vpath = write_temp_verilog(m, top_name=m.name)
@@ -289,13 +289,13 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
 
     # after you produced aag_path with yosys:
     aag_back_lines = file_to_lines(aag_path)
-    m_back_raw = AigerImporter(aag_back_lines).get_sprout_module("BackRaw")
+    m_back_raw = AigerImporter(aag_back_lines).get_spirehdl_module("BackRaw")
     # exporter AIG from the raw imported module (no IOCollector yet)
-    aag_from_raw, aig_from_raw = sprout_to_aig_via_exporter(m_back_raw)
+    aag_from_raw, aig_from_raw = spirehdl_to_aig_via_exporter(m_back_raw)
     # yosys AIG
     aig_yosys = read_aag_into_aig(aag_path)
 
-    assert equivalence_checking(aig_from_raw, aig_yosys), "Importer produced a non-equivalent Sprout netlist BEFORE regrouping"
+    assert equivalence_checking(aig_from_raw, aig_yosys), "Importer produced a non-equivalent SpireHDL netlist BEFORE regrouping"
 
     # Normalize PI order (by name) before equivalence
     order_exp, po_order_exp = build_io_order(aag_lines)  # e.g., ["a[0]",...,"b[0]",...]
@@ -313,10 +313,10 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
         print("AIG equivalence (exporter vs pyosys) …")
         assert equivalence_checking(aig_exp, aig_pyo), "AIGs not equivalent!"
 
-    # 5) AAG (with symbols) → Sprout
+    # 5) AAG (with symbols) → SpireHDL
     aag_back = file_to_lines(aag_path)
-    m_back = AigerImporter(aag_back).get_sprout_module(m.name + "_back")
-    # m_back = roundtrip_aiger_back_to_sprout(aag_back, name=m.name + "_back")
+    m_back = AigerImporter(aag_back).get_spirehdl_module(m.name + "_back")
+    # m_back = roundtrip_aiger_back_to_spirehdl(aag_back, name=m.name + "_back")
 
     # 6) Regroup I/Os to match original port widths
     IOCollector().group(m_back, spec)

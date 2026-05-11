@@ -18,7 +18,7 @@ from spirehdl.spirehdl import Const, Expr, Op2, SInt, Signal, UInt, fit_type
 
 @dataclass
 class MultiplierConfig:
-    """Configuration for choosing between Sprout operator and explicit multiplier."""
+    """Configuration for choosing between SpireHDL operator and explicit multiplier."""
 
     use_operator: bool = False
     multiplier_opt: MultiplierOption | None = None
@@ -31,7 +31,7 @@ class MultiplierConfig:
 
 @dataclass
 class AdderConfig:
-    """Configuration for choosing between Sprout operator and explicit adder."""
+    """Configuration for choosing between SpireHDL operator and explicit adder."""
 
     use_operator: bool = False
     encoding: Encoding = Encoding.unsigned
@@ -135,7 +135,7 @@ def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig | ArithmeticAutoConfig)
 
 @dataclass
 class SubtractorConfig:
-    """Configuration for choosing between Sprout operator and explicit subtractor."""
+    """Configuration for choosing between SpireHDL operator and explicit subtractor."""
 
     use_operator: bool = False
     encoding: Encoding = Encoding.unsigned

@@ -165,7 +165,7 @@ class ConfiguredMultiplier(StageBasedMultiplierBasic):
         )
 
 
-def gen_sprout_module(mult: ConfiguredMultiplier) -> Module:
+def gen_spirehdl_module(mult: ConfiguredMultiplier) -> Module:
     return mult.to_module(f"Mul{mult.config.a_width}_ct_booth_opt")
 
 
@@ -182,7 +182,7 @@ def main() -> None:
         optim_type="area",
     )
 
-    module = gen_sprout_module(mult)
+    module = gen_spirehdl_module(mult)
     transistor_count = get_yosys_transistor_count(module, n_iter_optimizations=10)
     print(f"Yosys-reported transistor count: {transistor_count}")
 

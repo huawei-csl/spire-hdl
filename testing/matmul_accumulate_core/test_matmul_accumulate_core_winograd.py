@@ -33,7 +33,7 @@ def test_mmac_core_basic_simulation():
     signed_io_type = True
     n_iter_optimizations = 0  # none for default
 
-    # use sprout operators
+    # use SpireHDL operators
     # mult_cfg = MultiplierConfig(use_operator=True)
     # add_cfg = AdderConfig(use_operator=True, full_output_bit=True)
 

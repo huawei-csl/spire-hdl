@@ -156,7 +156,7 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
 
     def elaborate(self) -> None:
 
-        m = AigerImporter(self.f_aag_lines(self.aw, self.bw, self.a_encoding, self.b_encoding)).get_sprout_module()
+        m = AigerImporter(self.f_aag_lines(self.aw, self.bw, self.a_encoding, self.b_encoding)).get_spirehdl_module()
 
         this_class = self
 
