@@ -1,12 +1,19 @@
-# SpireHDL
+<div align="center">
+  <img src="imgs/spire-hdl.png" alt="SpireHDL" width="250">
+</div>
 
-SpireHDL is a Python embedded domain-specific language (DSL) for building digital hardware in a concise, composable way.  It lets you describe logic with Python expressions, compile the result to synthesizable Verilog or AIG/AAG netlists, and iterate quickly with a built-in cycle-accurate simulator.
+<br>
 
-For cores, generators (e.g. arithmetic units), evaluation scripts, and extra tooling notes, see [`README_cores_extras.md`](README_cores_extras.md).
+A modern Python HDL that compiles concise, composable hardware descriptions to synthesizable Verilog and AIG/AAG netlists — with synthesis optimization and a cycle-accurate simulator built in.
 
-![SpireHDL](imgs/spire_hdl.png)
+- **Designed for humans and agents to be effective** — a small, regular surface that reads well to engineers and LLMs alike
+- **Reduces area and delay vs. a traditional Verilog flow** — optimization is part of the compile, not an afterthought
+- **Integrated with ABC and mockturtle** — modern synthesis optimization wired directly into the compilation pipeline
+- **Arithmetic library with automated replacement** — swap adders, multipliers, and FP cores against an area/delay objective
+- **Cycle-accurate Python simulator** — drive inputs, tick clocks, inspect any expression, and capture probes without leaving Python
+- **Content-addressed optimization cache** — instant re-runs via `@flowy_optimized` / `@abc_optimized` decorators
 
-## Project overview
+# Overview
 
 SpireHDL revolves around a small set of core modules:
 
@@ -14,7 +21,14 @@ SpireHDL revolves around a small set of core modules:
 - **[`spirehdl/spirehdl_module.py`](src/spirehdl/spirehdl_module.py)** – structural modeling helpers.  The `Module` class constructs ports, wires, and registers, produces Verilog, and exposes analysis utilities.  The `Component` base class lets you package reusable sub-designs and convert them to or from SpireHDL modules.  `IOCollector` can rebuild packed ports from bit-level signals when importing external netlists.
 - **[`spirehdl/spirehdl_simulator.py`](src/spirehdl/spirehdl_simulator.py)** – a lightweight simulator that can drive inputs, tick clocks, inspect outputs or internal expressions, and capture probes for debugging—all without leaving Python.
 
-Supporting packages add reusable arithmetic building blocks and importer utilities for external netlists when you need to mix handwritten SpireHDL code with pre-existing IP; see [`mutipliers_ext.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/mutipliers_ext.py) and [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py) for examples.
+### Further reading
+
+Other markdown documents in this repository:
+
+- [`README_cores_extras.md`](README_cores_extras.md) — cores, generators, evaluation scripts, and extra tooling notes
+- [`README_arithmetic_optimization.md`](README_arithmetic_optimization.md) — automatic arithmetic replacement with `replace_arithmetic_ops` (adders, multipliers, subtractors)
+- [`README_optimization_decorators.md`](README_optimization_decorators.md) — the `@abc_optimized` / `@flowy_optimized` circuit optimization decorators
+- [`testing/examples/README.md`](testing/examples/README.md) — example designs exercising SpireHDL features
 
 ## Installation
 
