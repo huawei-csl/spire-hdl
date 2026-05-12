@@ -385,15 +385,25 @@ class Module:
         return comp
 
     # Verilog generation
-    def to_verilog_lines(self, collect_signals=True) -> list[str]:
+    def to_verilog_lines(self, collect_signals=True, simplify=False, cse=True) -> list[str]:
 
         if collect_signals:
             self.collect_signals()
+            # Post-construction peephole simplification (opt_expr / opt_muxtree analogue): constant folding, boolean
+            # identities, trivial-mux collapse, and mux-tree guard substitution. Runs before CSE so that any newly-
+            # exposed shared sub-expressions (e.g. mux(c, x, x) → x exposes x as a sharing target) get collapsed
+            # afterward. Re-collect signals so auto-shared wires orphaned by guard substitution drop out of _signals
+            # (and don't emit as dead `assign sig_N = …` lines).
+            if simplify:
+                from spirehdl.spirehdl_simplify import apply_simplify
+                if apply_simplify(self):
+                    self.collect_signals()
             # Post-construction structural CSE (Common Subexpression Elimination): collapse any
             # duplicate subtrees. Then re-collect so the freshly-created shared wires land in self._signals for emission.
-            from spirehdl.spirehdl_cse import apply_structural_cse
-            if apply_structural_cse(self):
-                self.collect_signals()
+            if cse:
+                from spirehdl.spirehdl_cse import apply_structural_cse
+                if apply_structural_cse(self):
+                    self.collect_signals()
 
         # Basic checks
         for s in self._signals:
@@ -468,12 +478,12 @@ class Module:
         lines.append("endmodule")
         return lines
 
-    def to_verilog(self) -> str:
-        lines = self.to_verilog_lines() + [""]  # final newline
+    def to_verilog(self, simplify=False, cse=True) -> str:
+        lines = self.to_verilog_lines(simplify=simplify, cse=cse) + [""]  # final newline
         return "\n".join(lines)
 
-    def to_verilog_file(self, filepath: str) -> None:
-        verilog_str = self.to_verilog()
+    def to_verilog_file(self, filepath: str, simplify=False, cse=True) -> None:
+        verilog_str = self.to_verilog(simplify=simplify, cse=cse)
         with open(filepath, "w") as f:
             f.write(verilog_str)
 
