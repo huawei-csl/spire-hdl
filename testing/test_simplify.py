@@ -364,7 +364,7 @@ def test_to_verilog_eliminates_redundant_addition():
     a = m.input(UInt(8), "a")
     y = m.output(UInt(8), "y")
     y <<= a + Const(0, UInt(8))
-    v = m.to_verilog()
+    v = m.to_verilog(simplify=True)
     # No `+ ` operator should remain in the assignments (the input `a` is wired straight to `y` via a one-line assign).
     assert re.search(r"\+", v) is None, f"Expected `+` to be eliminated:\n{v}"
 
@@ -376,7 +376,7 @@ def test_to_verilog_collapses_constant_mux():
     b = m.input(UInt(8), "b")
     y = m.output(UInt(8), "y")
     y <<= mux(Const(1, UInt(1)), a, b)
-    v = m.to_verilog()
+    v = m.to_verilog(simplify=True)
     assert " ? " not in v, f"Expected ternary to be eliminated:\n{v}"
 
 
