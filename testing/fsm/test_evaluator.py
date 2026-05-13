@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.fsm._evaluator import eval_with
+from spirehdl.optimize.fsm._evaluator import eval_with
 from spirehdl.spirehdl import Bool, Const, UInt, cat, mux
 from spirehdl.spirehdl_module import Module
 

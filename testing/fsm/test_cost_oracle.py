@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.fsm._cost_oracle import make_cost_fn, make_yosys_cost_fn
-from spirehdl.fsm._emit import restore_encoding
+from spirehdl.optimize.fsm._cost_oracle import make_cost_fn, make_yosys_cost_fn
+from spirehdl.optimize.fsm._emit import restore_encoding
 from spirehdl.spirehdl import UInt, mux
 from spirehdl.spirehdl_module import Module
 from spirehdl.spirehdl_state import Encoding, State, state

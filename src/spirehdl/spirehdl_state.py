@@ -102,7 +102,7 @@ class State:
         # minimisation, encoding search) can recognise state Consts
         # unambiguously by identity rather than by (value, width), which
         # would collide with literal zeros, register inits, mask constants,
-        # etc. The sentinels are read by helpers in `spirehdl.fsm.*`.
+        # etc. The sentinels are read by helpers in `spirehdl.optimize.fsm.*`.
         for name, val in cls._values.items():
             c = Const(val, typ)
             c._state_class = cls
@@ -121,8 +121,8 @@ class State:
 #
 #   from spirehdl.spirehdl_state import optimized_fsm, optimized_encoding, ...
 #
-# The implementation lives in `spirehdl.fsm`. Importing lazily here avoids a
-# circular import on module load (spirehdl.fsm imports from this module).
+# The implementation lives in `spirehdl.optimize.fsm`. Importing lazily here avoids a
+# circular import on module load (spirehdl.optimize.fsm imports from this module).
 # ---------------------------------------------------------------------------
 
 def __getattr__(name):  # PEP 562 module-level __getattr__
@@ -137,6 +137,6 @@ def __getattr__(name):  # PEP 562 module-level __getattr__
         "equivalence_classes",
     }
     if name in _exports:
-        from spirehdl import fsm as _fsm
+        from spirehdl.optimize import fsm as _fsm
         return getattr(_fsm, name)
     raise AttributeError(f"module 'spirehdl.spirehdl_state' has no attribute {name!r}")

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.fsm._emit import restore_encoding
-from spirehdl.fsm._encoding_search import search_encoding
+from spirehdl.optimize.fsm._emit import restore_encoding
+from spirehdl.optimize.fsm._encoding_search import search_encoding
 from spirehdl.spirehdl_state import Encoding, State, state
 
 

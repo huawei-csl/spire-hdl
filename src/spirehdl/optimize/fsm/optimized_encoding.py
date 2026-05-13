@@ -25,10 +25,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, Literal
 
-from spirehdl.fsm._capture import SharedCacheSnapshot
-from spirehdl.fsm._cost_oracle import make_cost_fn
-from spirehdl.fsm._encoding_search import search_encoding
-from spirehdl.fsm._walker import find_state_consts
+from spirehdl.optimize.fsm._capture import SharedCacheSnapshot
+from spirehdl.optimize.fsm._cost_oracle import make_cost_fn
+from spirehdl.optimize.fsm._encoding_search import search_encoding
+from spirehdl.optimize.fsm._walker import find_state_consts
 
 if TYPE_CHECKING:
     from spirehdl.spirehdl_module import Module
@@ -122,7 +122,7 @@ class optimized_encoding:
 
         # Commit the chosen encoding. The cost_fn already restored after the
         # final trial — re-apply the winner here so it sticks.
-        from spirehdl.fsm._emit import apply_encoding
+        from spirehdl.optimize.fsm._emit import apply_encoding
         apply_encoding(self.state_cls, best, width=self.width)
         return False
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.fsm._emit import apply_encoding, restore_encoding, snapshot_encoding
+from spirehdl.optimize.fsm._emit import apply_encoding, restore_encoding, snapshot_encoding
 from spirehdl.spirehdl import Bool, mux
 from spirehdl.spirehdl_module import Module
 from spirehdl.spirehdl_state import Encoding, State, state
@@ -51,7 +51,7 @@ def test_apply_encoding_propagates_to_existing_expression_tree():
     apply_encoding(S, {"A": 3, "B": 2, "C": 1, "D": 0})
 
     # The Const objects in the driver tree are the SAME objects we mutated.
-    from spirehdl.fsm._walker import find_state_consts
+    from spirehdl.optimize.fsm._walker import find_state_consts
     consts = find_state_consts([out._driver], S)
     values = {c._state_name: c.value for c in consts}
     assert values["A"] == 3

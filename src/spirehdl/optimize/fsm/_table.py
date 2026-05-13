@@ -17,8 +17,8 @@ from dataclasses import dataclass, field
 from itertools import product
 from typing import Sequence, TYPE_CHECKING
 
-from spirehdl.fsm._evaluator import eval_with
-from spirehdl.fsm._walker import find_input_signals
+from spirehdl.optimize.fsm._evaluator import eval_with
+from spirehdl.optimize.fsm._walker import find_input_signals
 
 if TYPE_CHECKING:
     from spirehdl.spirehdl import Signal

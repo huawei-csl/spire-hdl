@@ -1,7 +1,7 @@
 """SharedCacheSnapshot (Step 3 of the FSM-encoding-search plan)."""
 from __future__ import annotations
 
-from spirehdl.fsm._capture import SharedCacheSnapshot
+from spirehdl.optimize.fsm._capture import SharedCacheSnapshot
 from spirehdl.spirehdl import UInt
 from spirehdl.spirehdl_module import Module
 

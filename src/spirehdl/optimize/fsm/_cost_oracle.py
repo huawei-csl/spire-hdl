@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Callable, Literal, TYPE_CHECKING
 
-from spirehdl.fsm._emit import apply_encoding, restore_encoding, snapshot_encoding
+from spirehdl.optimize.fsm._emit import apply_encoding, restore_encoding, snapshot_encoding
 from spirehdl.helpers import get_aig_stats, get_yosys_metrics
 
 if TYPE_CHECKING:

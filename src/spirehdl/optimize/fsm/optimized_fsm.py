@@ -25,13 +25,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Sequence
 
-from spirehdl.fsm._capture import SharedCacheSnapshot
-from spirehdl.fsm._emit import apply_encoding
-from spirehdl.fsm._hopcroft import minimize_fsm
-from spirehdl.fsm._table import (
+from spirehdl.optimize.fsm._capture import SharedCacheSnapshot
+from spirehdl.optimize.fsm._emit import apply_encoding
+from spirehdl.optimize.fsm._hopcroft import minimize_fsm
+from spirehdl.optimize.fsm._table import (
     TooLargeForExhaustiveExtraction, extract_transition_table,
 )
-from spirehdl.fsm._walker import find_state_consts
+from spirehdl.optimize.fsm._walker import find_state_consts
 
 if TYPE_CHECKING:
     from spirehdl.spirehdl import Signal

@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from spirehdl.fsm._table import TransitionTable
+    from spirehdl.optimize.fsm._table import TransitionTable
 
 
 def minimize_fsm(table: "TransitionTable") -> dict[int, int]:

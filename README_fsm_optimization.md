@@ -1,7 +1,7 @@
 # FSM and State-Encoding Optimization
 
 Two opt-in context managers in
-[`spirehdl/fsm/`](src/spirehdl/fsm/) add automatic optimization passes on
+[`spirehdl/optimize/fsm/`](src/spirehdl/optimize/fsm/) add automatic optimization passes on
 top of the basic [`State`](README_state_machines.md) API:
 
 | Wrapper | What it does | When to use it |

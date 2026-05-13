@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.fsm._emit import restore_encoding
+from spirehdl.optimize.fsm._emit import restore_encoding
 from spirehdl.spirehdl import Bool, UInt, mux
 from spirehdl.spirehdl_module import Module
 from spirehdl.spirehdl_state import (

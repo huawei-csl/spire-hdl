@@ -1,7 +1,7 @@
 """Walker (Step 4 of the FSM-encoding-search plan)."""
 from __future__ import annotations
 
-from spirehdl.fsm._walker import (
+from spirehdl.optimize.fsm._walker import (
     find_input_signals, find_state_consts, is_state_const, walk,
 )
 from spirehdl.spirehdl import Bool, Const, UInt, cat, mux

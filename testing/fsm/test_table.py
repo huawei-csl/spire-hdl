@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.fsm._emit import restore_encoding
-from spirehdl.fsm._table import (
+from spirehdl.optimize.fsm._emit import restore_encoding
+from spirehdl.optimize.fsm._table import (
     MAX_INPUT_COMBINATIONS, TooLargeForExhaustiveExtraction, extract_transition_table,
 )
 from spirehdl.spirehdl import Bool, UInt
