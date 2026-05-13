@@ -7,7 +7,7 @@ top of the basic [`State`](README_state_machines.md) API:
 | Wrapper | What it does | When to use it |
 |---|---|---|
 | `optimized_fsm(reg, module, ...)` | Hopcroft DFA state minimization. Merges behaviourally-equivalent states by mutating the State Consts in place, then runs the peephole simplifier. | When your FSM has redundant states (e.g. paper-style "easy to write" form). |
-| `optimized_encoding(state_cls, module, ...)` | Searches bit-assignments for a `State` subclass under a Yosys synthesis metric (cells / wires / transistors). | Whenever a `State` subclass appears in the design — FSM next-state, ALU opcode dispatch, decoder lookup, register-file tag, etc. |
+| `optimized_encoding(state_cls, module, ...)` | Searches bit-assignments for a `State` subclass under an in-process synthesis metric (cells / wires / transistors via pyosys, or aig_gates / aig_depth via aigverse). | Whenever a `State` subclass appears in the design — FSM next-state, ALU opcode dispatch, decoder lookup, register-file tag, etc. |
 
 Either wrapper is usable in isolation; **nest them** when both passes are
 wanted. Critically, the user's FSM body inside the wrapper is *byte-identical*
@@ -169,7 +169,7 @@ with optimized_encoding(MyStates, module=m, search="swap"):
 |-----------|---------|-------------|
 | `state_cls` | — | The State subclass to re-encode. |
 | `module` | — | The `Module` whose Verilog gets synthesised for each candidate assignment. |
-| `objective` | `"cells"` | Yosys metric to minimise. One of `cells`, `wires`, `transistors`. |
+| `objective` | `"cells"` | Synthesis metric to minimise. One of `cells`, `wires`, `transistors` (via in-process pyosys), `aig_gates`, `aig_depth` (via aigverse). |
 | `search` | `"auto"` | Strategy (see ladder above). |
 | `width` | `state_cls._width` | Width of the encoding. Width-changing search (widen for `ONEHOT`, etc.) is **future work** — must equal the current width. |
 | `cost_fn` | `None` | Custom callable `assignment → float`. When `None`, defaults to `make_yosys_cost_fn`. |
@@ -289,11 +289,10 @@ states that Hopcroft just merged.
   - `test_optimized_fsm.py` — case10 (7→4 classes), already-minimal FSM,
     `minimize=False` no-op, post-wrapper simulation parity.
   - `test_optimized_encoding.py` — ALU-style dispatch under a synthetic
-    cost (no Yosys dependency); also verifies that an empty `with` block
-    is a no-op.
-  - `test_nested_wrappers.py` — case10 with both wrappers nested, both a
-    synthetic-cost variant and a real-Yosys variant (the latter
-    auto-skips when `yosys` isn't on `PATH`).
+    cost; also verifies that an empty `with` block is a no-op.
+  - `test_nested_wrappers.py` — case10 with both wrappers nested,
+    synthetic-cost and real-synth variants (both run unconditionally —
+    the cost oracle uses in-process pyosys + aigverse).
 
 Run them (from the spire-hdl repo root) with:
 

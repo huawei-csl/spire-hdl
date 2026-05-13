@@ -5,12 +5,11 @@ Inner ``__exit__`` (``optimized_fsm``) runs first → Hopcroft shrinks the
 state set; outer ``__exit__`` (``optimized_encoding``) then searches
 bit-assignments over the survivors.
 
-The yosys-based path requires the yosys binary on PATH; without it we fall
-back to a synthetic cost_fn that exercises the wiring deterministically.
+The default cost oracle uses in-process pyosys + aigverse, so both the
+synthetic-cost and real-synth variants run unconditionally (no `yosys`
+binary required).
 """
 from __future__ import annotations
-
-import shutil
 
 import pytest
 
@@ -21,10 +20,6 @@ from spirehdl.spirehdl_module import Module
 from spirehdl.spirehdl_state import (
     Encoding, State, optimized_encoding, optimized_fsm, state,
 )
-
-
-HAS_YOSYS = shutil.which("yosys") is not None
-requires_yosys = pytest.mark.skipif(not HAS_YOSYS, reason="yosys not on PATH")
 
 
 class Case10(State, encoding=Encoding.BINARY):
@@ -113,15 +108,12 @@ def test_nested_wrappers_minimize_then_search_synthetic():
     assert v["S5"] == 0
 
 
-@requires_yosys
-def test_nested_wrappers_case10_real_yosys_synth():
-    """End-to-end with the real yosys cost oracle. We don't insist on a
-    specific cell count — just that the nested wrappers produce a valid
-    synthesised module and don't regress on the original. Cells after the
+def test_nested_wrappers_case10_real_synth():
+    """End-to-end with the real (pyosys-backed) cost oracle. We don't insist
+    on a specific cell count — just that the nested wrappers produce a valid
+    synthesisable module and don't regress on the original. Cells after the
     pipeline must be <= cells before (i.e. optimisation is non-negative)."""
-    import tempfile
-    from pathlib import Path
-    from spirehdl.fsm._cost_oracle import _yosys_stat
+    from spirehdl.fsm._cost_oracle import _measure
 
     # Baseline: build without wrappers, synth, record cells.
     m_base = Module("case10_base", with_clock=True, with_reset=False)
@@ -129,11 +121,7 @@ def test_nested_wrappers_case10_real_yosys_synth():
     out_b = m_base.output(UInt(1), "out")
     reg_b = m_base.reg(Case10.typ, "state_reg", init=Case10.S0)
     _build_case10_body(reg_b, out_b, x_b)
-    with tempfile.TemporaryDirectory() as tmp:
-        vp = Path(tmp) / "case10_base.v"
-        m_base.to_verilog_file(str(vp))
-        base_stats = _yosys_stat(vp, "case10_base")
-    cells_base = base_stats["cells"]
+    cells_base = _measure(m_base, "cells")
 
     # Reset Case10's encoding before building the optimised version.
     restore_encoding(Case10, {"S0": 0, "S1": 1, "S2": 2, "S3": 3,
@@ -147,14 +135,10 @@ def test_nested_wrappers_case10_real_yosys_synth():
     with optimized_encoding(Case10, module=m_opt, search="exhaustive"):
         with optimized_fsm(reg_o, module=m_opt, minimize=True, outputs=[out_o]):
             _build_case10_body(reg_o, out_o, x_o)
-    with tempfile.TemporaryDirectory() as tmp:
-        vp = Path(tmp) / "case10_opt.v"
-        m_opt.to_verilog_file(str(vp))
-        opt_stats = _yosys_stat(vp, "case10_opt")
-    cells_opt = opt_stats["cells"]
+    cells_opt = _measure(m_opt, "cells")
 
     # The wrapper must not regress — and should strictly improve in practice
     # (case10 was the motivating benchmark).
-    assert cells_opt != float("inf"), f"yosys synth of optimised module failed: {opt_stats}"
+    assert cells_opt != float("inf"), f"synth of optimised module failed"
     assert cells_opt <= cells_base, (
         f"optimisation regressed: baseline {cells_base} → wrapped {cells_opt}")

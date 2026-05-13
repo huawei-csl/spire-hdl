@@ -11,7 +11,8 @@ On ``__exit__``:
 1. Verify the State class was actually referenced inside the with-block by
    walking ``_SharedCache.new_wires + state_cls Const objects`` (the
    ``_SharedCache`` snapshot/diff capture from Step 3).
-2. Build a cost function via ``_cost_oracle.make_yosys_cost_fn``.
+2. Build a cost function via ``_cost_oracle.make_cost_fn`` (pyosys + aigverse,
+   in-process — no `yosys` binary required).
 3. Run ``search_encoding`` with the chosen strategy.
 4. Apply the winning bit-assignment via ``apply_encoding``.
 
@@ -25,7 +26,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Literal
 
 from spirehdl.fsm._capture import SharedCacheSnapshot
-from spirehdl.fsm._cost_oracle import make_yosys_cost_fn
+from spirehdl.fsm._cost_oracle import make_cost_fn
 from spirehdl.fsm._encoding_search import search_encoding
 from spirehdl.fsm._walker import find_state_consts
 
@@ -35,7 +36,9 @@ if TYPE_CHECKING:
 
 
 Strategy = Literal["predefined", "exhaustive", "swap", "anneal", "auto"]
-Objective = Literal["cells", "wires", "transistors"]
+Objective = Literal[
+    "cells", "wires", "transistors", "aig_gates", "aig_depth",
+]
 
 
 class optimized_encoding:
@@ -48,13 +51,13 @@ class optimized_encoding:
     module : Module
         The Module the user populates inside the ``with`` block. Required so
         the cost oracle can synthesise candidate encodings.
-    objective : "cells" | "wires" | "transistors"
+    objective : "cells" | "wires" | "transistors" | "aig_gates" | "aig_depth"
         Synthesis metric to minimise.
     search : strategy name (see ``_encoding_search.search_encoding``)
     width : optional int (currently must equal ``state_cls._width``)
     cost_fn : optional Callable[[assignment], float]
         Custom cost function. When ``None`` (default), uses
-        ``make_yosys_cost_fn``.
+        ``_cost_oracle.make_cost_fn`` (in-process pyosys + aigverse).
     """
 
     def __init__(
@@ -101,7 +104,7 @@ class optimized_encoding:
         if not found:
             return False
 
-        cost_fn = self.cost_fn or make_yosys_cost_fn(
+        cost_fn = self.cost_fn or make_cost_fn(
             self.module, self.state_cls, objective=self.objective,
         )
 
