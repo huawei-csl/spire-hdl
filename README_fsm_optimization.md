@@ -228,6 +228,79 @@ has happened.
 
 ---
 
+## Benchmark results
+
+Two reference designs run end-to-end through the wrappers. The full
+reproducer is [`testing/fsm/bench_fsm_optimize.py`](testing/fsm/bench_fsm_optimize.py)
+(run via `PYTHONPATH=src python testing/fsm/bench_fsm_optimize.py`); both
+benchmarks use `search="swap"` (4 restarts × 200 iters, deterministic
+internal `random.Random(0)`) so results are reproducible.
+
+### Case 1 — 7-state sequence detector (sequential)
+
+A Moore FSM with four pairs of behaviourally-equivalent states — the
+canonical [`case10`](testing/fsm/test_nested_wrappers.py) used throughout
+the unit tests. Hopcroft merges the 7 states into 4 equivalence classes
+(`{S0,S3}, {S1}, {S2,S4,S6}, {S5}`); the encoding search then picks the
+best bit-assignment over the survivors. Metric: yosys `cells` /
+`estimated_num_transistors` (sequential designs can't go through aigverse).
+
+| Variant | cells | transistors |
+|---|---|---|
+| baseline (declared `Encoding.BINARY`, no wrappers) | 95 | 652 |
+| `+ optimized_encoding(Seq, objective="cells")` | **77 (-18.9%)** | **512 (-21.5%)** |
+| `+ optimized_fsm(reg, minimize=True)` | **53 (-44.2%)** | **360 (-44.8%)** |
+| `+ both` (nested, encoding search runs over the post-Hopcroft groups) | **29 (-69.5%)** | **206 (-68.4%)** |
+
+The two wrappers compose multiplicatively: each on its own beats the
+baseline, and together they reach a ~3× reduction over the naive design.
+Nesting wins because Hopcroft shrinks the search space (4 groups instead
+of 7) before the encoding search runs, and a smaller space lets `swap`
+find a better optimum within the same evaluation budget.
+
+### Case 2 — 8-opcode CPU control-word decoder (combinational)
+
+A small instruction decoder mapping 8 opcodes (`LOAD/STORE/ADD/SUB/AND/OR/JMP/BEQ`)
+to 5 control outputs (`mem_en`, `we`, `alu_en`, `is_arith`, `br_en`). Each
+output is a disjunction of opcode-equality tests — exactly the pattern
+where encoding choice matters: if the opcodes in a group happen to share
+a bit, the whole disjunction collapses to a single bit-test.
+
+```python
+class Op(State, encoding=Encoding.BINARY):
+    LOAD = state(); STORE = state()
+    ADD  = state(); SUB   = state()
+    AND_ = state(); OR_   = state()
+    JMP  = state(); BEQ   = state()
+
+with optimized_encoding(Op, module=m, objective="cells"):
+    mem_en   <<= (op == Op.LOAD) | (op == Op.STORE)
+    we       <<= (op == Op.STORE)
+    alu_en   <<= (op == Op.ADD)  | (op == Op.SUB) | (op == Op.AND_) | (op == Op.OR_)
+    is_arith <<= (op == Op.ADD)  | (op == Op.SUB)
+    br_en    <<= (op == Op.JMP)  | (op == Op.BEQ)
+```
+
+| Variant | cells | transistors |
+|---|---|---|
+| baseline (declared `Encoding.BINARY`, no wrapper) | 18 | 102 |
+| `+ optimized_encoding(Op, objective="cells")` | **6 (-66.7%)** | **42 (-58.8%)** |
+
+A 3× reduction with one context manager — no manual encoding tuning,
+no separate Verilog rewrite. The search discovers that placing each
+disjunction-group on a contiguous bit-range makes the four wide ORs
+collapse into one bit-test apiece, which is exactly the win a skilled
+CPU-decoder author would aim for by hand.
+
+> The AIG metrics (`aig_gates`, `aig_depth`) do not move on this design
+> — aigverse's elaborate optimization already reaches the minimum
+> representation regardless of encoding, so the encoding effect only
+> appears in metrics that preserve the case-decoder structure (yosys
+> `cells` / `transistors`). Pick `objective` to match the metric you
+> actually care about.
+
+---
+
 ## Under the hood (in one screen)
 
 **Sentinel-based detection.** When you declare a `State` subclass, every

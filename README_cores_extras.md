@@ -232,6 +232,7 @@ For some scripts you might need to add `PYTHONPATH=$(pwd)` before running the co
 - probabliy not a nice pattern: type(elem).wire_like(elem), better do -> elem.get_wire_clone()
 - in testing/test_matmul_accumulate_core.py, etc use vec.to_list() to generate io dict -> to dataclass/named tuple in a wrapper componnet
 - new synthax of control strucutres is _if, _else. maybe change to when and otherwise or elsewhen, so we can drop the underscore.
+- document aggregate types
 
 Contributions are welcome—feel free to open issues or submit pull requests with improvements or new hardware components.
 
