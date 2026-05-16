@@ -1,20 +1,17 @@
-"""Step 8: bit-assignment search.
+"""Bit-assignment search.
 
-Given a State subclass and a ``cost_fn`` that scores an assignment by
-applying it to the design and reading back a synthesis metric, find the
-cheapest bit-assignment under one of four strategies:
+Given a State subclass and a ``cost_fn`` that scores an assignment by applying it to the design and reading back a
+synthesis metric, find the cheapest bit-assignment under one of four strategies:
 
-- ``predefined`` — try BINARY / GRAY / ONEHOT-like encodings at the
-  current width (no widening).
-- ``exhaustive`` — enumerate every permutation of codepoints over the
-  state set. Only safe for small N (n! ≤ 5040 by default).
+- ``predefined`` — try BINARY / GRAY / ONEHOT-like encodings at the current width (no widening).
+- ``exhaustive`` — enumerate every permutation of codepoints over the state set. Only safe for small N (n! ≤ 5040
+  by default).
 - ``swap`` — pair-swap accept-on-improvement with random restarts.
 - ``anneal`` — placeholder for future work (currently raises).
-- ``auto`` — pick predefined for n ≤ 2, exhaustive for n! ≤
-  ``exhaustive_budget``, swap otherwise.
+- ``auto`` — pick predefined for n ≤ 2, exhaustive for n! ≤ ``exhaustive_budget``, swap otherwise.
 
-``cost_fn(assignment)`` must take an assignment dict and return a float;
-``float('inf')`` is treated as "rejected" (synthesis failed).
+``cost_fn(assignment)`` must take an assignment dict and return a float; ``float('inf')`` is treated as "rejected"
+(synthesis failed).
 """
 from __future__ import annotations
 
@@ -137,9 +134,8 @@ def search_encoding(
 ) -> dict[str, int]:
     """Return the best-scoring assignment found.
 
-    ``width`` defaults to ``state_cls._width`` (no widening). Changing the
-    width requires the apply_encoding width-change path, which is future
-    work — pass ``width=None`` for now.
+    ``width`` defaults to ``state_cls._width`` (no widening). Changing the width requires the apply_encoding
+    width-change path, which is future work — pass ``width=None`` for now.
 
     Strategy ladder for ``"auto"``:
       n ≤ 2                           → predefined (try BINARY only really)
@@ -151,16 +147,13 @@ def search_encoding(
 
     n = len(state_cls.names)
     if 1 << width < n:
-        # Surface "too narrow" before "width change unsupported" — it's a
-        # user-facing error that's always wrong regardless of whether width
-        # changing is implemented.
+        # Surface "too narrow" before "width change unsupported" — it's a user-facing error that's always wrong
+        # regardless of whether width changing is implemented.
         raise ValueError(
-            f"width {width} bits cannot encode {n} states (need at least "
-            f"{(n - 1).bit_length()} bits)")
+            f"width {width} bits cannot encode {n} states (need at least {(n - 1).bit_length()} bits)")
 
     if width != state_cls._width:
-        raise NotImplementedError(
-            f"width change ({state_cls._width} → {width}) not yet supported")
+        raise NotImplementedError(f"width change ({state_cls._width} → {width}) not yet supported")
 
     if strategy == "anneal":
         raise NotImplementedError("anneal strategy is future work")

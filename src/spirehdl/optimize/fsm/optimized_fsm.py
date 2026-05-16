@@ -1,4 +1,4 @@
-"""Step 11a: ``optimized_fsm`` — Hopcroft state minimisation wrapper.
+"""``optimized_fsm`` — Hopcroft state minimisation wrapper.
 
 Usage::
 
@@ -11,15 +11,14 @@ On ``__exit__``:
 
 1. Extract the transition table from ``reg._driver``.
 2. Run Hopcroft → ``{state_value -> canonical_state_value}`` mapping.
-3. Apply the canonical map via ``apply_encoding`` — every merged state's
-   Const is mutated to its representative's value, propagating through the
-   already-built Expr DAG.
+3. Apply the canonical map via ``apply_encoding`` — every merged state's Const is mutated to its representative's
+   value, propagating through the already-built Expr DAG.
 4. Run ``apply_simplify(module)`` to fold the now-redundant mux branches.
 
 If ``minimize=False`` the wrapper is a no-op.
 
-The wrapper does *not* search encodings — that's ``optimized_encoding``'s
-job (Proposal E). Compose by nesting if both are wanted.
+The wrapper does *not* search encodings — that's ``optimized_encoding``'s job (Proposal E). Compose by nesting if
+both are wanted.
 """
 from __future__ import annotations
 
@@ -28,9 +27,7 @@ from typing import TYPE_CHECKING, Sequence
 from spirehdl.optimize.fsm._capture import SharedCacheSnapshot
 from spirehdl.optimize.fsm._emit import apply_encoding
 from spirehdl.optimize.fsm._hopcroft import minimize_fsm
-from spirehdl.optimize.fsm._table import (
-    TooLargeForExhaustiveExtraction, extract_transition_table,
-)
+from spirehdl.optimize.fsm._table import TooLargeForExhaustiveExtraction, extract_transition_table
 from spirehdl.optimize.fsm._walker import find_state_consts
 
 if TYPE_CHECKING:
@@ -79,27 +76,24 @@ def _infer_state_cls(reg: "Signal") -> "type[State] | None":
 
 
 class optimized_fsm:
-    """Hopcroft-minimisation wrapper. Reduces equivalence classes in the FSM
-    whose state register is ``reg``, mutating Consts of the corresponding
-    State subclass in place so the existing Expr DAG keeps working.
+    """Hopcroft-minimisation wrapper. Reduces equivalence classes in the FSM whose state register is ``reg``,
+    mutating Consts of the corresponding State subclass in place so the existing Expr DAG keeps working.
 
     Parameters
     ----------
     reg : Signal
         The FSM state register (a `Module.reg(...)` instance).
     module : Module
-        The Module containing ``reg``. Required so ``apply_simplify`` can run
-        afterwards to collapse the mux branches that become redundant once
-        equivalent states share a value.
+        The Module containing ``reg``. Required so ``apply_simplify`` can run afterwards to collapse the mux
+        branches that become redundant once equivalent states share a value.
     minimize : bool
         Master switch. When False the wrapper is a no-op (just a marker).
     outputs : sequence of Signals
-        Moore output signals whose drivers are part of the FSM's
-        observable behaviour. Used in the initial Hopcroft partition.
+        Moore output signals whose drivers are part of the FSM's observable behaviour. Used in the initial
+        Hopcroft partition.
     state_cls : optional State subclass
-        Override the auto-inferred state class. Useful when ``reg._driver``
-        hasn't been populated yet on ``__enter__`` (the wrapper auto-defers
-        inference to ``__exit__`` if needed).
+        Override the auto-inferred state class. Useful when ``reg._driver`` hasn't been populated yet on
+        ``__enter__`` (the wrapper auto-defers inference to ``__exit__`` if needed).
     """
 
     def __init__(
@@ -136,9 +130,7 @@ class optimized_fsm:
             return False
 
         try:
-            table = extract_transition_table(
-                self.reg, state_cls, outputs=self.outputs,
-            )
+            table = extract_transition_table(self.reg, state_cls, outputs=self.outputs)
         except TooLargeForExhaustiveExtraction:
             # Skip minimisation when the input domain is too large to enumerate
             # safely; user can still benefit from encoding search separately.
@@ -150,16 +142,12 @@ class optimized_fsm:
         if all(canon[v] == v for v in canon):
             return False
 
-        # Build a name->canonical-value assignment by mapping each state name
-        # to the canonical representative of its current value.
-        assignment = {
-            name: canon[state_cls._values[name]]
-            for name in state_cls.names
-        }
+        # Build a name->canonical-value assignment by mapping each state name to the canonical representative of its
+        # current value.
+        assignment = {name: canon[state_cls._values[name]] for name in state_cls.names}
         apply_encoding(state_cls, assignment)
 
-        # Fold the now-redundant mux branches. apply_simplify is in-place
-        # on the Module's signals + their drivers.
+        # Fold the now-redundant mux branches. apply_simplify is in-place on the Module's signals + their drivers.
         from spirehdl.spirehdl_simplify import apply_simplify
         apply_simplify(self.module)
         return False

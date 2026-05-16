@@ -1,23 +1,20 @@
-"""Step 7: Hopcroft DFA minimisation on an extracted transition table.
+"""Hopcroft DFA minimisation on an extracted transition table.
 
-Operates on the ``TransitionTable`` produced by ``_table.py``. Returns a
-mapping ``{state_value -> canonical_state_value}`` where every state in a
-behavioural-equivalence class maps to a single representative.
+Operates on the ``TransitionTable`` produced by ``_table.py``. Returns a mapping
+``{state_value -> canonical_state_value}`` where every state in a behavioural-equivalence class maps to a single
+representative.
 
 The algorithm is the standard partition-refinement:
 
-1. Initial partition: group states by their per-input output signature
-   (Moore output for each input combination).
-2. Refine: split each block whenever two states have different
-   next-state-class signatures across all inputs.
+1. Initial partition: group states by their per-input output signature (Moore output for each input combination).
+2. Refine: split each block whenever two states have different next-state-class signatures across all inputs.
 3. Iterate until stable.
 
-Canonical representative is the *smallest* state value in each class so the
-original ``S0`` survives wherever possible (deterministic, debuggable).
+Canonical representative is the *smallest* state value in each class so the original ``S0`` survives wherever
+possible (deterministic, debuggable).
 
-Only the transition table is consulted; the State class is not modified
-here. Callers (e.g. ``optimized_fsm``) use the returned mapping to drive
-``apply_encoding``, which mutates the class.
+Only the transition table is consulted; the State class is not modified here. Callers (e.g. ``optimized_fsm``) use
+the returned mapping to drive ``apply_encoding``, which mutates the class.
 """
 from __future__ import annotations
 
@@ -30,8 +27,8 @@ if TYPE_CHECKING:
 def minimize_fsm(table: "TransitionTable") -> dict[int, int]:
     """Return ``{state_value -> canonical_state_value}``.
 
-    Equivalent states (those that produce the same output sequence under
-    every input sequence) map to a single canonical representative.
+    Equivalent states (those that produce the same output sequence under every input sequence) map to a single
+    canonical representative.
 
     If no states are equivalent, the mapping is the identity.
     """
@@ -39,11 +36,9 @@ def minimize_fsm(table: "TransitionTable") -> dict[int, int]:
     if not state_values:
         return {}
 
-    # Build the initial partition: states with the same per-input output
-    # signature belong to the same initial class. For a Moore FSM all rows of
-    # the output table for a given state are identical (output depends on
-    # state only) so the per-input loop collapses to a single tuple; for
-    # Mealy outputs it captures the full input-dependent profile.
+    # Build the initial partition: states with the same per-input output signature belong to the same initial class.
+    # For a Moore FSM all rows of the output table for a given state are identical (output depends on state only) so
+    # the per-input loop collapses to a single tuple; for Mealy outputs it captures the full input-dependent profile.
     combos = table.all_input_combos()
 
     def output_sig(sv: int) -> tuple:
@@ -60,8 +55,7 @@ def minimize_fsm(table: "TransitionTable") -> dict[int, int]:
                 return idx
         raise AssertionError(f"state {sv} not in partition")
 
-    # Refine: split each block whenever two states have different
-    # next-state-class signatures.
+    # Refine: split each block whenever two states have different next-state-class signatures.
     while True:
         new_partition: list[list[int]] = []
         for block in partition:
@@ -86,9 +80,8 @@ def minimize_fsm(table: "TransitionTable") -> dict[int, int]:
 
 
 def equivalence_classes(table: "TransitionTable") -> list[list[int]]:
-    """Convenience: return the equivalence-class partition as a list of lists.
-
-    Useful for displaying / debugging without consulting the canonical map.
+    """Convenience: return the equivalence-class partition as a list of lists. Useful for displaying / debugging
+    without consulting the canonical map.
     """
     canon = minimize_fsm(table)
     classes: dict[int, list[int]] = {}

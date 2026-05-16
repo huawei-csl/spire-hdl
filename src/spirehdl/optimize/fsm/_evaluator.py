@@ -1,17 +1,14 @@
-"""Step 5: symbolic-substitution evaluator.
+"""Symbolic-substitution evaluator.
 
-Concrete-integer evaluation of an Expr DAG under a ``{Signal -> int}``
-environment. Used by ``extract_transition_table`` to enumerate
-(state_value × input_combination) transitions when reconstructing the
+Concrete-integer evaluation of an Expr DAG under a ``{Signal -> int}`` environment. Used by
+``extract_transition_table`` to enumerate (state_value × input_combination) transitions when reconstructing the
 FSM's transition table from ``reg._driver``.
 
-The operator table mirrors ``spirehdl_simplify._fold_op2`` (same width-
-masked Verilog semantics) so symbolic eval never diverges from what the
-peephole simplifier would compute on the same Const inputs.
+The operator table mirrors ``spirehdl_simplify._fold_op2`` (same width-masked Verilog semantics) so symbolic eval
+never diverges from what the peephole simplifier would compute on the same Const inputs.
 
-Auto-shared CSE wires (``_auto_generated=True``) are transparently
-followed via ``signal._driver``; user-named signals must appear in the
-``env`` dict or raise.
+Auto-shared CSE wires (``_auto_generated=True``) are transparently followed via ``signal._driver``; user-named
+signals must appear in the ``env`` dict or raise.
 """
 from __future__ import annotations
 
@@ -22,8 +19,8 @@ from spirehdl.spirehdl import (
 )
 from spirehdl.spirehdl_visitor import ExprVisitor
 
-# Bindings are passed as an iterable of (Signal, int) pairs because Signal
-# overrides ``__eq__`` to build an Op2 Expr, so Signals can't be dict keys.
+# Bindings are passed as an iterable of (Signal, int) pairs because Signal overrides ``__eq__`` to build an Op2 Expr,
+# so Signals can't be dict keys.
 Bindings = Iterable[tuple[Signal, int]]
 
 
@@ -61,14 +58,14 @@ def _apply_op2(op: str, a: int, b: int, width: int) -> int:
 class _Eval(ExprVisitor[int]):
     """Concrete evaluator; one instance per (expr, env) call.
 
-    The visitor caches per-node so shared sub-Exprs are computed only once,
-    which matters for deeply-nested mux trees built from `switch_/case_`.
+    The visitor caches per-node so shared sub-Exprs are computed only once, which matters for deeply-nested mux
+    trees built from `switch_/case_`.
     """
 
     def __init__(self, bindings: Bindings) -> None:
         super().__init__()
-        # Keyed by id(signal) so we don't trigger Signal.__eq__ (which
-        # builds an Op2 Expr rather than returning a bool).
+        # Keyed by id(signal) so we don't trigger Signal.__eq__ (which builds an Op2 Expr rather than returning a
+        # bool).
         self._env: dict[int, int] = {id(s): int(v) for s, v in bindings}
 
     def visit_const(self, e: Const) -> int:
@@ -80,8 +77,7 @@ class _Eval(ExprVisitor[int]):
             return self._env[sid]
         if e._driver is not None:
             return self.visit(e._driver)
-        raise ValueError(
-            f"evaluator: signal {e.name!r} has no value in env and no driver")
+        raise ValueError(f"evaluator: signal {e.name!r} has no value in env and no driver")
 
     def visit_op1(self, e: Op1) -> int:
         return _apply_op1(e.op, self.visit(e.a), e.typ.width)
@@ -111,9 +107,8 @@ class _Eval(ExprVisitor[int]):
 def eval_with(expr: Expr, bindings: Bindings) -> int:
     """Top-level entry point: evaluate ``expr`` under ``bindings``.
 
-    Bindings is an iterable of ``(Signal, int)`` pairs (a list of tuples, not
-    a dict — see the module-level ``Bindings`` type alias for the rationale).
-    Raises ``ValueError`` if any referenced signal is unbound and has no
-    driver to fall back to.
+    Bindings is an iterable of ``(Signal, int)`` pairs (a list of tuples, not a dict — see the module-level
+    ``Bindings`` type alias for the rationale). Raises ``ValueError`` if any referenced signal is unbound and has
+    no driver to fall back to.
     """
     return _Eval(bindings).visit(expr)
