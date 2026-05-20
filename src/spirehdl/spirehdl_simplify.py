@@ -452,3 +452,203 @@ def _apply_simplify_once(module) -> int:
                 s._driver = new_drv
 
     return n_changed
+
+
+# ---------------------------------------------------------------------------
+# Mux-tree balance pass: detect the linear-cascade lookup anti-pattern
+#   mux(sel == Const(0), v_0,
+#     mux(sel == Const(1), v_1,
+#       ...
+#         mux(sel == Const(N-1), v_{N-1}, default)))
+#
+# and replace with a balanced binary mux tree using BITS of `sel`:
+#   leaves = [v_0, v_1, ..., v_{N-1}]
+#   for bit in range(log2(N)):
+#       leaves = [mux(sel[bit], leaves[i+1], leaves[i]) for i in range(0, N, 2)]
+#   return leaves[0]
+#
+# The cascade form (N comparators + N-deep mux chain) tends to synthesise to
+# a deep AOI/OAI chain under yosys+abc, whereas the bit-tree form maps cleanly
+# to log2(N) levels of native MUX2 cells. The win is largest for N ≥ 16 (on
+# smaller N, yosys-abc usually finds an optimal MUX2/MUX4 structure on its own
+# — forcing the bit tree there can even regress delay).
+#
+# We require:
+#   1. Cascade length ≥ min_n (default 16).
+#   2. All `==` guards reference the SAME sel signal.
+#   3. The key values cover [0, 2^K) exactly once for K = sel.typ.width
+#      (full-coverage power-of-2). The cascade's innermost else-branch
+#      ("default") is then never taken and can be dropped.
+#
+# Returns the number of cascades rewritten.
+# ---------------------------------------------------------------------------
+
+
+def _eq_const_info(e: Expr, key_of: Callable[[Expr], tuple]):
+    """If `e` is structurally `signal == Const(k)`, return (signal, k, sel_key).
+
+    Handles `Const(k) == signal` symmetrically. Returns None otherwise.
+    """
+    e = _through(e)
+    if not isinstance(e, Op2) or e.op != "==":
+        return None
+    a, b = _through(e.a), _through(e.b)
+    if isinstance(b, Const) and not isinstance(a, Const):
+        return (e.a, b.value, key_of(e.a))
+    if isinstance(a, Const) and not isinstance(b, Const):
+        return (e.b, a.value, key_of(e.b))
+    return None
+
+
+def _collect_cascade(root: Expr, key_of: Callable[[Expr], tuple]):
+    """Walk down a Ternary chain collecting (k, value) pairs where every
+    selector is `sel == Const(k)` for the SAME `sel`.
+
+    Returns (sel_signal, [(k_0, v_0), (k_1, v_1), ...], default, depth_consumed).
+    `depth_consumed` is the number of Ternary nodes consumed; if < 2 the caller
+    should consider the cascade not worth rewriting.
+    """
+    e = root
+    pairs: List = []
+    sel_signal = None
+    sel_key = None
+    depth = 0
+    while True:
+        e_t = _through(e)
+        if not isinstance(e_t, Ternary):
+            break
+        info = _eq_const_info(e_t.sel, key_of)
+        if info is None:
+            break
+        signal, val, this_sel_key = info
+        if sel_key is None:
+            sel_signal = signal
+            sel_key = this_sel_key
+        elif this_sel_key != sel_key:
+            break
+        pairs.append((val, e_t.a))
+        depth += 1
+        e = e_t.b
+    return sel_signal, pairs, e, depth
+
+
+def _build_bit_tree(sel: Expr, leaves: List[Expr]) -> Expr:
+    """Build a balanced binary mux tree using bits of `sel`.
+
+    `leaves[i]` is selected when `sel == i`. `len(leaves)` must be a power of
+    two and equal to `2 ** sel.typ.width`.
+    """
+    w = sel.typ.width
+    n = len(leaves)
+    assert n == (1 << w), f"leaves count {n} must equal 2^{w}"
+    layer = list(leaves)
+    for bit in range(w):
+        sel_bit = Slice(sel, bit, bit + 1)
+        layer = [Ternary(sel_bit, layer[i + 1], layer[i])
+                 for i in range(0, len(layer), 2)]
+    return layer[0]
+
+
+def _try_balance_cascade(root: Expr, key_of: Callable[[Expr], tuple],
+                          min_n: int) -> Expr:
+    """If `root` heads a cascade of length M = 2^K-1 or M = 2^K with the keys
+    {0, 1, ..., M-1} and the SAME sel signal at every level, return a balanced
+    bit-tree replacement. Else return `root` unchanged.
+
+    Two layout cases:
+      - "Full cascade" (M = 2^K): every value in {0..2^K-1} appears as a key in
+        the chain; the cascade's innermost `default` is dead code and ignored.
+      - "Open cascade" (M = 2^K-1): keys cover {0..2^K-2} and the cascade ends
+        in a `default` Expr that's the value for sel == 2^K-1. This is the
+        idiomatic Python form `chain = items[last]; for i in reversed(...):
+        chain = mux(sel == i, items[i], chain)`.
+    """
+    sel_signal, pairs, default, depth = _collect_cascade(root, key_of)
+    if sel_signal is None:
+        return root
+    k = sel_signal.typ.width
+    n_full = 1 << k
+    # We bail out only if the FULL-COVERAGE size n_full is below the threshold —
+    # depth itself can be n_full or n_full-1 (open cascade) which would be one
+    # short of n_full but still produces a tree with n_full leaves.
+    if n_full < min_n:
+        return root
+
+    keys = [k_ for (k_, _) in pairs]
+    pair_count = depth
+    if pair_count == n_full and sorted(keys) == list(range(n_full)):
+        # Full cascade: build leaves from pairs only; default is dead.
+        leaves: List[Expr] = [None] * n_full  # type: ignore[list-item]
+        for k_, v in pairs:
+            leaves[k_] = v
+        return _build_bit_tree(sel_signal, leaves)
+    if pair_count == n_full - 1 and sorted(keys) == list(range(n_full - 1)):
+        # Open cascade: pairs cover 0..n_full-2, default fills slot n_full-1.
+        leaves = [None] * n_full  # type: ignore[list-item]
+        for k_, v in pairs:
+            leaves[k_] = v
+        leaves[n_full - 1] = default
+        return _build_bit_tree(sel_signal, leaves)
+    return root
+
+
+def apply_mux_tree_balance(module, min_n: int = 16) -> int:
+    """Detect and rewrite linear `mux(sel == Const(i), v_i, ...)` cascades of
+    length >= min_n with full power-of-2 coverage into balanced bit-tree muxes.
+
+    Returns the number of cascades rewritten. See header comment for context.
+    """
+    if min_n < 4:
+        # below this threshold the bit-tree form is rarely a win — bail.
+        return 0
+
+    keyer = _KeyWalker()
+
+    def key_of(e: Expr) -> tuple:
+        return keyer.visit(e)
+
+    n_changed = 0
+    visited: set = set()
+
+    def walk(e: Expr) -> Expr:
+        nonlocal n_changed
+        if id(e) in visited:
+            return e
+        visited.add(id(e))
+        # Recurse into children FIRST so inner cascades have a chance to
+        # rewrite before we look at the outer cascade.
+        if isinstance(e, Op1):
+            e.a = walk(e.a)
+        elif isinstance(e, Op2):
+            e.a = walk(e.a)
+            e.b = walk(e.b)
+        elif isinstance(e, Ternary):
+            e.sel = walk(e.sel)
+            e.a = walk(e.a)
+            e.b = walk(e.b)
+            # Now check whether *this* Ternary heads a cascade we should rewrite.
+            new_e = _try_balance_cascade(e, key_of, min_n)
+            if new_e is not e:
+                n_changed += 1
+                return new_e
+        elif isinstance(e, Concat):
+            e.parts = [walk(p) for p in e.parts]
+        elif isinstance(e, Slice):
+            e.a = walk(e.a)
+        elif isinstance(e, Resize):
+            e.a = walk(e.a)
+        elif isinstance(e, Signal):
+            if getattr(e, "_auto_generated", False) and e._driver is not None:
+                new_drv = walk(e._driver)
+                if new_drv is not e._driver:
+                    e._driver = new_drv
+        return e
+
+    for s in module._signals:
+        drv = getattr(s, "_driver", None)
+        if isinstance(drv, Expr):
+            new_drv = walk(drv)
+            if new_drv is not drv:
+                s._driver = new_drv
+
+    return n_changed

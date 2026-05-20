@@ -385,7 +385,8 @@ class Module:
         return comp
 
     # Verilog generation
-    def to_verilog_lines(self, collect_signals=True, simplify=False, cse=True) -> list[str]:
+    def to_verilog_lines(self, collect_signals=True, simplify=False, cse=True,
+                          balance_mux_trees=False, balance_mux_min_n=16) -> list[str]:
 
         if collect_signals:
             self.collect_signals()
@@ -397,6 +398,15 @@ class Module:
             if simplify:
                 from spirehdl.spirehdl_simplify import apply_simplify
                 if apply_simplify(self):
+                    self.collect_signals()
+            # Optional mux-tree balance pass: detect linear cascades of the form
+            #   mux(sel == Const(0), v_0, mux(sel == Const(1), v_1, ... mux(sel == Const(N-1), v_{N-1}, default)))
+            # with full power-of-2 coverage and N >= balance_mux_min_n, and rewrite as a balanced binary mux tree
+            # using BITS of sel. Yosys+abc often fails to tree-balance the linear cascade back, leaving a deep AOI/OAI
+            # chain on the critical path (see `benchmarks/dr_rtl_spirehdl/router/_debug/DEBUGGING.md` for the analysis).
+            if balance_mux_trees:
+                from spirehdl.spirehdl_simplify import apply_mux_tree_balance
+                if apply_mux_tree_balance(self, min_n=balance_mux_min_n):
                     self.collect_signals()
             # Post-construction structural CSE (Common Subexpression Elimination): collapse any
             # duplicate subtrees. Then re-collect so the freshly-created shared wires land in self._signals for emission.
@@ -478,12 +488,22 @@ class Module:
         lines.append("endmodule")
         return lines
 
-    def to_verilog(self, simplify=False, cse=True) -> str:
-        lines = self.to_verilog_lines(simplify=simplify, cse=cse) + [""]  # final newline
+    def to_verilog(self, simplify=False, cse=True,
+                    balance_mux_trees=False, balance_mux_min_n=16) -> str:
+        lines = self.to_verilog_lines(
+            simplify=simplify, cse=cse,
+            balance_mux_trees=balance_mux_trees,
+            balance_mux_min_n=balance_mux_min_n,
+        ) + [""]  # final newline
         return "\n".join(lines)
 
-    def to_verilog_file(self, filepath: str, simplify=False, cse=True) -> None:
-        verilog_str = self.to_verilog(simplify=simplify, cse=cse)
+    def to_verilog_file(self, filepath: str, simplify=False, cse=True,
+                         balance_mux_trees=False, balance_mux_min_n=16) -> None:
+        verilog_str = self.to_verilog(
+            simplify=simplify, cse=cse,
+            balance_mux_trees=balance_mux_trees,
+            balance_mux_min_n=balance_mux_min_n,
+        )
         with open(filepath, "w") as f:
             f.write(verilog_str)
 
