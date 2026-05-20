@@ -1,6 +1,6 @@
 from spirehdl.spirehdl_module import Module
 from spirehdl.spirehdl import *
-from spirehdl.spirehdl import Signal, Expr, Const, Op1, Op2, Ternary, Concat, Slice, Resize
+from spirehdl.spirehdl import Signal, Expr, Const, Op1, Op2, Ternary, Concat, Slice, Resize, MemRead, Memory
 from spirehdl.spirehdl_simulator_base import SimulatorBase
 from spirehdl.spirehdl_visitor import ExprVisitor
 
@@ -128,6 +128,14 @@ class _SimExprEval(ExprVisitor[int]):
         av = self.visit(e.a)
         return _resize_bits(av, e.a.typ.width, e.to_width, e.a.typ.signed)
 
+    def visit_memread(self, e: MemRead) -> int:
+        addr_w = e.addr.typ.width
+        addr = _to_bits(self.visit(e.addr), addr_w)
+        arr = self._sim._mem_state.get(id(e.mem))
+        if arr is None or addr >= len(arr):
+            return 0
+        return _to_bits(arr[addr], e.typ.width)
+
 
 class Simulator(SimulatorBase):
     """
@@ -141,10 +149,16 @@ class Simulator(SimulatorBase):
 
     def __init__(self, module: "Module"):
         self.m = module
+        # Memory signals are not added to module._signals by the module API (Memory()
+        # is constructed standalone). Walk from existing driver chains and pull any
+        # discovered Memory instances in, additively — without resetting _signals
+        # (which would drop user-added regs/wires when the module has no outputs).
+        self._discover_memories()
         self.inputs = [s for s in self.m._ports if s.kind == "input"]
         self.outputs = [s for s in self.m._ports if s.kind == "output"]
         self.regs = [s for s in self.m._signals if s.kind == "reg"]
         self.wires = [s for s in self.m._signals if s.kind == "wire"]
+        self.mems = [s for s in self.m._signals if s.kind == "mem"]
 
         def check_or_duplicate_name(signals):
             seen = set()
@@ -176,6 +190,17 @@ class Simulator(SimulatorBase):
                 init_bits = self._eval_expr_bits(r._init)
                 init_bits = _resize_bits(init_bits, r._init.typ.width, r.typ.width, r._init.typ.signed)
             self._reg[_sid(r)] = _to_bits(init_bits, r.typ.width)
+
+        # Memory contents: { id(mem) -> list[int] of length depth }. Initialise from
+        # the memory's `init=` array if given, else zeros (matches verilog `initial begin
+        # … end` semantics).
+        self._mem_state: dict[int, list[int]] = {}
+        for m in self.mems:
+            w = m.typ.width
+            if m.init is not None:
+                self._mem_state[id(m)] = [_to_bits(v, w) for v in m.init]
+            else:
+                self._mem_state[id(m)] = [0] * m.depth
 
         if self.m.with_reset:
             self._in[_sid(self.m.rst)] = 0
@@ -219,9 +244,24 @@ class Simulator(SimulatorBase):
         for _ in range(n):
             if self.m.with_clock:
                 self._in[_sid(self.m.clk)] = 0
+            mem_actions = self._compute_mem_actions()
             next_vals = self._compute_next_state()
             for sid, v in next_vals.items():
                 self._reg[sid] = v
+            for m, action in mem_actions:
+                if action is None:
+                    continue
+                arr = self._mem_state.get(id(m))
+                if arr is None:
+                    continue
+                if action[0] == "reset_all":
+                    val = action[1]
+                    for i in range(len(arr)):
+                        arr[i] = val
+                elif action[0] == "write":
+                    _, addr, data = action
+                    if 0 <= addr < len(arr):
+                        arr[addr] = data
             if self.m.with_clock:
                 self._in[_sid(self.m.clk)] = 1
                 self._in[_sid(self.m.clk)] = 0
@@ -262,6 +302,74 @@ class Simulator(SimulatorBase):
     # Internals
     # -----------------------------
 
+    def _discover_memories(self) -> None:
+        """Additively pull Memory signals (and their auto-created registered-read output
+        regs) into ``self.m._signals``.
+
+        Memory and its rdata register are constructed standalone (not via ``m.reg`` /
+        ``m.input``), so they only enter ``_signals`` if a downstream collector finds
+        them. We cannot call ``Module.collect_signals()`` (which would reset ``_signals``
+        to ports and drop user-added regs/wires when the module has no outputs), so
+        we do a targeted additive walk that only appends signals of kind ``mem`` and
+        memory-managed registers. Auto-generated wires are intentionally NOT added —
+        they aren't needed for simulation state and may have name collisions that
+        would only show up in the duplicate-name check (uniquification happens in
+        ``collect_signals``, not here).
+        """
+        existing = {id(s) for s in self.m._signals}
+        seen_e: set = set()
+        seen_s: set = set()
+        stack: list = []
+        for s in list(self.m._signals):
+            drv = getattr(s, "_driver", None)
+            if drv is not None:
+                stack.append(drv)
+        while stack:
+            node = stack.pop()
+            if node is None:
+                continue
+            nid = id(node)
+            if isinstance(node, Signal):
+                if nid in seen_s:
+                    continue
+                seen_s.add(nid)
+                # Only add Memory and memory-managed register signals (others either
+                # are already in _signals via m.reg/m.input or are auto-shared wires
+                # the simulator doesn't need in _signals).
+                if nid not in existing and (
+                    node.kind == "mem"
+                    or getattr(node, "_memory_managed_by", None) is not None
+                ):
+                    self.m._signals.append(node)
+                    existing.add(nid)
+                if node.kind == "mem":
+                    for e in (node._write_addr, node._write_data, node._write_enable,
+                              node._reset_enable, node._reset_value,
+                              node._reg_read_addr, node._reg_read_enable):
+                        if e is not None:
+                            stack.append(e)
+                    if node._reg_read_output is not None:
+                        stack.append(node._reg_read_output)
+                mem_owner = getattr(node, "_memory_managed_by", None)
+                if mem_owner is not None:
+                    stack.append(mem_owner)
+                if node._driver is not None:
+                    stack.append(node._driver)
+                continue
+            if nid in seen_e:
+                continue
+            seen_e.add(nid)
+            if isinstance(node, MemRead):
+                stack.append(node.mem)
+                stack.append(node.addr)
+                continue
+            for attr in ("a", "b", "sel"):
+                if hasattr(node, attr):
+                    stack.append(getattr(node, attr))
+            if hasattr(node, "parts"):
+                for p in node.parts:
+                    stack.append(p)
+
     def _resolve(self, ref: Union[str, Signal]) -> Signal:
         if isinstance(ref, Signal):
             return ref
@@ -277,13 +385,21 @@ class Simulator(SimulatorBase):
         self._cache_sig.clear()
 
     def _compute_next_state(self) -> dict[int, int]:
-        """Compute next-state values for all regs without committing."""
+        """Compute next-state values for all regs (incl. memory-managed registered-read
+        outputs) without committing. Memory write/reset actions are computed by the
+        companion :meth:`_compute_mem_actions`.
+        """
         res: dict[int, int] = {}
         rst_high = self.m.with_reset and self._in.get(_sid(self.m.rst), 0) != 0
 
         for r in self.regs:
+            if getattr(r, "_memory_managed_by", None) is not None:
+                # Memory-managed register: next-state comes from the parent memory's
+                # registered-read port, computed below.
+                if _sid(r) not in self._reg:
+                    self._reg[_sid(r)] = 0
+                continue
             if rst_high:
-                # Reset path
                 if r._init is not None:
                     init_bits = self._eval_expr_bits(r._init)
                     v = _resize_bits(init_bits, r._init.typ.width, r.typ.width, r._init.typ.signed)
@@ -296,7 +412,50 @@ class Simulator(SimulatorBase):
                     raise ValueError(f"Register '{r.name}' has no next-state assignment.")
                 nxt_bits = self._eval_expr_bits(drv)
                 res[_sid(r)] = _resize_bits(nxt_bits, drv.typ.width, r.typ.width, drv.typ.signed)
+
+        # Registered-read outputs: independent of module rst (memory's always block
+        # has no async-rst sensitivity in emitted verilog).
+        for m in self.mems:
+            if m._reg_read_output is None:
+                continue
+            rout_sid = _sid(m._reg_read_output)
+            re_bit = (self._eval_expr_bits(m._reg_read_enable) & 1) if m._reg_read_enable is not None else 1
+            if re_bit:
+                addr = _to_bits(self._eval_expr_bits(m._reg_read_addr), m._reg_read_addr.typ.width)
+                arr = self._mem_state.get(id(m))
+                val = arr[addr] if (arr is not None and addr < len(arr)) else 0
+                res[rout_sid] = _to_bits(val, m.typ.width)
+            else:
+                res[rout_sid] = self._reg.get(rout_sid, 0)
         return res
+
+    def _compute_mem_actions(self) -> list:
+        """Compute memory write/reset actions for this cycle.
+
+        Returns a list of (Memory, action) where action is one of:
+          * ('reset_all', value) — reset enable high, clear all entries
+          * ('write', addr, data) — write enable high
+          * None — no change this cycle
+        """
+        out: list = []
+        for m in self.mems:
+            action = None
+            if m._reset_enable is not None and self._eval_expr_bits(m._reset_enable) & 1:
+                if m._reset_value is not None:
+                    rv = self._eval_expr_bits(m._reset_value)
+                    rv = _resize_bits(rv, m._reset_value.typ.width, m.typ.width, m._reset_value.typ.signed)
+                else:
+                    rv = 0
+                action = ("reset_all", _to_bits(rv, m.typ.width))
+            elif m._write_addr is not None:
+                we_bit = (self._eval_expr_bits(m._write_enable) & 1) if m._write_enable is not None else 1
+                if we_bit:
+                    addr = _to_bits(self._eval_expr_bits(m._write_addr), m._write_addr.typ.width)
+                    data = self._eval_expr_bits(m._write_data)
+                    data = _resize_bits(data, m._write_data.typ.width, m.typ.width, m._write_data.typ.signed)
+                    action = ("write", addr, _to_bits(data, m.typ.width))
+            out.append((m, action))
+        return out
 
     # ------- Expression evaluation (to bit patterns) -------
 

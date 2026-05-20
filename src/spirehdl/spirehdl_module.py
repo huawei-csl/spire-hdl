@@ -6,7 +6,7 @@ import time
 
 
 from spirehdl import VERILOG_BANNER
-from spirehdl.spirehdl import Bool, Expr, ExprLike, HDLType, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
+from spirehdl.spirehdl import Bool, Const, Expr, ExprLike, HDLType, MemRead, Memory, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
 
 
 from typing import Any, Dict, Iterable, List, Optional
@@ -268,20 +268,27 @@ class Module:
             t = type(e)
             fn = child_extractor_cache.get(t)
             if fn is None:
-                # Probe once for this type using the current instance.
-                # This assumes structure is consistent across instances of the same class (usually true).
-                names = []
-                for n in ("a", "b", "sel", "_driver"):
-                    if hasattr(e, n):
-                        names.append(n)
-                has_parts = hasattr(e, "parts")
+                if t is MemRead:
+                    # MemRead has non-standard fields (mem, addr); the generic attr-probe
+                    # below would miss both.
+                    def fn(x):
+                        yield x.mem
+                        yield x.addr
+                else:
+                    # Probe once for this type using the current instance.
+                    # This assumes structure is consistent across instances of the same class (usually true).
+                    names = []
+                    for n in ("a", "b", "sel", "_driver"):
+                        if hasattr(e, n):
+                            names.append(n)
+                    has_parts = hasattr(e, "parts")
 
-                def fn(x, names=tuple(names), has_parts=has_parts):
-                    for n in names:
-                        yield getattr(x, n)
-                    if has_parts:
-                        for p in x.parts:
-                            yield p
+                    def fn(x, names=tuple(names), has_parts=has_parts):
+                        for n in names:
+                            yield getattr(x, n)
+                        if has_parts:
+                            for p in x.parts:
+                                yield p
 
                 child_extractor_cache[t] = fn
             return fn(e)
@@ -325,6 +332,23 @@ class Module:
                 drv = node._driver
                 if drv is not None:
                     stack.append(drv)
+
+                # Memory-managed registers (registered-read outputs) have no _driver — their
+                # next-state is the memory's MemRead. Push the parent memory so it gets walked.
+                mem_owner = getattr(node, "_memory_managed_by", None)
+                if mem_owner is not None:
+                    stack.append(mem_owner)
+
+                # Memory: its port exprs (write/reset/registered-read) aren't reachable via _driver,
+                # so push them here so any expressions feeding them get collected.
+                if node.kind == "mem":
+                    for e in (node._write_addr, node._write_data, node._write_enable,
+                              node._reset_enable, node._reset_value,
+                              node._reg_read_addr, node._reg_read_enable):
+                        if e is not None:
+                            stack.append(e)
+                    if node._reg_read_output is not None:
+                        stack.append(node._reg_read_output)
                 continue
 
             # Otherwise it's an Expr (non-Signal)
@@ -421,7 +445,10 @@ class Module:
                 if s.kind == "output":
                     raise ValueError(f"Output '{s.name}' has no driver.")
             if s.kind == "reg" and s._driver is None:
-                raise ValueError(f"Register '{s.name}' has no next-state assignment.")
+                # Memory-managed registers (registered-read outputs) get their next-state
+                # written by the memory's always block, not via _driver.
+                if getattr(s, "_memory_managed_by", None) is None:
+                    raise ValueError(f"Register '{s.name}' has no next-state assignment.")
 
         lines: List[str] = [VERILOG_BANNER, ""]
         # Ports list
@@ -444,23 +471,42 @@ class Module:
         if not collect_signals:
             wires += [s for s in get_shared_wires() if not any(s is w for w in wires)]
 
-        regs = self._internals_of("reg")
+        regs_all = self._internals_of("reg")
+        # Memory-managed registers (registered-read outputs) get their next-state in the
+        # memory's own always block; exclude from the normal reg always block.
+        regs = [r for r in regs_all if getattr(r, "_memory_managed_by", None) is None]
+        mems = self._internals_of("mem")
         lines.append('// Wires')
         for w in wires:
             sign = "signed " if w.typ.signed else ""
             rng = w.typ.range_str()
             lines.append(f"  wire {sign}{rng} {w.name};")
         lines.append('// Registers')
-        for r in regs:
+        for r in regs_all:
             sign = "signed " if r.typ.signed else ""
             rng = r.typ.range_str()
             lines.append(f"  reg {sign}{rng} {r.name};")
+        if mems:
+            lines.append('// Memories')
+            for m in mems:
+                sign = "signed " if m.typ.signed else ""
+                rng = m.typ.range_str()
+                lines.append(f"  reg {sign}{rng} {m.name}[0:{m.depth-1}];")
         # Combinational assigns for wires/outputs
         lines.append("// Combinational assignments")
         for s in [*wires, *self._ports_of("output")]:
             if s._driver is not None:
                 rhs = fit_width(s._driver, s.typ).to_verilog()
                 lines.append(f"  assign {s.name} = {rhs};")
+
+        # Memory initial values (ROM-style array literal)
+        for m in mems:
+            if m.init is not None:
+                lines.append("initial begin")
+                for i, v in enumerate(m.init):
+                    lit = Const(v, m.typ).to_verilog()
+                    lines.append(f"  {m.name}[{i}] = {lit};")
+                lines.append("end")
 
         # Sequential logic
         lines.append("// Sequential logic")
@@ -483,6 +529,62 @@ class Module:
             else:
                 for r in regs:
                     lines.append(f"    {r.name} <= {fit_width(r._driver, r.typ).to_verilog()};")
+            lines.append("  end")
+
+        # Memory sequential logic — one always block per memory. Clock-only sensitivity
+        # (no async rst) since memory reset is via the memory's own .reset(enable) port,
+        # not the module's rst — matches the verilog idiom yosys's memory pass recognises.
+        for m in mems:
+            has_write = m._write_addr is not None
+            has_reset = m._reset_enable is not None
+            has_rread = m._reg_read_addr is not None
+            if not (has_write or has_reset or has_rread):
+                continue  # ROM only (init-only) — no sequential block
+            if not self.with_clock:
+                raise ValueError(f"Memory '{m.name}' has sequential ports but module has no clock.")
+            lines.append(f"  always @(posedge {self.clk.name}) begin")
+            if has_reset and has_write:
+                re_v = m._reset_enable.to_verilog()
+                rv_v = m._reset_value.to_verilog()
+                wa_v = m._write_addr.to_verilog()
+                wd_v = fit_width(m._write_data, m.typ).to_verilog()
+                lines.append(f"    if ({re_v}) begin")
+                for i in range(m.depth):
+                    lines.append(f"      {m.name}[{i}] <= {rv_v};")
+                if m._write_enable is not None:
+                    we_v = m._write_enable.to_verilog()
+                    lines.append(f"    end else if ({we_v}) begin")
+                else:
+                    lines.append(f"    end else begin")
+                lines.append(f"      {m.name}[{wa_v}] <= {wd_v};")
+                lines.append(f"    end")
+            elif has_reset:
+                re_v = m._reset_enable.to_verilog()
+                rv_v = m._reset_value.to_verilog()
+                lines.append(f"    if ({re_v}) begin")
+                for i in range(m.depth):
+                    lines.append(f"      {m.name}[{i}] <= {rv_v};")
+                lines.append(f"    end")
+            elif has_write:
+                wa_v = m._write_addr.to_verilog()
+                wd_v = fit_width(m._write_data, m.typ).to_verilog()
+                if m._write_enable is not None:
+                    we_v = m._write_enable.to_verilog()
+                    lines.append(f"    if ({we_v}) begin")
+                    lines.append(f"      {m.name}[{wa_v}] <= {wd_v};")
+                    lines.append(f"    end")
+                else:
+                    lines.append(f"    {m.name}[{wa_v}] <= {wd_v};")
+            if has_rread:
+                ra_v = m._reg_read_addr.to_verilog()
+                rout = m._reg_read_output.name
+                if m._reg_read_enable is not None:
+                    re_v = m._reg_read_enable.to_verilog()
+                    lines.append(f"    if ({re_v}) begin")
+                    lines.append(f"      {rout} <= {m.name}[{ra_v}];")
+                    lines.append(f"    end")
+                else:
+                    lines.append(f"    {rout} <= {m.name}[{ra_v}];")
             lines.append("  end")
 
         lines.append("endmodule")

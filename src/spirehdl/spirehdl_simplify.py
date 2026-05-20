@@ -34,6 +34,7 @@ from spirehdl.spirehdl import (
     Const,
     Expr,
     HDLType,
+    MemRead,
     Op1,
     Op2,
     Resize,
@@ -90,6 +91,9 @@ class _KeyWalker(ExprVisitor[tuple]):
 
     def visit_resize(self, e: Resize) -> tuple:
         return ("resize", self.visit(e.a), e.to_width, e.typ.signed)
+
+    def visit_memread(self, e: MemRead) -> tuple:
+        return ("memread", id(e.mem), self.visit(e.addr), e.typ.width, e.typ.signed)
 
 
 # ---------------------------------------------------------------------------
@@ -435,6 +439,9 @@ def _apply_simplify_once(module) -> int:
         elif isinstance(e, Resize):
             e.a = simp(e.a)
             new_e = _simplify_resize(e)
+        elif isinstance(e, MemRead):
+            # Recurse into the addr expr; no peephole rewrites apply to mem[addr] itself.
+            e.addr = simp(e.addr)
         # Const / Signal: leaves, nothing to recurse into.
 
         visiting.discard(eid)

@@ -15,6 +15,7 @@ from spirehdl.spirehdl import (
     Concat,
     Const,
     Expr,
+    MemRead,
     Op1,
     Op2,
     Resize,
@@ -55,6 +56,10 @@ def expr_children(e: Expr) -> Tuple[Expr, ...]:
         return (e.a,)
     if isinstance(e, Resize):
         return (e.a,)
+    if isinstance(e, MemRead):
+        # The Memory itself is a Signal (kind="mem") and not a sub-expression
+        # that participates in normal Expr DAG traversal — only the address is.
+        return (e.addr,)
     return ()
 
 
@@ -95,6 +100,8 @@ class ExprVisitor(Generic[T]):
             result = self.visit_slice(e)
         elif isinstance(e, Resize):
             result = self.visit_resize(e)
+        elif isinstance(e, MemRead):
+            result = self.visit_memread(e)
         else:
             raise TypeError(f"Unsupported Expr subclass: {type(e)}")
 
@@ -129,4 +136,7 @@ class ExprVisitor(Generic[T]):
         raise NotImplementedError
 
     def visit_resize(self, e: Resize) -> T:
+        raise NotImplementedError
+
+    def visit_memread(self, e: MemRead) -> T:
         raise NotImplementedError

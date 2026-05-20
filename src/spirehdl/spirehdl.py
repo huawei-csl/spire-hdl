@@ -363,6 +363,134 @@ class Wire(Signal):
 
 
 # -----------------------------
+# Memory primitive
+# -----------------------------
+
+class Memory(Signal):
+    """Array-of-registers storage. Emits `reg [W-1:0] name[0:depth-1];`.
+
+    Lets yosys's ``memory`` pass recognise the storage as a memory array
+    (vs. N separate Register declarations), so memory-aware optimisations
+    (``memory_dff``, ``memory_share``, ``memory_bmux2rom``) fire.
+
+    MVP scope:
+      * 1 write port (``.write(addr, data, enable=)``)
+      * 1 sync-reset path (``.reset(enable, value=)``) — clears all entries
+        to a constant via a ``for`` loop inside ``always @(posedge clk)``.
+      * N combinational reads via ``mem[addr]`` → ``MemRead`` Expr.
+      * Optional initial values (``init=[…]``) — emitted as an
+        ``initial`` block; sets the array at sim time 0.
+      * Optional registered-read port (``.registered_read(addr, enable=)``)
+        — auto-creates a Register that captures ``mem[addr]`` per edge.
+
+    See ``benchmarks/dr_rtl_spirehdl/router/context/starting_point.py`` for
+    the canonical use case (16 × 9-bit FIFO).
+    """
+
+    def __init__(self, elem_type: HDLType, depth: int,
+                 init: Optional[Sequence[int]] = None,
+                 name: Optional[str] = None):
+        if name is None:
+            name = infer_signal_name_from_assignment("mem", "mem", __file__)
+        if depth <= 0:
+            raise ValueError(f"Memory depth must be > 0; got {depth}")
+        if init is not None:
+            if len(init) != depth:
+                raise ValueError(
+                    f"Memory init must have length == depth ({depth}); got {len(init)}")
+        super().__init__(name, elem_type, kind="mem")
+        self.depth = depth
+        self.init = list(init) if init is not None else None
+        # Write port — set by .write(addr, data, enable=)
+        self._write_addr: Optional[Expr] = None
+        self._write_data: Optional[Expr] = None
+        self._write_enable: Optional[Expr] = None
+        # Reset — set by .reset(enable, value=)
+        self._reset_enable: Optional[Expr] = None
+        self._reset_value: Optional[Expr] = None
+        # Optional registered-read port — set by .registered_read(addr, enable=)
+        self._reg_read_addr: Optional[Expr] = None
+        self._reg_read_enable: Optional[Expr] = None
+        self._reg_read_output: Optional["Signal"] = None  # auto-created Register
+
+    def write(self, addr: ExprLike, data: ExprLike, enable: Optional[ExprLike] = None) -> None:
+        """Declare a single write port.
+
+        Verilog idiom emitted::
+
+            always @(posedge clk)
+              if (enable) name[addr] <= data;
+        """
+        if self._write_addr is not None:
+            raise ValueError(f"Memory '{self.name}': single write port only (MVP).")
+        self._write_addr = as_expr(addr)
+        self._write_data = fit_width(as_expr(data), self.typ)
+        self._write_enable = as_expr(enable) if enable is not None else None
+
+    def reset(self, enable: ExprLike, value: ExprLike = 0) -> None:
+        """Declare a single sync-reset path that clears all entries to *value*.
+
+        Verilog idiom emitted::
+
+            always @(posedge clk)
+              if (enable) for (i=0; i<depth; i=i+1) name[i] <= value;
+        """
+        if self._reset_enable is not None:
+            raise ValueError(f"Memory '{self.name}': single reset port only (MVP).")
+        self._reset_enable = as_expr(enable)
+        if isinstance(value, int):
+            self._reset_value = Const(value, self.typ)
+        else:
+            self._reset_value = fit_width(as_expr(value), self.typ)
+
+    def registered_read(self, addr: ExprLike, enable: Optional[ExprLike] = None) -> "Signal":
+        """Declare a single registered-read port. Returns the auto-created Register.
+
+        Verilog idiom emitted::
+
+            always @(posedge clk)
+              if (enable) <auto_reg> <= name[addr];
+
+        If *enable* is None the read fires every cycle.
+        """
+        if self._reg_read_addr is not None:
+            raise ValueError(f"Memory '{self.name}': single registered-read port only (MVP).")
+        self._reg_read_addr = as_expr(addr)
+        self._reg_read_enable = as_expr(enable) if enable is not None else None
+        out = Register(self.typ, name=f"{self.name}_rdata")
+        # Tag so to_verilog_lines skips it in the regular reg-always block — it gets
+        # emitted as `name_rdata <= name[addr]` inside the memory's own always block,
+        # which is the verilog idiom yosys's memory pass recognises.
+        out._memory_managed_by = self
+        self._reg_read_output = out
+        return out
+
+    def __getitem__(self, addr: ExprLike) -> "MemRead":
+        """Async (combinational) read at ``mem[addr]``."""
+        return MemRead(self, as_expr(addr))
+
+    def to_verilog(self) -> str:
+        # Memory itself doesn't appear in expressions; only MemRead does.
+        # If someone references the memory directly, emit just the name.
+        return self.name
+
+
+class MemRead(Expr):
+    """Combinational read of a Memory element at ``mem[addr]``.
+
+    The ``typ`` of a MemRead is the memory's element type.
+    """
+
+    def __init__(self, mem: "Memory", addr: Expr):
+        self.mem = mem
+        self.addr = addr
+        self.typ = mem.typ  # element type
+
+    def to_verilog(self) -> str:
+        return f"{self.mem.name}[{self.addr.to_verilog()}]"
+
+
+# -----------------------------
 # Compound nodes
 # -----------------------------
 
