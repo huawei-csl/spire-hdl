@@ -17,6 +17,8 @@ A modern Python HDL that compiles concise, composable hardware descriptions to s
 
 Multiple layers of synthesis-aware optimization run *inside* the compile, so the Verilog SpireHDL emits is already small and fast before any external tool sees it. Numbers below are measured against a plain Yosys flow on the same RTL.
 
+Together these features enable **language-embedded optimization intent**: the designer marks *what* to optimize — a module to rewrite, an FSM to re-encode, an arithmetic block to retopologize — directly in the HDL source, and a compile-time pass realizes it. This makes optimization scope explicit and machine-readable, which is what lets both humans and agents drive the flow from the same surface.
+
 ### 🔢 Arithmetic auto-replacement — `replace_arithmetic_ops`
 
 Drops in topology-tuned adders, multipliers, and MAC fusions against an `area` / `delay` / `adp` objective. On an 8-bit ALU (add + sub + mul):
