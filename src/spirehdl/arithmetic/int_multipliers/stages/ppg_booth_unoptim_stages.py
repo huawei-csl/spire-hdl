@@ -11,6 +11,7 @@ from spirehdl.spirehdl_module import Module
 class BoothUnoptimizedPartialProductGenerator(PartialProductGeneratorBase):
     supported_signatures = (
         (False, False),
+        (True, True),
     )
 
     def generate_columns(
@@ -31,6 +32,9 @@ class BoothUnoptimizedPartialProductGenerator(PartialProductGeneratorBase):
         def bbit(k: int) -> Expr:
             if 0 <= k < wb:
                 return b[k]
+            if k < 0:
+                # below LSB: the virtual bit b[-1] used by radix-4 Booth is always 0
+                return Const(False, Bool())
             # beyond MSB uses sign bit if signed, else 0
             return b[wb - 1] if b_signed else Const(False, Bool())
 
@@ -92,8 +96,10 @@ class BoothUnoptimizedPartialProductGenerator(PartialProductGeneratorBase):
             # Place bits starting at column base_w = 2*i (radix-4 shift).
             base_w = 2 * i
 
-            # Use the longer of the two candidates to cover both |a| and |2a|.
-            max_len = max(len(a_ext), len(a2_ext)) *2
+            # Cover the natural term width (max of |a|, |2a|), then sign-extend
+            # each term up to out_bits so callers with out_bits > wa+wb get
+            # correct sign extension without an external resolve step.
+            max_len = max(len(a2_ext), out_bits - base_w)
             for t in range(max_len):
                 # pick bit t of |a| or |2a| guarded by enables; missing bits are 0
                 uses_precomute = False

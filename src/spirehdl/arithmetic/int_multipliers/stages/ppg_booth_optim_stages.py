@@ -79,7 +79,7 @@ class BoothOptimizedPartialProductGenerator(PartialProductGeneratorBase):
                     emit_bit = mag ^ neg
                     extend_bit = ~emit_bit
                 elif t == len(a_ext):
-                    emit_bit = extend_bit if a_signed else ~neg # signed: extend, unsigned: 1 if neg, 0 if pos 
+                    emit_bit = extend_bit if a_signed else ~neg # signed: extend, unsigned: 1 if neg, 0 if pos
                 elif t == len(a_ext) + 1:
                     emit_bit = Const(True, Bool())  # fixed 1 correction at the block’s MSB together with ref 1
                 else:

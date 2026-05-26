@@ -221,7 +221,6 @@ def test_cli_matmulacc_smoke(tmp_path: Path):
         "--ppa-opt", "ACCUMULATOR_TREE",
         "--fsa-opt", "RIPPLE_CARRY",
         "--encoding", "unsigned",
-        "--simulate",
         "--num-vectors", "16",
         "--verilog-out", str(verilog_path),
     ]
@@ -259,7 +258,6 @@ def test_cli_matmulacc_fused_smoke(tmp_path: Path):
         "--ppa-opt", "WALLACE_TREE",
         "--fsa-opt", "RIPPLE_CARRY",
         "--encoding", "twos_complement",
-        "--simulate",
         "--num-vectors", "16",
         "--verilog-out", str(verilog_path),
     ]
@@ -295,7 +293,6 @@ def test_cli_fpmatmulacc_smoke(tmp_path: Path):
         "--exponent-width", "5",
         "--fraction-width", "10",
         "--use-operator",
-        "--simulate",
         "--num-vectors", "16",
         "--verilog-out", str(verilog_path),
     ]

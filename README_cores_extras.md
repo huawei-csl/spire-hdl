@@ -73,7 +73,7 @@ python -m spirehdl.arithmetic.arithmetic_generator multiplier \
   --ppa-opt WALLACE_TREE \
   --fsa-opt RIPPLE_CARRY \
   --encoding twos_complement \
-  --simulate --num-vectors 128 \
+  --num-vectors 128 \
   --verilog-out out/mul8.v \
   --aag-out out/mul8.aag \
   --testbench-out out/mul8_tb.v \
@@ -84,7 +84,7 @@ python -m spirehdl.arithmetic.arithmetic_generator adder \
   --n-bits 16 \
   --fsa-opt PREFIX_BRENT_KUNG \
   --encoding twos_complement \
-  --simulate --num-vectors 128 \
+  --num-vectors 128 \
   --verilog-out out/add16.v
 
 python -m spirehdl.arithmetic.arithmetic_generator mac \
@@ -94,7 +94,7 @@ python -m spirehdl.arithmetic.arithmetic_generator mac \
   --ppa-opt WALLACE_TREE \
   --fsa-opt RIPPLE_CARRY \
   --encoding twos_complement \
-  --simulate --num-vectors 128 \
+  --num-vectors 128 \
   --verilog-out out/mac8.v \
   --aag-out out/mac8.aag \
   --testbench-out out/mac8_tb.v
@@ -107,7 +107,7 @@ python -m spirehdl.arithmetic.arithmetic_generator matmulacc \
   --ppa-opt WALLACE_TREE \
   --fsa-opt RIPPLE_CARRY \
   --encoding twos_complement \
-  --simulate --num-vectors 16 \
+  --num-vectors 16 \
   --verilog-out out/matmulacc_4x4x4_8b.v \
   --json-out out/matmulacc_4x4x4_8b.json
 
@@ -117,7 +117,7 @@ python -m spirehdl.arithmetic.arithmetic_generator matmulacc \
   --a-width 8 \
   --use-operator \
   --encoding twos_complement \
-  --simulate --num-vectors 16 \
+  --num-vectors 16 \
   --verilog-out out/matmulacc_4x4x4_8b.v \
   --json-out out/matmulacc_4x4x4_8b.json
 
@@ -129,14 +129,14 @@ python -m spirehdl.arithmetic.arithmetic_generator matmulacc-fused \
   --ppa-opt WALLACE_TREE \
   --fsa-opt RIPPLE_CARRY \
   --encoding twos_complement \
-  --simulate --num-vectors 16 \
+  --num-vectors 16 \
   --verilog-out out/matmulacc_fused_4x4x4_8b.v \
   --json-out out/matmulacc_fused_4x4x4_8b.json
 
 # Data-driven testbench: vectors stored in a separate .dat file
 python -m spirehdl.arithmetic.arithmetic_generator multiplier \
   --n-bits 8 \
-  --simulate --num-vectors 128 \
+  --num-vectors 128 \
   --verilog-out out/mul8.v \
   --testbench-out out/mul8_tb.v \
   --data-driven-testbench \
@@ -147,7 +147,7 @@ python -m spirehdl.arithmetic.arithmetic_generator fpmatmulacc \
   --dim-m 4 --dim-n 4 --dim-k 4 \
   --exponent-width 5 --fraction-width 10 \
   --use-operator \
-  --simulate --num-vectors 16 \
+  --num-vectors 16 \
   --verilog-out out/fp_matmulacc_4x4x4_f16.v \
   --json-out out/fp_matmulacc_4x4x4_f16.json
 
@@ -158,7 +158,7 @@ python -m spirehdl.arithmetic.arithmetic_generator fpmatmulacc \
   --ppg-opt AND \
   --ppa-opt WALLACE_TREE \
   --fsa-opt RIPPLE_CARRY \
-  --simulate --num-vectors 16 \
+  --num-vectors 16 \
   --verilog-out out/fp_matmulacc_4x4x4_f16_staged.v \
   --json-out out/fp_matmulacc_4x4x4_f16_staged.json
 
@@ -166,7 +166,7 @@ python -m spirehdl.arithmetic.arithmetic_generator fpmatmulacc \
 python -m spirehdl.arithmetic.arithmetic_generator fpmul \
   --exponent-width 8 --fraction-width 7 \
   --subnormal-support \
-  --simulate --num-vectors 128 \
+  --num-vectors 128 \
   --verilog-out out/fp_mul_bf16.v \
   --testbench-out out/fp_mul_bf16_tb.v \
   --data-driven-testbench \
@@ -177,7 +177,7 @@ python -m spirehdl.arithmetic.arithmetic_generator fpmul \
 python -m spirehdl.arithmetic.arithmetic_generator fpadd \
   --exponent-width 5 --fraction-width 10 \
   --subnormal-support \
-  --simulate --num-vectors 128 \
+  --num-vectors 128 \
   --verilog-out out/fp_add_f16.v \
   --testbench-out out/fp_add_f16_tb.v \
   --data-driven-testbench \

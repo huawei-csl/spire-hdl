@@ -202,7 +202,7 @@ class GenerationActions:
     aag_out: str | Path | None = None
     testbench_out: str | Path | None = None
     data_driven_testbench: bool = False
-    simulate: bool = False
+    simulate: bool = True
     num_vectors: int = 64
     targeted_test_vectors: bool = False
     tb_sigma: float | None = None
@@ -814,7 +814,7 @@ def _add_common_action_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--aag-out", type=str, default=None, help="Optional path for generated .aag")
     parser.add_argument("--testbench-out", type=str, default=None, help="Optional path for generated Verilog testbench")
     parser.add_argument("--data-driven-testbench", action="store_true", help="Generate data-driven testbench with separate .dat file instead of inline vectors")
-    parser.add_argument("--simulate", action="store_true", help="Run vector simulation after generation")
+    parser.add_argument("--skip-simulate", action="store_true", help="Skip vector simulation after generation (simulation runs by default to verify the generated core)")
     parser.add_argument("--num-vectors", type=int, default=64, help="Number of vectors for simulation")
     parser.add_argument("--targeted-test-vectors", action="store_true", help="Prepend targeted edge-case vectors (FP mul/add only)")
     parser.add_argument("--tb-sigma", type=float, default=None, help="Optional sigma for normal-distributed vectors")
@@ -1008,7 +1008,7 @@ def _actions_from_args(args: argparse.Namespace) -> GenerationActions:
         aag_out=args.aag_out,
         testbench_out=args.testbench_out,
         data_driven_testbench=args.data_driven_testbench,
-        simulate=args.simulate,
+        simulate=not args.skip_simulate,
         num_vectors=args.num_vectors,
         targeted_test_vectors=args.targeted_test_vectors,
         tb_sigma=args.tb_sigma,

@@ -120,7 +120,6 @@ def test_cli_mac_smoke(tmp_path: Path):
         "RIPPLE_CARRY",
         "--encoding",
         "unsigned",
-        "--simulate",
         "--num-vectors",
         "16",
         "--verilog-out",

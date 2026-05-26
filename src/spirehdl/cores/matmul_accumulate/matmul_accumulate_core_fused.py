@@ -10,7 +10,7 @@ from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib 
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
 from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import StageBasedMultiplierIO, TwoInputAritConfig
 from spirehdl.cores.matmul_accumulate.matmul_accumulate_core import MatmulAccumulateCore, MatmulAccumulateIO, MMAcDims, MMAcWidths
-from spirehdl.spirehdl import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, fit_type, fit_width, s_ext
+from spirehdl.spirehdl import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, fit_type, fit_width, reinterpret, s_ext
 from spirehdl.spirehdl_module import Component, Module
 
 
@@ -80,16 +80,21 @@ def fused_inner_product(vec_a: Iterable[Expr], vec_b: Iterable[Expr], c_term: Ex
     ppa = mult_cfg.ppa_opt.value(stage_cfg)
     fsa = mult_cfg.fsa_opt.value(stage_cfg)
 
+    # Booth PPGs select partial products based on operand signedness; when the
+    # encoding is signed but the carrier signals happen to be UInt, reinterpret
+    # them as SInt so the PPG sees the correct sign. BW reads bits directly and
+    # is unaffected. Each PPG is responsible for emitting sign-extended columns
+    # up to out_bits=result_width, so the merge below is a straight extend.
+    def _to_signed(sig: Expr) -> Expr:
+        if is_signed(encoding) and not sig.typ.signed:
+            return reinterpret(sig, SInt(sig.typ.width))
+        return sig
+
     merged_cols: DefaultDict[int, List[Expr]] = defaultdict(list)
     for idx, (a_sig, b_sig) in enumerate(zip(a_list, b_list)):
-        # manual sign extension (not efficient)
-        # a_sig_1 = cast(fit_width(a_sig, SInt(result_width)), UInt(result_width))
-        # b_sig_1 = cast(fit_width(b_sig, SInt(result_width)), UInt(result_width))
-        a_sig_1 = a_sig
-        b_sig_1 = b_sig
         io = StageBasedMultiplierIO(
-            a=a_sig_1,
-            b=b_sig_1,
+            a=_to_signed(a_sig),
+            b=_to_signed(b_sig),
             y=Signal(name=f"pp_{idx}", typ=UInt(result_width), kind="wire") # dummy, is not used
         )
         cols = ppg.generate_columns(io)
@@ -97,10 +102,22 @@ def fused_inner_product(vec_a: Iterable[Expr], vec_b: Iterable[Expr], c_term: Ex
             if weight < result_width:
                 merged_cols[weight].extend(bits)
 
-    # common upper corection
+    # common upper correction
     if fused_upper_correction:
-        for i in range(a_width - 1 + b_width - 1 + 1 + int(log2(len(a_list))), result_width):
-            merged_cols[i].append(Const(True, Bool()))
+        K = len(a_list)
+        shift = a_width + b_width - 1  # column 2n-1 where the BW upper-correction run starts
+        if K & (K - 1) == 0:
+            # Power-of-2 K: the K per-product +1 runs collapse exactly into a single
+            # run of +1s starting log2(K) columns higher. Easier-to-read form.
+            for i in range(shift + int(log2(K)), result_width):
+                merged_cols[i].append(Const(True, Bool()))
+        else:
+            # Arbitrary K: total upper correction equals -K * 2^(2n-1) mod 2^R.
+            # Set a +1 in every column where that constant has a 1 bit.
+            correction = (-K << shift) & ((1 << result_width) - 1)
+            for i in range(result_width):
+                if (correction >> i) & 1:
+                    merged_cols[i].append(Const(True, Bool()))
 
     # add c term bits
     if is_signed(encoding):
