@@ -72,10 +72,22 @@ def fused_inner_product(vec_a: Iterable[Expr], vec_b: Iterable[Expr], c_term: Ex
     )
 
     if mult_cfg.ppg_opt == PPGOption.BAUGH_WOOLEY:
-        fused_upper_correction = True # True yields smaller circuit
-        ppg = mult_cfg.ppg_opt.value(stage_cfg, upper_correction=not fused_upper_correction)
+        # Lift BW's per-product constant corrections (upper, lower) and switch the
+        # signed-C addition to BW's algebraic form. All three save area on the BW
+        # baseline; see docs/booth_optim_fused_upper_correction.md and the handoff
+        # doc for the algebra and measured gains.
+        fused_upper_correction = True
+        fused_lower_correction = True
+        bw_style_c_term = True
+        ppg = mult_cfg.ppg_opt.value(
+            stage_cfg,
+            upper_correction=not fused_upper_correction,
+            lower_correction=not fused_lower_correction,
+        )
     else:
         fused_upper_correction = False
+        fused_lower_correction = False
+        bw_style_c_term = False
         ppg = mult_cfg.ppg_opt.value(stage_cfg)
     ppa = mult_cfg.ppa_opt.value(stage_cfg)
     fsa = mult_cfg.fsa_opt.value(stage_cfg)
@@ -119,11 +131,38 @@ def fused_inner_product(vec_a: Iterable[Expr], vec_b: Iterable[Expr], c_term: Ex
                 if (correction >> i) & 1:
                     merged_cols[i].append(Const(True, Bool()))
 
+    # common lower correction (BW): each per-product PPG would emit +1 at col wa
+    # (symmetric) or +1 at col wa-1 plus +1 at col wb-1 (asymmetric). K copies
+    # sum to a constant integer; emit only the bits of that sum, mod 2^R.
+    if fused_lower_correction:
+        K = len(a_list)
+        if a_width == b_width:
+            contribution = K << a_width
+        else:
+            contribution = (K << (a_width - 1)) + (K << (b_width - 1))
+        correction = contribution & ((1 << result_width) - 1)
+        for i in range(result_width):
+            if (correction >> i) & 1:
+                merged_cols[i].append(Const(True, Bool()))
+
     # add c term bits
-    if is_signed(encoding):
-        c_term = s_ext(c_term, result_width) # sign-extend c_term to result_width, make sure source is SInt
-    for bit_idx in range(min(result_width, c_term.typ.width)):
-        merged_cols[bit_idx].append(c_term[bit_idx])
+    c_w = c_term.typ.width
+    if bw_style_c_term and is_signed(encoding) and result_width > c_w:
+        # BW-style sign extension of C: emit c[0..c_w-2] naturally, invert the
+        # sign bit at col c_w-1, then add a constant +1 at every col in
+        # [c_w-1, result_width). Algebraically equivalent to sign-replicating
+        # c[c_w-1] across cols [c_w-1, R) but only emits one inverter and a run
+        # of constants, instead of (R - c_w + 1) copies of the sign-bit signal.
+        for k in range(c_w - 1):
+            merged_cols[k].append(c_term[k])
+        merged_cols[c_w - 1].append(~c_term[c_w - 1])
+        for k in range(c_w - 1, result_width):
+            merged_cols[k].append(Const(True, Bool()))
+    else:
+        if is_signed(encoding):
+            c_term = s_ext(c_term, result_width) # sign-extend c_term to result_width, make sure source is SInt
+        for bit_idx in range(min(result_width, c_term.typ.width)):
+            merged_cols[bit_idx].append(c_term[bit_idx])
 
     reduced_cols = ppa.accumulate(merged_cols)
     filtered_cols = {w: bits for w, bits in reduced_cols.items() if w < result_width}

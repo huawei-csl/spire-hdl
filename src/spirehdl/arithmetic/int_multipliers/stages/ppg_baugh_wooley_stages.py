@@ -10,9 +10,10 @@ from spirehdl.spirehdl_module import Module
 class BaughWooleyPartialProductGenerator(PartialProductGeneratorBase):
     supported_signatures = ((True, True),)
 
-    def __init__(self, config, upper_correction: bool = True) -> None:
+    def __init__(self, config, upper_correction: bool = True, lower_correction: bool = True) -> None:
         super().__init__(config)
         self.upper_correction = upper_correction
+        self.lower_correction = lower_correction
 
     def generate_columns(
         self, io: StageBasedMultiplierIO
@@ -55,11 +56,12 @@ class BaughWooleyPartialProductGenerator(PartialProductGeneratorBase):
                     cols[i].append(Const(True, Bool()))
 
         # correction bits lower
-        if wa == wb:
-            cols[wa].append(Const(True, Bool()))
-        else: # asymmetric case: correction = 2^(wa-1) + 2^(wb-1)
-            cols[wa - 1].append(Const(True, Bool()))
-            cols[wb - 1].append(Const(True, Bool()))
+        if self.lower_correction:
+            if wa == wb:
+                cols[wa].append(Const(True, Bool()))
+            else: # asymmetric case: correction = 2^(wa-1) + 2^(wb-1)
+                cols[wa - 1].append(Const(True, Bool()))
+                cols[wb - 1].append(Const(True, Bool()))
 
         total_bits = sum(len(v) for v in cols.values())
 
