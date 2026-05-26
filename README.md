@@ -165,12 +165,14 @@ Components are ideal for assembling hierarchical designs: they let you instantia
 
 ## Aggregate data types
 
-SpireHDL includes structured, bit-packable aggregates for cleaner interfaces and bulk assignments ([`aggregate/`](src/spirehdl/aggregate)):
+SpireHDL includes structured, bit-packable aggregates for cleaner interfaces and bulk assignments ([`aggregate/`](src/sprouthdl/aggregate)).  See [`README_aggregate_types.md`](README_aggregate_types.md) for the full reference with an example for every type:
 
-- `HDLAggregate` defines the base “pack to bits” API that powers all aggregates ([`hdl_aggregate.py`](src/spirehdl/aggregate/hdl_aggregate.py)).
-- `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or aggregates ([`aggregate_array.py`](src/spirehdl/aggregate/aggregate_array.py)).
-- `AggregateRecord` lets you declare bundle-like classes with named fields that remain packable to a flat bitvector ([`aggregate_record.py`](src/spirehdl/aggregate/aggregate_record.py)).
+- `HDLAggregate` defines the base “pack to bits” API that powers all aggregates ([`hdl_aggregate.py`](src/sprouthdl/aggregate/hdl_aggregate.py)).
+- `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or aggregates ([`aggregate_array.py`](src/sprouthdl/aggregate/aggregate_array.py)).
+- `AggregateRecord` lets you declare bundle-like classes with named fields that remain packable to a flat bitvector ([`aggregate_record.py`](src/sprouthdl/aggregate/aggregate_record.py)).
+- `AggregateRecordDynamic` is the dataclass-friendly variant whose fields are defined per-instance, ideal for parameterized IO records ([`aggregate_record_dynamic.py`](src/spirehdl/aggregate/aggregate_record_dynamic.py)).
 - `FixedPoint` wraps a `Wire` or view with explicit total/frac widths and quantization helpers, keeping arithmetic readable while staying hardware-friendly ([`aggregate_fixed_point.py`](src/spirehdl/aggregate/aggregate_fixed_point.py)).
+- `FloatingPoint` provides an IEEE-style view with `add`/`mul` helpers parameterized by exponent / fraction widths ([`aggregate_floating_point.py`](src/spirehdl/aggregate/aggregate_floating_point.py)).
 - `AggregateRegister` stores any aggregate in a single register while preserving a structured view via `.value`/`.Q` ([`aggregate_register.py`](src/spirehdl/aggregate/aggregate_register.py)).
 
 Example:

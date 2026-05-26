@@ -198,29 +198,47 @@ class _AIG:
             eq = self.mk_and(eq, self.mk_xnor(a[i], b[i]))
         return eq
 
-    def bv_shift_left(self, a: List[int], sh: List[int], w_out: int) -> List[int]:
-        # Barrel shifter (logical), mux-based; sh is LSB-first
-        res = a[:]
-        res = self._zext(res, w_out)
+    def _or_reduce(self, bits: List[int]) -> int:
+        """OR-reduce a list of literals down to a single literal."""
+        r = lit_const0()
+        for b in bits:
+            r = self.mk_or(r, b)
+        return r
+
+    def _bv_shift(self, a: List[int], sh: List[int], w_out: int, *, left: bool) -> List[int]:
+        # Logical barrel shifter (mux-based); sh is LSB-first. `left` selects
+        # the shift direction
+        #
+        # Only shift-amount bits whose stage weight is < w_out are real barrel
+        # stages. A bit with weight >= w_out can never land a value bit inside
+        # the result and the result must be 0.
+        res = self._zext(a[:], w_out)
+
+        # number of selector bits that drive real barrel stages (steps < w_out)
+        active_n = (w_out - 1).bit_length()
+
         step = 1
-        for bit in sh:
-            if step >= w_out:
-                break
-            shifted = [lit_const0()] * step + res[: w_out - step]
+        for bit in sh[:active_n]:
+            if left:
+                shifted = [lit_const0()] * step + res[: w_out - step]
+            else:
+                shifted = res[step:] + [lit_const0()] * step
             res = self.bv_mux(bit, shifted, res)
             step <<= 1
+
+        # Overflow guard: only the high shift bits (weight >= w_out) can encode
+        # an out-of-range shift -- OR-reduce them and force the result to 0 when
+        # set.
+        if len(sh) > active_n:
+            overflow = self._or_reduce(sh[active_n:])
+            res = self.bv_mux(overflow, [lit_const0()] * w_out, res)
         return res
 
+    def bv_shift_left(self, a: List[int], sh: List[int], w_out: int) -> List[int]:
+        return self._bv_shift(a, sh, w_out, left=True)
+
     def bv_shift_right(self, a: List[int], sh: List[int], w_out: int) -> List[int]:
-        res = self._zext(a[:], w_out)
-        step = 1
-        for bit in sh:
-            if step >= w_out:
-                break
-            shifted = res[step:] + [lit_const0()] * step
-            res = self.bv_mux(bit, shifted, res)
-            step <<= 1
-        return res
+        return self._bv_shift(a, sh, w_out, left=False)
 
     def bv_mul(self, a: List[int], b: List[int], w_out: int) -> List[int]:
         # Shift-add array multiplier (unsigned; two's complement works bitwise equally for product bits)
