@@ -29,6 +29,7 @@ Other markdown documents in this repository:
 - [`README_arithmetic_optimization.md`](README_arithmetic_optimization.md) — automatic arithmetic replacement with `replace_arithmetic_ops` (adders, multipliers, subtractors)
 - [`README_optimization_decorators.md`](README_optimization_decorators.md) — the `@abc_optimized` / `@flowy_optimized` circuit optimization decorators
 - [`README_state_machines.md`](README_state_machines.md) — finite-state-machine declaration with the `State` / `Encoding` API and `switch_`/`case_` bodies
+- [`README_memories.md`](README_memories.md) — the `Memory` primitive (FIFOs, ROMs, RAMs), port wiring with `<<=`, simulation, and reading current memory state
 - [`testing/examples/README.md`](testing/examples/README.md) — example designs exercising SpireHDL features
 
 ## Installation

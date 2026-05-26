@@ -6,7 +6,7 @@ import time
 
 
 from spirehdl import VERILOG_BANNER
-from spirehdl.spirehdl import Bool, Const, Expr, ExprLike, HDLType, MemRead, Memory, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
+from spirehdl.spirehdl import Bool, Const, Expr, ExprLike, HDLType, Memory, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
 
 
 from typing import Any, Dict, Iterable, List, Optional
@@ -20,6 +20,7 @@ except ImportError:
     from typing_extensions import Self  # type: ignore
 
 from spirehdl.spirehdl_analyzer import _Analyzer, GraphReport
+from spirehdl.spirehdl_visitor import ExprVisitor, expr_children
 
 
 class Component(abc.ABC):
@@ -72,7 +73,7 @@ class Component(abc.ABC):
                 raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
         module.component = self # can be used for debugging
         #reset_shared_cache() # no longer needed as we collect signals
-        module._collect_signals_from_outputs([s for s in iter_values(self.io) if s.kind == "output"])
+        module.collect_signals()
         return module 
 
     def from_module(self, module: 'Module', make_internal=False, group=False) -> Self:
@@ -204,163 +205,19 @@ class Module:
         return spec
 
     def collect_signals(self) -> None:
+        """Rebuild ``_signals`` to hold every Signal reachable from any port or
+        user-added internal (anything currently in ``_signals`` that wasn't
+        produced by the CSE share-cache). Orphan auto-shared wires drop out
+        on each call — that's how simplify/CSE rewrites prune dead `assign`
+        lines.
         """
-        Walk the design starting from outputs
-        """
-        self._collect_signals_from_outputs(self._ports_of("output"))
-
-    # fast version
-    def _collect_signals_from_outputs(self, outputs: List["Signal"]) -> None:
-        """
-        Walk the design starting from outputs, pulling every reachable Signal into _signals.
-        Internal signals must be wire/reg; encountering an input/output that is not a port raises.
-        Name collisions are avoided by suffixing internal signal names.
-        """
-
-        # Optional: comment these out on huge graphs (printing itself can be slow)
-        # print("Collecting signals...")
-
-        # Start with ports, keep their names stable
-        self._signals = list(self._ports)
         port_ids = {id(p) for p in self._ports}
-
-        # O(1) membership for "already appended to _signals"
-        signals_in_list = set(port_ids)
-
-        # Name tracking (ports first)
-        name_to_sig: Dict[str, "Signal"] = {p.name: p for p in self._ports}
-
-        visited_signal_ids: set[int] = set()
-        visited_expr_ids: set[int] = set()
-
-        # Cache: expr type -> function that yields child expressions
-        child_extractor_cache: Dict[type, callable] = {}
-
-        def uniquify_internal(sig: "Signal") -> None:
-            # Ports keep their names
-            if id(sig) in port_ids:
-                return
-
-            base = sig.name
-            existing = name_to_sig.get(base)
-
-            # If mapping already points to this exact signal, nothing to do
-            if existing is sig:
-                return
-
-            # If name is free, claim it
-            if existing is None:
-                name_to_sig[base] = sig
-                return
-
-            # Otherwise, suffix until free
-            idx = 1
-            while True:
-                candidate = f"{base}_{idx}"
-                if candidate not in name_to_sig:
-                    sig.name = candidate
-                    name_to_sig[candidate] = sig
-                    return
-                idx += 1
-
-        def get_children(e: "Expr"):
-            """Yield child expressions of e, with per-type caching of which fields to traverse."""
-            t = type(e)
-            fn = child_extractor_cache.get(t)
-            if fn is None:
-                if t is MemRead:
-                    # MemRead has non-standard fields (mem, addr); the generic attr-probe
-                    # below would miss both.
-                    def fn(x):
-                        yield x.mem
-                        yield x.addr
-                else:
-                    # Probe once for this type using the current instance.
-                    # This assumes structure is consistent across instances of the same class (usually true).
-                    names = []
-                    for n in ("a", "b", "sel", "_driver"):
-                        if hasattr(e, n):
-                            names.append(n)
-                    has_parts = hasattr(e, "parts")
-
-                    def fn(x, names=tuple(names), has_parts=has_parts):
-                        for n in names:
-                            yield getattr(x, n)
-                        if has_parts:
-                            for p in x.parts:
-                                yield p
-
-                child_extractor_cache[t] = fn
-            return fn(e)
-
-        # Iterative DFS stack over Expr|Signal|None
-        stack = list(outputs)
-
-        # Localize lookups for speed in tight loops
-        v_sig = visited_signal_ids
-        v_expr = visited_expr_ids
-        v_sig_add = v_sig.add
-        v_expr_add = v_expr.add
-        s_in = signals_in_list
-        s_in_add = s_in.add
-        append_sig = self._signals.append
-
-        while stack:
-            node = stack.pop()
-            if node is None:
-                continue
-
-            # Signals are Expr in your system, so check Signal first
-            if isinstance(node, Signal):
-                sid = id(node)
-                if sid in v_sig:
-                    continue
-                v_sig_add(sid)
-
-                if sid not in port_ids:
-                    if node.kind in ("input", "output"):
-                        raise RuntimeError(
-                            f"Internal signal '{node.name}' has port kind '{node.kind}'. "
-                            "Use wire/reg for internals. For internal components use make_internal()"
-                        )
-                    uniquify_internal(node)
-
-                    if sid not in s_in:
-                        append_sig(node)
-                        s_in_add(sid)
-
-                drv = node._driver
-                if drv is not None:
-                    stack.append(drv)
-
-                # Memory-managed registers (registered-read outputs) have no _driver — their
-                # next-state is the memory's MemRead. Push the parent memory so it gets walked.
-                mem_owner = getattr(node, "_memory_managed_by", None)
-                if mem_owner is not None:
-                    stack.append(mem_owner)
-
-                # Memory: its port exprs (write/reset/registered-read) aren't reachable via _driver,
-                # so push them here so any expressions feeding them get collected.
-                if node.kind == "mem":
-                    for e in (node._write_addr, node._write_data, node._write_enable,
-                              node._reset_enable, node._reset_value,
-                              node._reg_read_addr, node._reg_read_enable):
-                        if e is not None:
-                            stack.append(e)
-                    if node._reg_read_output is not None:
-                        stack.append(node._reg_read_output)
-                continue
-
-            # Otherwise it's an Expr (non-Signal)
-            eid = id(node)
-            if eid in v_expr:
-                continue
-            v_expr_add(eid)
-
-            # Push children
-            for ch in get_children(node):
-                if ch is not None:
-                    stack.append(ch)
+        user_internals = [s for s in self._signals
+                          if id(s) not in port_ids
+                          and not getattr(s, "_auto_generated", False)]
+        seeds = self._ports_of("output") + user_internals
+        self._signals = list(self._ports)
+        _SignalCollector(self).run(seeds)
 
         # print(f"Collected {len(self._signals)} signals.")
 
@@ -439,15 +296,22 @@ class Module:
                 if apply_structural_cse(self):
                     self.collect_signals()
 
+        # Validate memory connections first (cheap, fails early).
+        mems = self._internals_of("mem")
+        for m in mems:
+            m.validate()
+
+        # Memory-owned rdata Registers get their next-state written inside the memory's
+        # own always block; exclude from the normal reg always block.
+        mem_owned_reg_ids = {id(m.read_data) for m in mems if m._registered_read}
+
         # Basic checks
         for s in self._signals:
             if s.kind in ("wire", "output") and s._driver is None:
                 if s.kind == "output":
                     raise ValueError(f"Output '{s.name}' has no driver.")
             if s.kind == "reg" and s._driver is None:
-                # Memory-managed registers (registered-read outputs) get their next-state
-                # written by the memory's always block, not via _driver.
-                if getattr(s, "_memory_managed_by", None) is None:
+                if id(s) not in mem_owned_reg_ids:
                     raise ValueError(f"Register '{s.name}' has no next-state assignment.")
 
         lines: List[str] = [VERILOG_BANNER, ""]
@@ -464,18 +328,13 @@ class Module:
             rng = p.typ.range_str()
             lines.append(f"  {dir_} {sign}{rng} {p.name};")
 
-        # Internals
-        # wires = self._internals_of("wire") + get_shared_wires()
-        # instead of the above merge to avoid duplication if called multiple times
         wires = self._internals_of("wire")
         if not collect_signals:
             wires += [s for s in get_shared_wires() if not any(s is w for w in wires)]
 
         regs_all = self._internals_of("reg")
-        # Memory-managed registers (registered-read outputs) get their next-state in the
-        # memory's own always block; exclude from the normal reg always block.
-        regs = [r for r in regs_all if getattr(r, "_memory_managed_by", None) is None]
-        mems = self._internals_of("mem")
+        regs = [r for r in regs_all if id(r) not in mem_owned_reg_ids]
+
         lines.append('// Wires')
         for w in wires:
             sign = "signed " if w.typ.signed else ""
@@ -489,26 +348,23 @@ class Module:
         if mems:
             lines.append('// Memories')
             for m in mems:
-                sign = "signed " if m.typ.signed else ""
-                rng = m.typ.range_str()
-                lines.append(f"  reg {sign}{rng} {m.name}[0:{m.depth-1}];")
-        # Combinational assigns for wires/outputs
+                lines += m.emit_decl_lines()
+
+        # Combinational assigns for wires/outputs. Memory port wires (wires with
+        # `_memory_parent`) come through this loop too — their drivers are either
+        # user-set (write_addr/data/enable, reset_*, read_addr/enable) or the
+        # default `Const(1)`/`Const(0)`/`_ArrayIndex` set at memory construction.
         lines.append("// Combinational assignments")
         for s in [*wires, *self._ports_of("output")]:
             if s._driver is not None:
                 rhs = fit_width(s._driver, s.typ).to_verilog()
                 lines.append(f"  assign {s.name} = {rhs};")
 
-        # Memory initial values (ROM-style array literal)
+        # Memory init-block (ROM-style).
         for m in mems:
-            if m.init is not None:
-                lines.append("initial begin")
-                for i, v in enumerate(m.init):
-                    lit = Const(v, m.typ).to_verilog()
-                    lines.append(f"  {m.name}[{i}] = {lit};")
-                lines.append("end")
+            lines += m.emit_initial_lines()
 
-        # Sequential logic
+        # Sequential logic for normal regs.
         lines.append("// Sequential logic")
         if regs:
             if not self.with_clock:
@@ -531,61 +387,12 @@ class Module:
                     lines.append(f"    {r.name} <= {fit_width(r._driver, r.typ).to_verilog()};")
             lines.append("  end")
 
-        # Memory sequential logic — one always block per memory. Clock-only sensitivity
-        # (no async rst) since memory reset is via the memory's own .reset(enable) port,
-        # not the module's rst — matches the verilog idiom yosys's memory pass recognises.
+        # Memory always blocks — clock-only, yosys-recognised idiom.
         for m in mems:
-            has_write = m._write_addr is not None
-            has_reset = m._reset_enable is not None
-            has_rread = m._reg_read_addr is not None
-            if not (has_write or has_reset or has_rread):
-                continue  # ROM only (init-only) — no sequential block
-            if not self.with_clock:
+            mem_lines = m.emit_always_lines(self.clk.name if self.with_clock else "")
+            if mem_lines and not self.with_clock:
                 raise ValueError(f"Memory '{m.name}' has sequential ports but module has no clock.")
-            lines.append(f"  always @(posedge {self.clk.name}) begin")
-            if has_reset and has_write:
-                re_v = m._reset_enable.to_verilog()
-                rv_v = m._reset_value.to_verilog()
-                wa_v = m._write_addr.to_verilog()
-                wd_v = fit_width(m._write_data, m.typ).to_verilog()
-                lines.append(f"    if ({re_v}) begin")
-                for i in range(m.depth):
-                    lines.append(f"      {m.name}[{i}] <= {rv_v};")
-                if m._write_enable is not None:
-                    we_v = m._write_enable.to_verilog()
-                    lines.append(f"    end else if ({we_v}) begin")
-                else:
-                    lines.append(f"    end else begin")
-                lines.append(f"      {m.name}[{wa_v}] <= {wd_v};")
-                lines.append(f"    end")
-            elif has_reset:
-                re_v = m._reset_enable.to_verilog()
-                rv_v = m._reset_value.to_verilog()
-                lines.append(f"    if ({re_v}) begin")
-                for i in range(m.depth):
-                    lines.append(f"      {m.name}[{i}] <= {rv_v};")
-                lines.append(f"    end")
-            elif has_write:
-                wa_v = m._write_addr.to_verilog()
-                wd_v = fit_width(m._write_data, m.typ).to_verilog()
-                if m._write_enable is not None:
-                    we_v = m._write_enable.to_verilog()
-                    lines.append(f"    if ({we_v}) begin")
-                    lines.append(f"      {m.name}[{wa_v}] <= {wd_v};")
-                    lines.append(f"    end")
-                else:
-                    lines.append(f"    {m.name}[{wa_v}] <= {wd_v};")
-            if has_rread:
-                ra_v = m._reg_read_addr.to_verilog()
-                rout = m._reg_read_output.name
-                if m._reg_read_enable is not None:
-                    re_v = m._reg_read_enable.to_verilog()
-                    lines.append(f"    if ({re_v}) begin")
-                    lines.append(f"      {rout} <= {m.name}[{ra_v}];")
-                    lines.append(f"    end")
-                else:
-                    lines.append(f"    {rout} <= {m.name}[{ra_v}];")
-            lines.append("  end")
+            lines += mem_lines
 
         lines.append("endmodule")
         return lines
@@ -665,6 +472,103 @@ class Module:
                 visit(s._driver)
 
         return exprs
+
+
+class _SignalCollector(ExprVisitor[None]):
+    """Walk a design and rebuild `Module._signals`.
+
+    Side-effects only: each visited Signal is uniquified and appended to
+    `_signals` (once). Traversal goes through `expr_children`, which knows
+    about Memory port-wires and the port-wire back-edge to its parent.
+    """
+
+    def __init__(self, module: "Module") -> None:
+        super().__init__()
+        self.m = module
+        self.port_ids = {id(p) for p in module._ports}
+        self.in_list = set(self.port_ids)
+        self.name_to_sig: Dict[str, "Signal"] = {p.name: p for p in module._ports}
+
+    def run(self, seeds: List["Signal"]) -> None:
+        for s in seeds:
+            self.visit(s)
+
+    def visit_signal(self, s: Signal) -> None:
+        sid = id(s)
+        if sid not in self.port_ids:
+            if s.kind in ("input", "output"):
+                raise RuntimeError(
+                    f"Internal signal '{s.name}' has port kind '{s.kind}'. "
+                    "Use wire/reg for internals. For internal components use make_internal()")
+            self._uniquify(s)
+            if sid not in self.in_list:
+                self.m._signals.append(s)
+                self.in_list.add(sid)
+        # Walk children explicitly. Unlike `expr_children` (which treats regs as
+        # comb-depth-zero leaves for analyzer purposes), the collector must
+        # traverse reg drivers too — otherwise externally-created Registers/Wires
+        # chained to module outputs would be missed.
+        if isinstance(s, Memory):
+            for p in s._iter_ports():
+                self.visit(p)
+        else:
+            parent = getattr(s, "_memory_parent", None)
+            if parent is not None:
+                self.visit(parent)
+            if s._driver is not None:
+                self.visit(s._driver)
+
+    # Default-recurse for non-Signal nodes via expr_children.
+    def _walk(self, e: Expr) -> None:
+        for ch in expr_children(e):
+            self.visit(ch)
+
+    visit_const = staticmethod(lambda e: None)
+    visit_array_index = staticmethod(lambda e: None)
+    visit_op1     = _walk
+    visit_op2     = _walk
+    visit_ternary = _walk
+    visit_concat  = _walk
+    visit_slice   = _walk
+    visit_resize  = _walk
+
+    def _uniquify(self, sig: Signal) -> None:
+        # Memory port wires: name is `{mem.name}__suffix` derived from the current
+        # parent name. If the parent is renamed later, ``_propagate_mem_rename``
+        # (below) updates port wire names too — so we don't need to force the
+        # parent to be visited first here (that would recurse infinitely because
+        # the parent's children include this very port).
+        parent = getattr(sig, "_memory_parent", None)
+        if parent is not None:
+            sig.name = f"{parent.name}__{sig._port_suffix}"
+        base = sig.name
+        existing = self.name_to_sig.get(base)
+        if existing is sig:
+            return
+        if existing is None:
+            self.name_to_sig[base] = sig
+            return
+        # Collision: suffix until free.
+        idx = 1
+        while True:
+            candidate = f"{base}_{idx}"
+            if candidate not in self.name_to_sig:
+                sig.name = candidate
+                self.name_to_sig[candidate] = sig
+                # If we just renamed a Memory, propagate to its port wires that have
+                # already been uniquified (we'll see new ports later via traversal,
+                # but already-cached ones won't be revisited).
+                if isinstance(sig, Memory):
+                    for port in sig._iter_ports():
+                        old = port.name
+                        new = f"{sig.name}__{port._port_suffix}"
+                        port.name = new
+                        if old in self.name_to_sig and self.name_to_sig[old] is port:
+                            del self.name_to_sig[old]
+                        self.name_to_sig[new] = port
+                return
+            idx += 1
+
 
 def gen_spec(class_instance: Component) -> Dict[str, UInt]:
     spec = {}

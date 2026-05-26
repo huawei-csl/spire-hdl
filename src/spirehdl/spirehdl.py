@@ -369,125 +369,212 @@ class Wire(Signal):
 class Memory(Signal):
     """Array-of-registers storage. Emits `reg [W-1:0] name[0:depth-1];`.
 
-    Lets yosys's ``memory`` pass recognise the storage as a memory array
-    (vs. N separate Register declarations), so memory-aware optimisations
-    (``memory_dff``, ``memory_share``, ``memory_bmux2rom``) fire.
+    Memory exposes its read/write/reset ports as Signal attributes. Users
+    wire them with ``<<=`` just like any other signal::
 
-    MVP scope:
-      * 1 write port (``.write(addr, data, enable=)``)
-      * 1 sync-reset path (``.reset(enable, value=)``) — clears all entries
-        to a constant via a ``for`` loop inside ``always @(posedge clk)``.
-      * N combinational reads via ``mem[addr]`` → ``MemRead`` Expr.
-      * Optional initial values (``init=[…]``) — emitted as an
-        ``initial`` block; sets the array at sim time 0.
-      * Optional registered-read port (``.registered_read(addr, enable=)``)
-        — auto-creates a Register that captures ``mem[addr]`` per edge.
+        mem = Memory(UInt(9), depth=16, name="fifo")
+        mem.write_addr   <<= addr_w
+        mem.write_data   <<= din
+        mem.write_enable <<= we       # default 1 if user omits; gate writes with this
+        mem.reset_enable <<= clr      # presence activates the reset arm
+        mem.reset_value  <<= 0        # default 0; usually omitted
+        mem.read_addr    <<= addr_r
+        dout             <<= mem.read_data
 
-    See ``benchmarks/dr_rtl_spirehdl/router/context/starting_point.py`` for
-    the canonical use case (16 × 9-bit FIFO).
+    Sync read: ``Memory(..., registered_read=True)`` makes ``read_data`` a
+    Register clocked by the memory's own always block (yosys-friendly
+    idiom). The Memory also gets a ``read_enable`` port, defaulting to 1.
+
+    There are no ``write()``/``reset()``/``registered_read()`` methods —
+    everything is just port wiring. Verilog emission and simulation live
+    on Memory itself (``emit_decl``, ``emit_initial``, ``emit_always``,
+    ``init_sim_state``, ``step``) and are called by Module/Simulator.
     """
 
-    def __init__(self, elem_type: HDLType, depth: int,
+    def __init__(self, elem_type: HDLType, depth: int, *,
                  init: Optional[Sequence[int]] = None,
+                 registered_read: bool = False,
                  name: Optional[str] = None):
         if name is None:
             name = infer_signal_name_from_assignment("mem", "mem", __file__)
         if depth <= 0:
             raise ValueError(f"Memory depth must be > 0; got {depth}")
-        if init is not None:
-            if len(init) != depth:
-                raise ValueError(
-                    f"Memory init must have length == depth ({depth}); got {len(init)}")
+        if init is not None and len(init) != depth:
+            raise ValueError(
+                f"Memory init must have length == depth ({depth}); got {len(init)}")
         super().__init__(name, elem_type, kind="mem")
         self.depth = depth
         self.init = list(init) if init is not None else None
-        # Write port — set by .write(addr, data, enable=)
-        self._write_addr: Optional[Expr] = None
-        self._write_data: Optional[Expr] = None
-        self._write_enable: Optional[Expr] = None
-        # Reset — set by .reset(enable, value=)
-        self._reset_enable: Optional[Expr] = None
-        self._reset_value: Optional[Expr] = None
-        # Optional registered-read port — set by .registered_read(addr, enable=)
-        self._reg_read_addr: Optional[Expr] = None
-        self._reg_read_enable: Optional[Expr] = None
-        self._reg_read_output: Optional["Signal"] = None  # auto-created Register
+        self._registered_read = registered_read
+        addr_t = UInt(max(1, (depth - 1).bit_length()))
 
-    def write(self, addr: ExprLike, data: ExprLike, enable: Optional[ExprLike] = None) -> None:
-        """Declare a single write port.
+        def _port(suffix: str, typ: HDLType, kind: str = "wire") -> Signal:
+            s = Signal(f"{name}__{suffix}", typ, kind)
+            s._memory_parent = self
+            s._port_suffix = suffix
+            return s
 
-        Verilog idiom emitted::
+        # Required ports — user must drive when the corresponding group is active.
+        self.write_addr   = _port("waddr", addr_t)
+        self.write_data   = _port("wdata", elem_type)
+        self.reset_enable = _port("rstn",  Bool())
+        self.read_addr    = _port("raddr", addr_t)
 
-            always @(posedge clk)
-              if (enable) name[addr] <= data;
-        """
-        if self._write_addr is not None:
-            raise ValueError(f"Memory '{self.name}': single write port only (MVP).")
-        self._write_addr = as_expr(addr)
-        self._write_data = fit_width(as_expr(data), self.typ)
-        self._write_enable = as_expr(enable) if enable is not None else None
-
-    def reset(self, enable: ExprLike, value: ExprLike = 0) -> None:
-        """Declare a single sync-reset path that clears all entries to *value*.
-
-        Verilog idiom emitted::
-
-            always @(posedge clk)
-              if (enable) for (i=0; i<depth; i=i+1) name[i] <= value;
-        """
-        if self._reset_enable is not None:
-            raise ValueError(f"Memory '{self.name}': single reset port only (MVP).")
-        self._reset_enable = as_expr(enable)
-        if isinstance(value, int):
-            self._reset_value = Const(value, self.typ)
+        # Optional ports with defaults (user may override with `<<=`).
+        self.write_enable = _port("we", Bool())
+        self.write_enable._driver = Const(1, Bool())
+        self.reset_value  = _port("rv", elem_type)
+        self.reset_value._driver = Const(0, elem_type)
+        if registered_read:
+            self.read_enable = _port("re", Bool())
+            self.read_enable._driver = Const(1, Bool())
+            self.read_data = _port("rdata", elem_type, kind="reg")
+            # Next-state for read_data is computed inside the memory's always block.
         else:
-            self._reset_value = fit_width(as_expr(value), self.typ)
+            self.read_enable = None
+            self.read_data = _port("rdata", elem_type)
+            self.read_data._driver = _ArrayIndex(self, self.read_addr, elem_type)
 
-    def registered_read(self, addr: ExprLike, enable: Optional[ExprLike] = None) -> "Signal":
-        """Declare a single registered-read port. Returns the auto-created Register.
+    def to_verilog(self) -> str:
+        # A Memory is an array; it can never appear as a scalar operand. Raise
+        # instead of silently producing invalid verilog like `assign out = fifo;`.
+        raise RuntimeError(
+            f"Memory '{self.name}' cannot appear in an expression; use mem.read_data.")
 
-        Verilog idiom emitted::
+    # ----------------------------- introspection helpers ----------------------
 
-            always @(posedge clk)
-              if (enable) <auto_reg> <= name[addr];
+    def _iter_ports(self) -> "list[Signal]":
+        return [p for p in (
+            self.write_addr, self.write_data, self.write_enable,
+            self.reset_value, self.reset_enable,
+            self.read_addr, self.read_data, self.read_enable,
+        ) if p is not None]
 
-        If *enable* is None the read fires every cycle.
-        """
-        if self._reg_read_addr is not None:
-            raise ValueError(f"Memory '{self.name}': single registered-read port only (MVP).")
-        self._reg_read_addr = as_expr(addr)
-        self._reg_read_enable = as_expr(enable) if enable is not None else None
-        out = Register(self.typ, name=f"{self.name}_rdata")
-        # Tag so to_verilog_lines skips it in the regular reg-always block — it gets
-        # emitted as `name_rdata <= name[addr]` inside the memory's own always block,
-        # which is the verilog idiom yosys's memory pass recognises.
-        out._memory_managed_by = self
-        self._reg_read_output = out
+    def _has_write_port(self) -> bool:
+        return self.write_addr._driver is not None
+
+    def _has_reset_arm(self) -> bool:
+        return self.reset_enable._driver is not None
+
+    # ----------------------------- verilog emission ---------------------------
+
+    def emit_decl_lines(self) -> "list[str]":
+        sign = "signed " if self.typ.signed else ""
+        rng = self.typ.range_str()
+        return [f"  reg {sign}{rng} {self.name}[0:{self.depth-1}];"]
+
+    def emit_initial_lines(self) -> "list[str]":
+        if self.init is None:
+            return []
+        out = ["initial begin"]
+        for i, v in enumerate(self.init):
+            out.append(f"  {self.name}[{i}] = {Const(v, self.typ).to_verilog()};")
+        out.append("end")
         return out
 
-    def __getitem__(self, addr: ExprLike) -> "MemRead":
-        """Async (combinational) read at ``mem[addr]``."""
-        return MemRead(self, as_expr(addr))
+    def emit_always_lines(self, clk_name: str) -> "list[str]":
+        has_w = self._has_write_port()
+        has_r = self._has_reset_arm()
+        has_rr = self._registered_read
+        if not (has_w or has_r or has_rr):
+            return []
 
-    def to_verilog(self) -> str:
-        # Memory itself doesn't appear in expressions; only MemRead does.
-        # If someone references the memory directly, emit just the name.
-        return self.name
+        n = self.name
+        out = [f"  always @(posedge {clk_name}) begin"]
+        if has_r and has_w:
+            out.append(f"    if ({self.reset_enable.name}) begin")
+            for i in range(self.depth):
+                out.append(f"      {n}[{i}] <= {self.reset_value.name};")
+            out.append(f"    end else if ({self.write_enable.name}) begin")
+            out.append(f"      {n}[{self.write_addr.name}] <= {self.write_data.name};")
+            out.append(f"    end")
+        elif has_r:
+            out.append(f"    if ({self.reset_enable.name}) begin")
+            for i in range(self.depth):
+                out.append(f"      {n}[{i}] <= {self.reset_value.name};")
+            out.append(f"    end")
+        elif has_w:
+            out.append(f"    if ({self.write_enable.name}) begin")
+            out.append(f"      {n}[{self.write_addr.name}] <= {self.write_data.name};")
+            out.append(f"    end")
+        if has_rr:
+            out.append(f"    if ({self.read_enable.name}) begin")
+            out.append(f"      {self.read_data.name} <= {n}[{self.read_addr.name}];")
+            out.append(f"    end")
+        out.append("  end")
+        return out
+
+    def validate(self) -> None:
+        """Raise if required ports are partially wired (called by to_verilog)."""
+        wa = self.write_addr._driver is not None
+        wd = self.write_data._driver is not None
+        if wa != wd:
+            raise ValueError(
+                f"Memory '{self.name}': write_addr and write_data must both be "
+                f"connected or both left unconnected (got addr={wa}, data={wd}).")
+        if self._registered_read and self.read_addr._driver is None:
+            raise ValueError(
+                f"Memory '{self.name}': registered_read=True requires read_addr to be connected.")
+
+    # ----------------------------- simulator hooks ----------------------------
+
+    def init_sim_state(self) -> "list[int]":
+        if self.init is None:
+            return [0] * self.depth
+        from spirehdl.spirehdl_simulator import _to_bits  # local import (lazy to avoid cycles)
+        return [_to_bits(v, self.typ.width) for v in self.init]
+
+    def step(self, sim) -> None:
+        """One clock-edge update: writes/reset to mem state + rdata reg capture.
+
+        Mirrors verilog non-blocking semantics: all right-hand sides are sampled
+        from the pre-edge state before any updates apply. We sample the rdata
+        next-state *before* mutating the memory array, so a same-cycle write
+        followed by a registered read gives the old value (write-before-read
+        race resolved as it would be in hardware).
+        """
+        from spirehdl.spirehdl_simulator import _to_bits, _sid  # lazy, avoids cycles
+        ev = sim._eval_signal_bits
+        arr = sim._mem_state[id(self)]
+        w = self.typ.width
+
+        # 1. Sample rdata next-state from pre-edge mem state.
+        rdata_next = None
+        if self._registered_read and ev(self.read_enable) & 1:
+            a = _to_bits(ev(self.read_addr), self.read_addr.typ.width)
+            rdata_next = arr[a] if 0 <= a < self.depth else 0
+
+        # 2. Apply write/reset to mem state.
+        if self._has_reset_arm() and ev(self.reset_enable) & 1:
+            rv = _to_bits(ev(self.reset_value), w)
+            for i in range(self.depth):
+                arr[i] = rv
+        elif self._has_write_port() and ev(self.write_enable) & 1:
+            a = _to_bits(ev(self.write_addr), self.write_addr.typ.width)
+            if 0 <= a < self.depth:
+                arr[a] = _to_bits(ev(self.write_data), w)
+
+        # 3. Commit rdata reg next-state.
+        if rdata_next is not None:
+            sim._reg[_sid(self.read_data)] = _to_bits(rdata_next, w)
 
 
-class MemRead(Expr):
-    """Combinational read of a Memory element at ``mem[addr]``.
+class _ArrayIndex(Expr):
+    """Leaf Expr that emits ``mem.name[addr_wire.name]`` in verilog.
 
-    The ``typ`` of a MemRead is the memory's element type.
+    Used as the ``_driver`` of an async-read memory's ``read_data`` wire. Walkers
+    treat this as a leaf (no children): the address signal is reached through
+    Memory's port traversal, not through this Expr's fields. The simulator's
+    ``visit_array_index`` reads from ``_mem_state``.
     """
 
-    def __init__(self, mem: "Memory", addr: Expr):
+    def __init__(self, mem: "Memory", addr_wire: Signal, typ: HDLType):
         self.mem = mem
-        self.addr = addr
-        self.typ = mem.typ  # element type
+        self.addr_wire = addr_wire
+        self.typ = typ
 
     def to_verilog(self) -> str:
-        return f"{self.mem.name}[{self.addr.to_verilog()}]"
+        return f"{self.mem.name}[{self.addr_wire.name}]"
 
 
 # -----------------------------

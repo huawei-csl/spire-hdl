@@ -15,13 +15,14 @@ from spirehdl.spirehdl import (
     Concat,
     Const,
     Expr,
-    MemRead,
+    Memory,
     Op1,
     Op2,
     Resize,
     Signal,
     Slice,
     Ternary,
+    _ArrayIndex,
 )
 
 T = TypeVar("T")
@@ -37,10 +38,25 @@ def expr_children(e: Expr) -> Tuple[Expr, ...]:
     * ``Const`` and leaf ``Signal`` nodes (inputs, registers) have no children.
     * Combinational ``Signal`` nodes (wires, outputs) follow through to their
       driver expression.
+    * ``Memory`` (``kind="mem"``) exposes its port Signals as children, so the
+      collector finds the storage and its connected logic via normal traversal.
+    * A port Signal (any wire with ``_memory_parent``) yields a back-edge to
+      its parent Memory plus its own ``_driver`` — so reaching ``read_data``
+      from a user output traverses to the Memory and then out to the write
+      side.
+    * ``_ArrayIndex`` is a leaf — the address signal is reached through
+      Memory's port traversal, not through this Expr.
     """
     if isinstance(e, Const):
         return ()
+    if isinstance(e, _ArrayIndex):
+        return ()
     if isinstance(e, Signal):
+        if isinstance(e, Memory):
+            return tuple(e._iter_ports())
+        if getattr(e, "_memory_parent", None) is not None:
+            parent = e._memory_parent
+            return (parent, e._driver) if e._driver is not None else (parent,)
         if e.kind in ("input", "reg") or e._driver is None:
             return ()
         return (e._driver,)
@@ -56,10 +72,6 @@ def expr_children(e: Expr) -> Tuple[Expr, ...]:
         return (e.a,)
     if isinstance(e, Resize):
         return (e.a,)
-    if isinstance(e, MemRead):
-        # The Memory itself is a Signal (kind="mem") and not a sub-expression
-        # that participates in normal Expr DAG traversal — only the address is.
-        return (e.addr,)
     return ()
 
 
@@ -79,13 +91,22 @@ class ExprVisitor(Generic[T]):
         self._cache: dict[int, T] = {}
 
     def visit(self, e: Expr) -> T:
-        """Dispatch *e* to the appropriate ``visit_*`` handler (cached)."""
+        """Dispatch *e* to the appropriate ``visit_*`` handler (cached).
+
+        Cache is set to ``None`` eagerly before dispatch, so re-entry from
+        inside ``visit_*`` (e.g. when the design graph has back-edges like
+        Memory ↔ port-wire) returns ``None`` instead of recursing. After
+        ``visit_*`` returns, the cache is updated with the real result.
+        """
         eid = id(e)
         if eid in self._cache:
             return self._cache[eid]
+        self._cache[eid] = None  # in-progress sentinel — breaks back-edge cycles
 
         if isinstance(e, Const):
             result = self.visit_const(e)
+        elif isinstance(e, _ArrayIndex):
+            result = self.visit_array_index(e)
         elif isinstance(e, Signal):
             result = self.visit_signal(e)
         elif isinstance(e, Op1):
@@ -100,8 +121,6 @@ class ExprVisitor(Generic[T]):
             result = self.visit_slice(e)
         elif isinstance(e, Resize):
             result = self.visit_resize(e)
-        elif isinstance(e, MemRead):
-            result = self.visit_memread(e)
         else:
             raise TypeError(f"Unsupported Expr subclass: {type(e)}")
 
@@ -138,5 +157,5 @@ class ExprVisitor(Generic[T]):
     def visit_resize(self, e: Resize) -> T:
         raise NotImplementedError
 
-    def visit_memread(self, e: MemRead) -> T:
+    def visit_array_index(self, e: _ArrayIndex) -> T:
         raise NotImplementedError

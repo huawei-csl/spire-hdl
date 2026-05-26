@@ -29,13 +29,13 @@ from spirehdl.spirehdl import (
     Concat,
     Const,
     Expr,
-    MemRead,
     Op1,
     Op2,
     Resize,
     Signal,
     Slice,
     Ternary,
+    _ArrayIndex,
     _create_new_shared_wire,
 )
 from spirehdl.spirehdl_visitor import ExprVisitor
@@ -91,12 +91,11 @@ class _CseWalker(ExprVisitor[tuple]):
         self.all_ops.append(e)
         return ("resize", self.visit(e.a), e.to_width, e.typ.signed)
 
-    def visit_memread(self, e: MemRead) -> tuple:
-        # Two MemReads of the same Memory at the structurally-equal address are CSE-equivalent.
-        # Use id(mem) (the Python object identity) since Memory is a user-named Signal — we
-        # don't merge across distinct Memory instances even if they share a name.
-        self.all_ops.append(e)
-        return ("memread", id(e.mem), self.visit(e.addr), e.typ.width, e.typ.signed)
+    def visit_array_index(self, e: _ArrayIndex) -> tuple:
+        # Leaf — address signal is reached via Memory's port traversal, not through
+        # this Expr's fields. Canonical key uses id(mem) + id(addr_wire) since both
+        # are user-named Signals; we never merge across distinct Memory instances.
+        return ("array_index", id(e.mem), id(e.addr_wire), e.typ.width, e.typ.signed)
 
 
 def _children_of(e: Expr) -> Tuple[Expr, ...]:
