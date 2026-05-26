@@ -13,15 +13,51 @@ A modern Python HDL that compiles concise, composable hardware descriptions to s
 - **Cycle-accurate Python simulator** — drive inputs, tick clocks, inspect any expression, and capture probes without leaving Python
 - **Content-addressed optimization cache** — instant re-runs via `@flowy_optimized` / `@abc_optimized` decorators
 
+# Optimizations built in ⚡ 
+
+Multiple layers of synthesis-aware optimization run *inside* the compile, so the Verilog SpireHDL emits is already small and fast before any external tool sees it. Numbers below are measured against a plain Yosys flow on the same RTL.
+
+### 🔢 Arithmetic auto-replacement — `replace_arithmetic_ops`
+
+Drops in topology-tuned adders, multipliers, and MAC fusions against an `area` / `delay` / `adp` objective. On an 8-bit ALU (add + sub + mul):
+
+- **−51% transistors** with the `area` objective
+- **4.2× shorter critical path** with the `delay` objective
+- balanced `adp` gets near-minimal area *and* near-minimal depth at once
+
+MAC patterns (`a*b + c`) are fused into single column-reduction units, eliminating a full adder stage. See [`README_arithmetic_optimization.md`](README_arithmetic_optimization.md).
+
+### 🧠 ABC + mockturtle decorators — `@abc_optimized` / `@flowy_optimized`
+
+One decorator stacks modern AIG synthesis (`resyn2`, `&deepsyn`, RL-guided rewriting via Flowy) onto any `Module` or `Component`, with a content-addressed cache for instant re-runs:
+
+- **−69% AIG gates** on an 8-bit multiplier (`resyn2`)
+- **−83%** on a 16-bit multiplier
+- stack with `@arithmetic_optimized` for compounding wins — ABC cleans up after the arithmetic rewriter
+
+See [`README_optimization_decorators.md`](README_optimization_decorators.md).
+
+### 🎯 FSM + encoding search — `optimized_fsm` / `optimized_encoding`
+
+Hopcroft state minimisation and bit-assignment search as two composable context managers. On the canonical 7-state `case10` Moore FSM:
+
+- **−19% cells** with `optimized_encoding` alone
+- **−44% cells** with `optimized_fsm` alone
+- **−69.5% cells** when both are nested — a ~3× reduction with two `with` blocks, no hand-tuned encoding tables
+
+An 8-opcode CPU decoder sees **−66.7% cells** from a single `optimized_encoding`, because the search discovers an opcode layout where each wide OR collapses to one bit-test. See [`README_fsm_optimization.md`](README_fsm_optimization.md).
+
 # Overview
 
-SpireHDL revolves around a small set of core modules:
+### 🪶 Minimal core
+
+In its simplest form, SpireHDL only needs these core files. This is intentional — the HDL is kept to a minimal, self-contained core, and higher-level features are layered on top:
 
 - **[`spirehdl/spirehdl.py`](src/spirehdl/spirehdl.py)** – the expression DSL.  It provides bit-precise types such as `Bool`, `UInt`, and `SInt`, shared-expression caching, and the overloaded arithmetic / bitwise operators that make the Python syntax feel like an HDL.
 - **[`spirehdl/spirehdl_module.py`](src/spirehdl/spirehdl_module.py)** – structural modeling helpers.  The `Module` class constructs ports, wires, and registers, produces Verilog, and exposes analysis utilities.  The `Component` base class lets you package reusable sub-designs and convert them to or from SpireHDL modules.  `IOCollector` can rebuild packed ports from bit-level signals when importing external netlists.
 - **[`spirehdl/spirehdl_simulator.py`](src/spirehdl/spirehdl_simulator.py)** – a lightweight simulator that can drive inputs, tick clocks, inspect outputs or internal expressions, and capture probes for debugging—all without leaving Python.
 
-### Further reading
+### 📚 Further reading
 
 Other markdown documents in this repository:
 
@@ -29,6 +65,7 @@ Other markdown documents in this repository:
 - [`README_arithmetic_optimization.md`](README_arithmetic_optimization.md) — automatic arithmetic replacement with `replace_arithmetic_ops` (adders, multipliers, subtractors)
 - [`README_optimization_decorators.md`](README_optimization_decorators.md) — the `@abc_optimized` / `@flowy_optimized` circuit optimization decorators
 - [`README_state_machines.md`](README_state_machines.md) — finite-state-machine declaration with the `State` / `Encoding` API and `switch_`/`case_` bodies
+- [`README_fsm_optimization.md`](README_fsm_optimization.md) — the `optimized_fsm` and `optimized_encoding` context managers (Hopcroft state minimisation + bit-assignment search)
 - [`README_memories.md`](README_memories.md) — the `Memory` primitive (FIFOs, ROMs, RAMs), port wiring with `<<=`, simulation, and reading current memory state
 - [`testing/examples/README.md`](testing/examples/README.md) — example designs exercising SpireHDL features
 

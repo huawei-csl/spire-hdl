@@ -97,12 +97,46 @@ class State:
         cls._values = dict(zip(names, values))
         cls.typ = typ
 
-        # Replace placeholders with real Const values
+        # Replace placeholders with real Const values. Tag each Const with
+        # provenance back-pointers so downstream passes (Hopcroft FSM
+        # minimisation, encoding search) can recognise state Consts
+        # unambiguously by identity rather than by (value, width), which
+        # would collide with literal zeros, register inits, mask constants,
+        # etc. The sentinels are read by helpers in `spirehdl.optimize.fsm.*`.
         for name, val in cls._values.items():
-            setattr(cls, name, Const(val, typ))
+            c = Const(val, typ)
+            c._state_class = cls
+            c._state_name = name
+            setattr(cls, name, c)
 
     def __len__(self) -> int:
         return len(self.names)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({', '.join(self.names)}, encoding={self.encoding!r}, width={self._width})"
+
+
+# ---------------------------------------------------------------------------
+# Re-export FSM-optimisation surface for a single canonical import site:
+#
+#   from spirehdl.spirehdl_state import optimized_fsm, optimized_encoding, ...
+#
+# The implementation lives in `spirehdl.optimize.fsm`. Importing lazily here avoids a
+# circular import on module load (spirehdl.optimize.fsm imports from this module).
+# ---------------------------------------------------------------------------
+
+def __getattr__(name):  # PEP 562 module-level __getattr__
+    _exports = {
+        "optimized_fsm",
+        "optimized_encoding",
+        "minimize_fsm",
+        "search_encoding",
+        "apply_encoding",
+        "snapshot_encoding",
+        "restore_encoding",
+        "equivalence_classes",
+    }
+    if name in _exports:
+        from spirehdl.optimize import fsm as _fsm
+        return getattr(_fsm, name)
+    raise AttributeError(f"module 'spirehdl.spirehdl_state' has no attribute {name!r}")
