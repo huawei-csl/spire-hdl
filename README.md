@@ -69,6 +69,7 @@ Other markdown documents in this repository:
 - [`README_state_machines.md`](README_state_machines.md) — finite-state-machine declaration with the `State` / `Encoding` API and `switch_`/`case_` bodies
 - [`README_fsm_optimization.md`](README_fsm_optimization.md) — the `optimized_fsm` and `optimized_encoding` context managers (Hopcroft state minimisation + bit-assignment search)
 - [`README_memories.md`](README_memories.md) — the `Memory` primitive (FIFOs, ROMs, RAMs), port wiring with `<<=`, simulation, and reading current memory state
+- [`README_custom_verilog.md`](README_custom_verilog.md) — emit a hand-written Verilog block from a `Component` via `custom_verilog()`, with or without a Python sim model (blackbox)
 - [`testing/examples/README.md`](testing/examples/README.md) — example designs exercising SpireHDL features
 
 ## Installation
