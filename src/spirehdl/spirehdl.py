@@ -311,6 +311,11 @@ class Signal(Expr):
         self._driver: Optional[Expr] = None  # for wire/output
         self._init: Optional[Expr] = None  # for reg
         self._auto_generated: bool = False  # for internal use
+        # Custom-verilog tagging — when a Component opts to emit a hand-written Verilog block in place of its
+        # auto-generated logic, the framework tags the elaborate()-created signals so the emitter knows to skip
+        # them. Sim still uses `_driver` normally (these flags are emission-time only).
+        self._no_emit_decl: bool = False   # skip `wire …;` / `reg …;` declaration
+        self._no_emit_drive: bool = False  # skip the `assign` or always-block driver line
 
     def __ilshift__(self, rhs: ExprLike) -> "Signal":
         """Connect combinational driver: y <<= expr"""
@@ -369,8 +374,8 @@ class Wire(Signal):
 class Memory(Signal):
     """Array-of-registers storage. Emits `reg [W-1:0] name[0:depth-1];`.
 
-    Memory exposes its read/write/reset ports as Signal attributes. Users
-    wire them with ``<<=`` just like any other signal::
+    Memory exposes its read/write/reset ports as Signal attributes. Users wire them with ``<<=`` just like any
+    other signal::
 
         mem = Memory(UInt(9), depth=16, name="fifo")
         mem.write_addr   <<= addr_w
@@ -381,13 +386,11 @@ class Memory(Signal):
         mem.read_addr    <<= addr_r
         dout             <<= mem.read_data
 
-    Sync read: ``Memory(..., registered_read=True)`` makes ``read_data`` a
-    Register clocked by the memory's own always block (yosys-friendly
-    idiom). The Memory also gets a ``read_enable`` port, defaulting to 1.
+    Sync read: ``Memory(..., registered_read=True)`` makes ``read_data`` a Register clocked by the memory's own
+    always block (yosys-friendly idiom). The Memory also gets a ``read_enable`` port, defaulting to 1.
 
-    There are no ``write()``/``reset()``/``registered_read()`` methods —
-    everything is just port wiring. Verilog emission and simulation live
-    on Memory itself (``emit_decl``, ``emit_initial``, ``emit_always``,
+    There are no ``write()``/``reset()``/``registered_read()`` methods — everything is just port wiring. Verilog
+    emission and simulation live on Memory itself (``emit_decl``, ``emit_initial``, ``emit_always``,
     ``init_sim_state``, ``step``) and are called by Module/Simulator.
     """
 
@@ -436,8 +439,8 @@ class Memory(Signal):
             self.read_data._driver = _ArrayIndex(self, self.read_addr, elem_type)
 
     def to_verilog(self) -> str:
-        # A Memory is an array; it can never appear as a scalar operand. Raise
-        # instead of silently producing invalid verilog like `assign out = fifo;`.
+        # A Memory is an array; it can never appear as a scalar operand. Raise instead of silently producing
+        # invalid verilog like `assign out = fifo;`.
         raise RuntimeError(
             f"Memory '{self.name}' cannot appear in an expression; use mem.read_data.")
 
@@ -527,11 +530,10 @@ class Memory(Signal):
     def step(self, sim) -> None:
         """One clock-edge update: writes/reset to mem state + rdata reg capture.
 
-        Mirrors verilog non-blocking semantics: all right-hand sides are sampled
-        from the pre-edge state before any updates apply. We sample the rdata
-        next-state *before* mutating the memory array, so a same-cycle write
-        followed by a registered read gives the old value (write-before-read
-        race resolved as it would be in hardware).
+        Mirrors verilog non-blocking semantics: all right-hand sides are sampled from the pre-edge state before any
+        updates apply. We sample the rdata next-state *before* mutating the memory array, so a same-cycle write
+        followed by a registered read gives the old value (write-before-read race resolved as it would be in
+        hardware).
         """
         from spirehdl.spirehdl_simulator import _to_bits, _sid  # lazy, avoids cycles
         ev = sim._eval_signal_bits
@@ -562,10 +564,9 @@ class Memory(Signal):
 class _ArrayIndex(Expr):
     """Leaf Expr that emits ``mem.name[addr_wire.name]`` in verilog.
 
-    Used as the ``_driver`` of an async-read memory's ``read_data`` wire. Walkers
-    treat this as a leaf (no children): the address signal is reached through
-    Memory's port traversal, not through this Expr's fields. The simulator's
-    ``visit_array_index`` reads from ``_mem_state``.
+    Used as the ``_driver`` of an async-read memory's ``read_data`` wire. Walkers treat this as a leaf (no
+    children): the address signal is reached through Memory's port traversal, not through this Expr's fields. The
+    simulator's ``visit_array_index`` reads from ``_mem_state``.
     """
 
     def __init__(self, mem: "Memory", addr_wire: Signal, typ: HDLType):

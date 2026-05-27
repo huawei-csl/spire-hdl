@@ -36,16 +36,14 @@ def expr_children(e: Expr) -> Tuple[Expr, ...]:
     """Return the immediate structural sub-expressions of *e*.
 
     * ``Const`` and leaf ``Signal`` nodes (inputs, registers) have no children.
-    * Combinational ``Signal`` nodes (wires, outputs) follow through to their
-      driver expression.
-    * ``Memory`` (``kind="mem"``) exposes its port Signals as children, so the
-      collector finds the storage and its connected logic via normal traversal.
-    * A port Signal (any wire with ``_memory_parent``) yields a back-edge to
-      its parent Memory plus its own ``_driver`` — so reaching ``read_data``
-      from a user output traverses to the Memory and then out to the write
-      side.
-    * ``_ArrayIndex`` is a leaf — the address signal is reached through
-      Memory's port traversal, not through this Expr.
+    * Combinational ``Signal`` nodes (wires, outputs) follow through to their driver expression.
+    * ``Memory`` (``kind="mem"``) exposes its port Signals as children, so the collector finds the storage and its
+      connected logic via normal traversal.
+    * A port Signal (any wire with ``_memory_parent``) yields a back-edge to its parent Memory plus its own
+      ``_driver`` — so reaching ``read_data`` from a user output traverses to the Memory and then out to the
+      write side.
+    * ``_ArrayIndex`` is a leaf — the address signal is reached through Memory's port traversal, not through this
+      Expr.
     """
     if isinstance(e, Const):
         return ()
@@ -93,9 +91,8 @@ class ExprVisitor(Generic[T]):
     def visit(self, e: Expr) -> T:
         """Dispatch *e* to the appropriate ``visit_*`` handler (cached).
 
-        Cache is set to ``None`` eagerly before dispatch, so re-entry from
-        inside ``visit_*`` (e.g. when the design graph has back-edges like
-        Memory ↔ port-wire) returns ``None`` instead of recursing. After
+        Cache is set to ``None`` eagerly before dispatch, so re-entry from inside ``visit_*`` (e.g. when the
+        design graph has back-edges like Memory ↔ port-wire) returns ``None`` instead of recursing. After
         ``visit_*`` returns, the cache is updated with the real result.
         """
         eid = id(e)

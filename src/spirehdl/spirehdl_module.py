@@ -72,6 +72,10 @@ class Component(abc.ABC):
             else:
                 raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
         module.component = self # can be used for debugging
+        # Top-level Component with custom Verilog: tag elaborate-created signals so the emitter skips them.
+        # (Embedded Components do this in make_internal.)
+        if hasattr(self, 'custom_verilog'):
+            self._apply_custom_verilog_tags()
         #reset_shared_cache() # no longer needed as we collect signals
         module.collect_signals()
         return module 
@@ -112,14 +116,62 @@ class Component(abc.ABC):
         self.from_module(m, make_internal=make_internal, group=group)
 
     def make_internal(self) -> Self:
+        # If this Component supplies a custom Verilog body, tag its elaborate()-created internals so the parent's
+        # emitter skips them. Do this BEFORE flipping kind="output" → "wire" so the tagger can find the outputs by
+        # their original direction.
+        if hasattr(self, 'custom_verilog'):
+            self._apply_custom_verilog_tags()
         # go through all signals in io and change to 'wire'
         ios_dict = self.io if isinstance(self.io, dict) else self.io.__dict__
         for sig in ios_dict.values():
             if sig.kind in ('input', 'output'):
                 sig.kind = 'wire'
+                # Back-reference so the parent's emitter knows which Component owns this wire (and thus which
+                # custom_verilog block to call).
+                if hasattr(self, 'custom_verilog'):
+                    sig._owning_component = self
             else:
                 raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
         return self
+
+    def _apply_custom_verilog_tags(self) -> None:
+        """Walk from IO outputs and tag elaborate()-created signals as no-emit.
+
+        Internal signals (anything reachable from an IO output via driver chains that isn't itself an IO port) get
+        both flags set — they don't appear in the emitted Verilog at all. IO outputs get only ``_no_emit_drive`` set:
+        the port/wire declaration stays (parent code references it) but the elaborate-set ``assign`` is suppressed,
+        leaving the custom Verilog block to provide the actual value.
+        """
+        from spirehdl.spirehdl_visitor import expr_children  # local to avoid cycles
+        io_ids = {id(s) for s in iter_values(self.io)}
+        stack: List = []
+        for sig in iter_values(self.io):
+            if sig.kind == "output":
+                sig._no_emit_drive = True
+                if sig._driver is not None:
+                    stack.append(sig._driver)
+        visited: set = set()
+        while stack:
+            node = stack.pop()
+            nid = id(node)
+            if nid in visited:
+                continue
+            visited.add(nid)
+            if isinstance(node, Signal):
+                # Boundary check: signals owned by a *different* Component (i.e. a `make_internal`'d sub-Component)
+                # are that Component's namespace — its tagging is already done at its own `make_internal` time. We
+                # neither tag them here nor walk past them; the boundary stops us.
+                owner = getattr(node, "_owning_component", None)
+                if owner is not None and owner is not self:
+                    continue
+                if nid not in io_ids:
+                    node._no_emit_decl = True
+                    node._no_emit_drive = True
+                if node._driver is not None:
+                    stack.append(node._driver)
+            else:
+                for ch in expr_children(node):
+                    stack.append(ch)
 
     def get_spec(self) -> Dict[str, UInt]:
         return gen_spec(self)
@@ -205,11 +257,9 @@ class Module:
         return spec
 
     def collect_signals(self) -> None:
-        """Rebuild ``_signals`` to hold every Signal reachable from any port or
-        user-added internal (anything currently in ``_signals`` that wasn't
-        produced by the CSE share-cache). Orphan auto-shared wires drop out
-        on each call — that's how simplify/CSE rewrites prune dead `assign`
-        lines.
+        """Rebuild ``_signals`` to hold every Signal reachable from any port or user-added internal (anything
+        currently in ``_signals`` that wasn't produced by the CSE share-cache). Orphan auto-shared wires drop out
+        on each call — that's how simplify/CSE rewrites prune dead `assign` lines.
         """
         port_ids = {id(p) for p in self._ports}
         user_internals = [s for s in self._signals
@@ -301,18 +351,34 @@ class Module:
         for m in mems:
             m.validate()
 
-        # Memory-owned rdata Registers get their next-state written inside the memory's
-        # own always block; exclude from the normal reg always block.
+        # Memory-owned rdata Registers get their next-state written inside the memory's own always block; exclude
+        # from the normal reg always block.
         mem_owned_reg_ids = {id(m.read_data) for m in mems if m._registered_read}
 
-        # Basic checks
+        # Basic checks. Signals tagged `_no_emit_drive` (custom-Verilog replacement) are exempt — the custom block
+        # provides their value.
         for s in self._signals:
-            if s.kind in ("wire", "output") and s._driver is None:
+            if s.kind in ("wire", "output") and s._driver is None and not s._no_emit_drive:
                 if s.kind == "output":
                     raise ValueError(f"Output '{s.name}' has no driver.")
-            if s.kind == "reg" and s._driver is None:
+            if s.kind == "reg" and s._driver is None and not s._no_emit_drive:
                 if id(s) not in mem_owned_reg_ids:
                     raise ValueError(f"Register '{s.name}' has no next-state assignment.")
+
+        # Collect custom-Verilog blocks from any Component that owns part of this module's design graph (top-level
+        # Component via `module.component`, plus embedded Components reached through `_owning_component` back-edges
+        # on IO wires). Called here so port-wire names are already uniquified.
+        custom_blocks: list[str] = []
+        seen_owners: set = set()
+        def _maybe_collect(comp):
+            if comp is None or id(comp) in seen_owners:
+                return
+            if hasattr(comp, "custom_verilog"):
+                seen_owners.add(id(comp))
+                custom_blocks.append(comp.custom_verilog())
+        _maybe_collect(self.component)
+        for s in self._signals:
+            _maybe_collect(getattr(s, "_owning_component", None))
 
         lines: List[str] = [VERILOG_BANNER, ""]
         # Ports list
@@ -337,36 +403,46 @@ class Module:
 
         lines.append('// Wires')
         for w in wires:
+            if w._no_emit_decl:
+                continue
             sign = "signed " if w.typ.signed else ""
             rng = w.typ.range_str()
             lines.append(f"  wire {sign}{rng} {w.name};")
         lines.append('// Registers')
         for r in regs_all:
+            if r._no_emit_decl:
+                continue
             sign = "signed " if r.typ.signed else ""
             rng = r.typ.range_str()
             lines.append(f"  reg {sign}{rng} {r.name};")
         if mems:
             lines.append('// Memories')
             for m in mems:
+                if m._no_emit_decl:
+                    continue
                 lines += m.emit_decl_lines()
 
-        # Combinational assigns for wires/outputs. Memory port wires (wires with
-        # `_memory_parent`) come through this loop too — their drivers are either
-        # user-set (write_addr/data/enable, reset_*, read_addr/enable) or the
+        # Combinational assigns for wires/outputs. Memory port wires (wires with `_memory_parent`) come through this
+        # loop too — their drivers are either user-set (write_addr/data/enable, reset_*, read_addr/enable) or the
         # default `Const(1)`/`Const(0)`/`_ArrayIndex` set at memory construction.
         lines.append("// Combinational assignments")
         for s in [*wires, *self._ports_of("output")]:
+            if s._no_emit_drive:
+                continue
             if s._driver is not None:
                 rhs = fit_width(s._driver, s.typ).to_verilog()
                 lines.append(f"  assign {s.name} = {rhs};")
 
         # Memory init-block (ROM-style).
         for m in mems:
+            if m._no_emit_decl:
+                continue
             lines += m.emit_initial_lines()
 
         # Sequential logic for normal regs.
         lines.append("// Sequential logic")
-        if regs:
+        emit_regs = [r for r in regs if not r._no_emit_drive]
+        if emit_regs:
             if not self.with_clock:
                 raise ValueError("Registers present but module has no clock input.")
             sens = f"posedge {self.clk.name}"
@@ -375,24 +451,32 @@ class Module:
             lines.append(f"  always @({sens}) begin")
             if self.with_reset:
                 lines.append(f"    if ({self.rst.name}) begin")
-                for r in regs:
+                for r in emit_regs:
                     init = r._init.to_verilog() if r._init is not None else f"{r.typ.width}'d0"
                     lines.append(f"      {r.name} <= {init};")
                 lines.append("    end else begin")
-                for r in regs:
+                for r in emit_regs:
                     lines.append(f"      {r.name} <= {fit_width(r._driver, r.typ).to_verilog()};")
                 lines.append("    end")
             else:
-                for r in regs:
+                for r in emit_regs:
                     lines.append(f"    {r.name} <= {fit_width(r._driver, r.typ).to_verilog()};")
             lines.append("  end")
 
         # Memory always blocks — clock-only, yosys-recognised idiom.
         for m in mems:
+            if m._no_emit_drive:
+                continue
             mem_lines = m.emit_always_lines(self.clk.name if self.with_clock else "")
             if mem_lines and not self.with_clock:
                 raise ValueError(f"Memory '{m.name}' has sequential ports but module has no clock.")
             lines += mem_lines
+
+        # Custom Verilog blocks (one per Component that provides `custom_verilog`).
+        if custom_blocks:
+            lines.append("// Custom Verilog")
+            for block in custom_blocks:
+                lines.extend(block.splitlines())
 
         lines.append("endmodule")
         return lines
@@ -477,9 +561,8 @@ class Module:
 class _SignalCollector(ExprVisitor[None]):
     """Walk a design and rebuild `Module._signals`.
 
-    Side-effects only: each visited Signal is uniquified and appended to
-    `_signals` (once). Traversal goes through `expr_children`, which knows
-    about Memory port-wires and the port-wire back-edge to its parent.
+    Side-effects only: each visited Signal is uniquified and appended to `_signals` (once). Traversal goes through
+    `expr_children`, which knows about Memory port-wires and the port-wire back-edge to its parent.
     """
 
     def __init__(self, module: "Module") -> None:
@@ -504,10 +587,9 @@ class _SignalCollector(ExprVisitor[None]):
             if sid not in self.in_list:
                 self.m._signals.append(s)
                 self.in_list.add(sid)
-        # Walk children explicitly. Unlike `expr_children` (which treats regs as
-        # comb-depth-zero leaves for analyzer purposes), the collector must
-        # traverse reg drivers too — otherwise externally-created Registers/Wires
-        # chained to module outputs would be missed.
+        # Walk children explicitly. Unlike `expr_children` (which treats regs as comb-depth-zero leaves for
+        # analyzer purposes), the collector must traverse reg drivers too — otherwise externally-created
+        # Registers/Wires chained to module outputs would be missed.
         if isinstance(s, Memory):
             for p in s._iter_ports():
                 self.visit(p)
@@ -533,11 +615,10 @@ class _SignalCollector(ExprVisitor[None]):
     visit_resize  = _walk
 
     def _uniquify(self, sig: Signal) -> None:
-        # Memory port wires: name is `{mem.name}__suffix` derived from the current
-        # parent name. If the parent is renamed later, ``_propagate_mem_rename``
-        # (below) updates port wire names too — so we don't need to force the
-        # parent to be visited first here (that would recurse infinitely because
-        # the parent's children include this very port).
+        # Memory port wires: name is `{mem.name}__suffix` derived from the current parent name. If the parent is
+        # renamed later, ``_propagate_mem_rename`` (below) updates port wire names too — so we don't need to force
+        # the parent to be visited first here (that would recurse infinitely because the parent's children include
+        # this very port).
         parent = getattr(sig, "_memory_parent", None)
         if parent is not None:
             sig.name = f"{parent.name}__{sig._port_suffix}"
@@ -555,9 +636,8 @@ class _SignalCollector(ExprVisitor[None]):
             if candidate not in self.name_to_sig:
                 sig.name = candidate
                 self.name_to_sig[candidate] = sig
-                # If we just renamed a Memory, propagate to its port wires that have
-                # already been uniquified (we'll see new ports later via traversal,
-                # but already-cached ones won't be revisited).
+                # If we just renamed a Memory, propagate to its port wires that have already been uniquified
+                # (we'll see new ports later via traversal, but already-cached ones won't be revisited).
                 if isinstance(sig, Memory):
                     for port in sig._iter_ports():
                         old = port.name

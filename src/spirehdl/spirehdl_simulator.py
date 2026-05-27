@@ -149,17 +149,17 @@ class Simulator(SimulatorBase):
 
     def __init__(self, module: "Module"):
         self.m = module
-        # Memory + its port wires + any rdata reg are constructed standalone. Collecting
-        # signals pulls them all in via the design graph (the walker traverses through
-        # `read_data._memory_parent` back-edges and Memory's port-children).
+        # Memory + its port wires + any rdata reg are constructed standalone. Collecting signals pulls them all in
+        # via the design graph (the walker traverses through `read_data._memory_parent` back-edges and Memory's
+        # port-children).
         self.m.collect_signals()
         self.inputs = [s for s in self.m._ports if s.kind == "input"]
         self.outputs = [s for s in self.m._ports if s.kind == "output"]
         self.regs = [s for s in self.m._signals if s.kind == "reg"]
         self.wires = [s for s in self.m._signals if s.kind == "wire"]
         self.mems = [s for s in self.m._signals if s.kind == "mem"]
-        # Memory rdata registers (sync-read) skip the normal reg next-state loop;
-        # they're updated by Memory.step instead. Identity-based to avoid Expr.__eq__.
+        # Memory rdata registers (sync-read) skip the normal reg next-state loop; they're updated by Memory.step
+        # instead. Identity-based to avoid Expr.__eq__.
         self._mem_owned_reg_ids = {id(m.read_data) for m in self.mems if m._registered_read}
 
         def check_or_duplicate_name(signals):
@@ -193,8 +193,8 @@ class Simulator(SimulatorBase):
                 init_bits = _resize_bits(init_bits, r._init.typ.width, r.typ.width, r._init.typ.signed)
             self._reg[_sid(r)] = _to_bits(init_bits, r.typ.width)
 
-        # Memory contents: { id(mem) -> list[int] of length depth }. Initialisation
-        # comes from Memory.init_sim_state (zeros, or `init=…` if given).
+        # Memory contents: { id(mem) -> list[int] of length depth }. Initialisation comes from
+        # Memory.init_sim_state (zeros, or `init=…` if given).
         self._mem_state: dict[int, list[int]] = {id(m): m.init_sim_state() for m in self.mems}
 
         if self.m.with_reset:
@@ -283,10 +283,9 @@ class Simulator(SimulatorBase):
     def get_mem(self, ref) -> list[int]:
         """Return a copy of the current contents of a Memory.
 
-        `ref` may be the Memory object itself or its name (string). Returns a
-        Python list of length `mem.depth` with each entry as an unsigned bit-pattern
-        of width `mem.typ.width`. The returned list is a copy — mutating it does
-        not affect simulation state.
+        `ref` may be the Memory object itself or its name (string). Returns a Python list of length `mem.depth`
+        with each entry as an unsigned bit-pattern of width `mem.typ.width`. The returned list is a copy —
+        mutating it does not affect simulation state.
         """
         if isinstance(ref, Memory):
             mem = ref
@@ -322,9 +321,9 @@ class Simulator(SimulatorBase):
     def _compute_next_state(self) -> dict[int, int]:
         """Compute next-state values for normal regs without committing.
 
-        Memory rdata registers (sync read) are excluded — their next-state is computed
-        by ``Memory.step`` after this loop, mirroring the verilog idiom of emitting
-        rdata capture inside the memory's clock-only always block (no async-rst).
+        Memory rdata registers (sync read) are excluded — their next-state is computed by ``Memory.step`` after
+        this loop, mirroring the verilog idiom of emitting rdata capture inside the memory's clock-only always
+        block (no async-rst).
         """
         res: dict[int, int] = {}
         rst_high = self.m.with_reset and self._in.get(_sid(self.m.rst), 0) != 0
