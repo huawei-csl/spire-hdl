@@ -141,6 +141,9 @@ class Component(abc.ABC):
         both flags set — they don't appear in the emitted Verilog at all. IO outputs get only ``_no_emit_drive`` set:
         the port/wire declaration stays (parent code references it) but the elaborate-set ``assign`` is suppressed,
         leaving the custom Verilog block to provide the actual value.
+
+        Sets ``self._is_blackbox = True`` iff *no* output had an elaborate-set driver — the signal the collector
+        uses to decide whether peer-seeding is needed (only blackboxes need it).
         """
         from spirehdl.spirehdl_visitor import expr_children  # local to avoid cycles
         io_ids = {id(s) for s in iter_values(self.io)}
@@ -150,6 +153,7 @@ class Component(abc.ABC):
                 sig._no_emit_drive = True
                 if sig._driver is not None:
                     stack.append(sig._driver)
+        self._is_blackbox = not stack  # nothing to walk = no elaborate output drivers = blackbox
         visited: set = set()
         while stack:
             node = stack.pop()
@@ -599,6 +603,14 @@ class _SignalCollector(ExprVisitor[None]):
                 self.visit(parent)
             if s._driver is not None:
                 self.visit(s._driver)
+        # Blackbox support: visiting any IO wire of a blackbox triggers seeding from the peer IO wires too.
+        # Without this, the parent's input-side wiring wouldn't be reached (blackbox outputs have no driver chain
+        # back to inputs).
+        owner = getattr(s, "_owning_component", None)
+        if owner is not None and getattr(owner, "_is_blackbox", False):
+            for peer in iter_values(owner.io):
+                if peer is not s:
+                    self.visit(peer)
 
     # Default-recurse for non-Signal nodes via expr_children.
     def _walk(self, e: Expr) -> None:

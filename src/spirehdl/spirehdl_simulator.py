@@ -363,6 +363,12 @@ class Simulator(SimulatorBase):
 
         elif s.kind in ("wire", "output"):
             if s._driver is None:
+                # Blackbox-Component outputs have no Python sim model. The framework returns 0 as a stub so the
+                # rest of the design can still simulate. Signature: `_no_emit_drive=True`.
+                if s._no_emit_drive:
+                    bits = 0
+                    self._cache_sig[sid] = bits
+                    return bits
                 raise ValueError(f"Signal '{s.name}' ({s.kind}) has no driver.")
             visiting = self._expr_eval._visiting
             key = ("sig", sid)
