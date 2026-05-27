@@ -245,6 +245,33 @@ simulation, regardless of inputs."
   multi-instance vendor IP that synthesizers prefer to instantiate by
   name), wrap the parent Verilog manually after `to_verilog`.
 
+## Real-world examples: the primitives library
+
+The `src/spirehdl/primitives/` package contains production-style uses of
+the custom-with-sim pattern — both with non-trivial `elaborate()` reference
+models and Yosys-friendly `custom_verilog()` outputs:
+
+- [`MemoryPrimitive`](src/spirehdl/primitives/primitive_memory.py) —
+  array-of-registers RAM with optional registered read, reset arm, and
+  init values. Supports aggregate element types via user-side
+  `to_bits`/`from_bits` at the port boundary. Emits the standard Yosys-
+  inferable `reg [W-1:0] mem[0:D-1];` idiom in `custom_verilog()`.
+- [`FIFOPrimitive`](src/spirehdl/primitives/primitive_fifo.py) — standard
+  synchronous FIFO (push/pop/full/empty/count, registered head). Inlines
+  its storage and pointer/count logic in a single `custom_verilog()`
+  block.
+
+Both are good templates for new custom-Verilog Components: they exercise
+sequential state in `elaborate()` (Registers + mux trees), aggregate-type
+support, and per-instance internal-name uniquification so multiple
+instances inside the same parent don't collide on inlined names.
+
+A standalone analysis of when to use this pattern vs. baking storage into
+the SpireHDL core lives in
+[`docs/memory_primitive_vs_builtin.md`](docs/memory_primitive_vs_builtin.md)
+— useful background if you're deciding between "build it as a primitive"
+and "extend the core".
+
 ## See also
 
 - Tests covering both flavours:
@@ -254,3 +281,8 @@ simulation, regardless of inputs."
   [`testing/test_blackbox_component.py`](testing/test_blackbox_component.py)
   (top-level, embedded, multi-instance blackboxes; the walker-reachability
   fix is exercised in `test_embedded_blackbox_parent_helper_is_reachable`).
+- Primitives tests:
+  [`testing/test_primitive_memory.py`](testing/test_primitive_memory.py)
+  (10 cases including an `AggregateRecord` element-type round-trip) and
+  [`testing/test_primitive_fifo.py`](testing/test_primitive_fifo.py)
+  (8 cases including underflow/overflow safety and aggregate element types).
