@@ -39,6 +39,7 @@ from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_fused import (
 )
 from spirehdl.helpers import (
     extract_yosys_metrics_from_verilog,
+    extract_yosys_heavy_metrics_from_verilog,
     get_aig_stats,
 )
 from spirehdl.spirehdl import reset_shared_cache
@@ -72,7 +73,7 @@ _PPA_SKIP = {
 _CSV_COLUMNS = [
     "op", "a_w", "b_w", "signed",
     "fsa_opt", "ppg_opt", "ppa_opt", "optim_type",
-    "transistor_count", "aig_depth", "num_aig_gates",
+    "transistor_count", "transistor_count_heavy", "aig_depth", "num_aig_gates",
 ]
 
 
@@ -88,67 +89,99 @@ def _width_pairs(bitwidths: list[int]) -> list[tuple[int, int]]:
     return sorted(pairs)
 
 
+_PARETO_METRIC_COLS = ("transistor_count", "transistor_count_heavy", "num_aig_gates")
+
+
 def _pareto_filter(rows: list[dict]) -> list[dict]:
-    """Keep only Pareto-optimal rows (not dominated on both TC and depth)."""
+    """Keep rows that are Pareto-optimal under at least one (metric, aig_depth)
+    pair, where metric ∈ {transistor_count, transistor_count_heavy,
+    num_aig_gates}.
+
+    A row is kept iff, for some metric column, no other row dominates it on
+    (metric, aig_depth).
+    """
     result = []
     for r in rows:
-        dominated = any(
-            o["transistor_count"] <= r["transistor_count"]
-            and o["aig_depth"] <= r["aig_depth"]
-            and (o["transistor_count"] < r["transistor_count"] or o["aig_depth"] < r["aig_depth"])
-            for o in rows
-        )
-        if not dominated:
+        kept_under_any = False
+        for col in _PARETO_METRIC_COLS:
+            r_val = r.get(col)
+            if r_val in (None, ""):
+                continue
+            r_depth = r["aig_depth"]
+            dominated = False
+            for o in rows:
+                if o is r:
+                    continue
+                o_val = o.get(col)
+                if o_val in (None, ""):
+                    continue
+                o_depth = o["aig_depth"]
+                if (o_val <= r_val and o_depth <= r_depth and
+                        (o_val < r_val or o_depth < r_depth)):
+                    dominated = True
+                    break
+            if not dominated:
+                kept_under_any = True
+                break
+        if kept_under_any:
             result.append(r)
     return result
 
 
 def _yosys_metrics(module) -> dict:
-    """Yosys transistor count via the read_verilog path on `module.to_verilog()`.
-
-    Uses `extract_yosys_metrics_from_verilog` rather than `get_yosys_metrics`
-    because the former matches what downstream consumers actually see when
-    they take `to_verilog()` and run it through their own yosys flow. The
-    `get_yosys_metrics(module)` alternative goes Module -> AIG -> read_aiger + aigverse 
-    rewrite, which can pick a different post-techmap cell mix.
+    """Run BOTH the lite (`abc -fast`) and heavy (`synth; clean -purge`) yosys
+    pipelines on the same emitted Verilog and return both transistor counts.
     """
-    return extract_yosys_metrics_from_verilog(module.to_verilog().splitlines())
+    verilog_lines = module.to_verilog().splitlines()
+    metrics = extract_yosys_metrics_from_verilog(verilog_lines)
+    try:
+        heavy = extract_yosys_heavy_metrics_from_verilog(verilog_lines)
+        metrics["estimated_num_transistors_heavy"] = heavy["estimated_num_transistors"]
+    except Exception:
+        # Don't fail the whole eval if the heavy pass errors on a degenerate
+        # case (e.g. 1-bit ops with empty hierarchy); just leave the column blank.
+        metrics["estimated_num_transistors_heavy"] = None
+    return metrics
 
 
 # ---------------------------------------------------------------------------
 # Single-config evaluators (run in worker processes)
 # ---------------------------------------------------------------------------
 
-def eval_adder(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool) -> dict:
+def eval_adder(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool,
+                optim_type: Literal["area", "speed"]) -> dict:
     reset_shared_cache()
     adder = StageBasedPrefixAdder(
         a_w=a_w, b_w=b_w, signed_a=signed, signed_b=signed,
-        optim_type="area", fsa_cls=fsa_opt.value, full_output_bit=True,
+        optim_type=optim_type, fsa_cls=fsa_opt.value, full_output_bit=True,
     )
-    module = adder.to_module(f"adder_{fsa_opt.name}_{a_w}x{b_w}")
+    module = adder.to_module(f"adder_{fsa_opt.name}_{a_w}x{b_w}_{optim_type}")
     ym = _yosys_metrics(module)
     aig = get_aig_stats(module)
     return {
         "op": "add", "a_w": a_w, "b_w": b_w, "signed": "signed" if signed else "unsigned",
-        "fsa_opt": fsa_opt.name, "ppg_opt": "", "ppa_opt": "", "optim_type": "",
+        "fsa_opt": fsa_opt.name, "ppg_opt": "", "ppa_opt": "", "optim_type": optim_type,
         "transistor_count": int(ym["estimated_num_transistors"]),
+        "transistor_count_heavy": int(ym["estimated_num_transistors_heavy"]) if ym.get("estimated_num_transistors_heavy") is not None else "",
         "aig_depth": int(aig["depth"]), "num_aig_gates": int(aig["num_gates"]),
     }
 
 
-def eval_subtractor(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool) -> dict:
+def eval_subtractor(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool,
+                     optim_type: Literal["area", "speed"]) -> dict:
     reset_shared_cache()
     sub = StageBasedSubtractor(
         a_w=a_w, b_w=b_w, signed_a=signed, signed_b=signed,
-        optim_type="area", fsa_cls=fsa_opt.value, full_output_bit=True,
+        optim_type=optim_type, fsa_cls=fsa_opt.value, full_output_bit=True,
     )
-    module = sub.to_module(f"sub_{fsa_opt.name}_{a_w}x{b_w}")
+    module = sub.to_module(f"sub_{fsa_opt.name}_{a_w}x{b_w}_{optim_type}")
     ym = _yosys_metrics(module)
     aig = get_aig_stats(module)
     return {
         "op": "sub", "a_w": a_w, "b_w": b_w, "signed": "signed" if signed else "unsigned",
-        "fsa_opt": fsa_opt.name, "ppg_opt": "", "ppa_opt": "", "optim_type": "",
+        "fsa_opt": fsa_opt.name, "ppg_opt": "", "ppa_opt": "", "optim_type": optim_type,
         "transistor_count": int(ym["estimated_num_transistors"]),
+        "transistor_count_heavy": int(ym["estimated_num_transistors_heavy"]) if ym.get("estimated_num_transistors_heavy") is not None else "",
         "aig_depth": int(aig["depth"]), "num_aig_gates": int(aig["num_gates"]),
     }
 
@@ -174,6 +207,7 @@ def eval_multiplier(
         "fsa_opt": fsa_opt.name, "ppg_opt": ppg_opt.name, "ppa_opt": ppa_opt.name,
         "optim_type": optim_type,
         "transistor_count": int(ym["estimated_num_transistors"]),
+        "transistor_count_heavy": int(ym["estimated_num_transistors_heavy"]) if ym.get("estimated_num_transistors_heavy") is not None else "",
         "aig_depth": int(aig["depth"]), "num_aig_gates": int(aig["num_gates"]),
     }
 
@@ -202,16 +236,18 @@ def _run_parallel(desc: str, tasks: list, eval_fn, max_workers: int) -> list[dic
 def sweep_adders(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
     fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
     pairs = _width_pairs(bitwidths)
-    tasks = [(fsa, a_w, b_w, signed)
-             for (a_w, b_w), fsa, signed in product(pairs, fsa_options, [False, True])]
+    tasks = [(fsa, a_w, b_w, signed, optim_type)
+             for (a_w, b_w), fsa, signed, optim_type in product(
+                 pairs, fsa_options, [False, True], ["area", "speed"])]
     return _run_parallel("Adders", tasks, eval_adder, max_workers)
 
 
 def sweep_subtractors(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
     fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
     pairs = _width_pairs(bitwidths)
-    tasks = [(fsa, a_w, b_w, signed)
-             for (a_w, b_w), fsa, signed in product(pairs, fsa_options, [False, True])]
+    tasks = [(fsa, a_w, b_w, signed, optim_type)
+             for (a_w, b_w), fsa, signed, optim_type in product(
+                 pairs, fsa_options, [False, True], ["area", "speed"])]
     return _run_parallel("Subtractors", tasks, eval_subtractor, max_workers)
 
 
@@ -258,6 +294,7 @@ def eval_mac(
         "fsa_opt": fsa_opt.name, "ppg_opt": ppg_opt.name, "ppa_opt": ppa_opt.name,
         "optim_type": optim_type,
         "transistor_count": int(ym["estimated_num_transistors"]),
+        "transistor_count_heavy": int(ym["estimated_num_transistors_heavy"]) if ym.get("estimated_num_transistors_heavy") is not None else "",
         "aig_depth": int(aig["depth"]), "num_aig_gates": int(aig["num_gates"]),
     }
 
@@ -285,6 +322,79 @@ def sweep_macs(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
             tasks.append((ppg, ppa, fsa, n_bits, c_bits, encoding, optim_type))
 
     return _run_parallel("MACs", tasks, eval_mac, max_workers)
+
+
+def eval_mia(
+    ppa_opt: PPAOption, fsa_opt: FSAOption,
+    n_inputs: int, n_bits: int, encoding: Encoding,
+    optim_type: Literal["area", "speed"],
+) -> dict:
+    """Evaluate a multi-input add (MIA): y = sum(operands), N≥3 symmetric width.
+
+    Builds a single CSA tree (`ppa_cls`) + final 2-input adder (`fsa_cls`) via
+    the shared `compressor_sum` helper. Captures both yosys-pipeline transistor
+    counts and AIG stats. Picks `op="mia<N>"` to keep the DB schema flat —
+    `lookup_best_mia_config(N, width, signed, …)` snaps to the nearest `N`.
+    """
+    reset_shared_cache()
+    from spirehdl.spirehdl_module import Module
+    from spirehdl.spirehdl import UInt, SInt
+    from spirehdl.arithmetic.int_multipliers.stages.ppa_fsa_util import (
+        OutputConfig, compressor_sum,
+    )
+
+    signed = is_signed(encoding)
+    io_type = SInt if signed else UInt
+
+    # Output width: max input width + ceil(log2(N)) extra bits for carries.
+    import math
+    extra = max(1, (n_inputs - 1).bit_length())
+    out_w = n_bits + extra
+
+    m = Module(
+        f"mia{n_inputs}_{ppa_opt.name}_{fsa_opt.name}_{n_bits}b_{encoding.name}_{optim_type}",
+        with_clock=False, with_reset=False,
+    )
+    operands = [m.input(io_type(n_bits), f"x{i}") for i in range(n_inputs)]
+    y = m.output(io_type(out_w), "y")
+
+    config = OutputConfig(out_width=out_w, optim_type=optim_type)
+    sum_expr = compressor_sum(config, list(operands), ppa_opt.value, fsa_opt.value)
+    if sum_expr.typ.width > out_w:
+        sum_expr = sum_expr[0:out_w]
+    y <<= sum_expr
+
+    ym = _yosys_metrics(m)
+    aig = get_aig_stats(m)
+    return {
+        "op": f"mia{n_inputs}", "a_w": n_bits, "b_w": n_bits,
+        "signed": "signed" if signed else "unsigned",
+        "fsa_opt": fsa_opt.name, "ppg_opt": "", "ppa_opt": ppa_opt.name,
+        "optim_type": optim_type,
+        "transistor_count": int(ym["estimated_num_transistors"]),
+        "transistor_count_heavy": int(ym["estimated_num_transistors_heavy"]) if ym.get("estimated_num_transistors_heavy") is not None else "",
+        "aig_depth": int(aig["depth"]), "num_aig_gates": int(aig["num_gates"]),
+    }
+
+
+def sweep_mia(bitwidths: list[int], n_inputs_list: list[int],
+              max_workers: int = 16) -> list[dict]:
+    """Sweep multi-input add configs. Uses symmetric widths only."""
+    ppa_options = [p for p in PPAOption if p not in _PPA_SKIP]
+    fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
+
+    tasks = []
+    for n_bits, n_inputs, ppa, fsa, optim_type in product(
+        bitwidths, n_inputs_list, ppa_options, fsa_options, ["area", "speed"]
+    ):
+        if n_bits < 2:  # Trivial / degenerate
+            continue
+        if n_inputs < 3:
+            continue
+        for encoding in [Encoding.unsigned, Encoding.twos_complement]:
+            tasks.append((ppa, fsa, n_inputs, n_bits, encoding, optim_type))
+
+    return _run_parallel("MIA", tasks, eval_mia, max_workers)
 
 
 def eval_inner_product(
@@ -322,6 +432,7 @@ def eval_inner_product(
         "fsa_opt": fsa_opt.name, "ppg_opt": ppg_opt.name, "ppa_opt": ppa_opt.name,
         "optim_type": optim_type,
         "transistor_count": int(ym["estimated_num_transistors"]),
+        "transistor_count_heavy": int(ym["estimated_num_transistors_heavy"]) if ym.get("estimated_num_transistors_heavy") is not None else "",
         "aig_depth": int(aig["depth"]), "num_aig_gates": int(aig["num_gates"]),
     }
 
@@ -432,6 +543,9 @@ def main(
     all_rows.extend(sweep_subtractors(bitwidths, max_workers=max_workers))
     all_rows.extend(sweep_multipliers(bitwidths, max_workers=max_workers))
     all_rows.extend(sweep_macs(bitwidths, max_workers=max_workers))
+    # Multi-input adders for the common chain lengths real designs hit; `build_multi_input_add` snaps to the nearest N.
+    all_rows.extend(sweep_mia(bitwidths, n_inputs_list=[3, 4, 5, 8],
+                               max_workers=max_workers))
     all_rows.extend(sweep_inner_products(bitwidths, max_workers=max_workers))
 
     if fmt == "csv":

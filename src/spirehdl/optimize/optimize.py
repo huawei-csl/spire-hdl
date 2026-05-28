@@ -1015,6 +1015,7 @@ def arithmetic_optimized(
     _fn: Callable[..., Any] | None = None,
     *,
     objective: Literal["area", "delay", "adp"] = "area",
+    metric: Literal["transistors", "transistors_heavy", "aig_count"] | None = None,
 ) -> Callable[..., Any]:
     """Decorator that rewrites a function's ``+``, ``-``, ``*`` operators
     with optimized StageBased hardware via ``replace_arithmetic_ops``.
@@ -1041,16 +1042,32 @@ def arithmetic_optimized(
     Parameters
     ----------
     objective : {"area", "delay", "adp"}
-        Optimization target:
+        How to score candidates against the chosen ``metric``:
 
-        - ``"area"``:  minimize Yosys transistor count
-        - ``"delay"``: minimize AIG depth (proxy for critical-path delay)
-        - ``"adp"``:   minimize area-delay product
+        - ``"area"``:  minimize the chosen size metric (tiebreak: AIG depth)
+        - ``"delay"``: minimize AIG depth (tiebreak: chosen metric)
+        - ``"adp"``:   minimize metric × AIG depth
+    metric : {"transistors", "transistors_heavy", "aig_count"} | None
+        Which "size" column the DB lookup ranks against. ``None`` (the
+        default) resolves to ``DEFAULT_LOOKUP_METRIC`` from
+        ``arithmetic.eval.auto_config`` — currently
+        ``"transistors_heavy"``.
+
+        - ``"transistors_heavy"`` (default): Yosys transistor count under
+          the full ``synth; clean -purge`` pipeline. Matches what
+          ``core/cost.py``'s ``yosys_transistors`` measures, so topology
+          picks stay faithful through the full synth flow.
+        - ``"transistors"``: Yosys transistor count under the lite
+          ``abc -fast`` pipeline. Kept for backward compatibility.
+        - ``"aig_count"``: AIG gate count (technology-independent). Useful
+          when downstream is AIG-level (e.g. ABC deepsyn).
     """
     from spirehdl.arithmetic.int_arithmetic_config import (
         ArithmeticAutoConfig,
         replace_arithmetic_ops,
     )
+    from spirehdl.arithmetic.eval.auto_config import DEFAULT_LOOKUP_METRIC
+    effective_metric = metric if metric is not None else DEFAULT_LOOKUP_METRIC
 
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
@@ -1088,7 +1105,7 @@ def arithmetic_optimized(
             # Rewrite +, -, * (and ==, !=) with optimized StageBased components.
             replace_arithmetic_ops(
                 comp,
-                ArithmeticAutoConfig(objective=objective),
+                ArithmeticAutoConfig(objective=objective, metric=effective_metric),
             )
 
             # Splice into the caller's graph: turn comp.io ports into internal

@@ -19,11 +19,28 @@ def half_adder(x: Expr, y: Expr) -> Tuple[Expr, Expr]:
 
 
 def full_adder_fast(x: Expr, y: Expr, z: Expr) -> Tuple[Expr, Expr]:
+    """Shared-XOR full adder: 5 gates, partial-propagate `s1=x^y` reused
+    in sum and carry. OR operand order has the `(s1&z)` term first."""
     s1 = x ^ y
     return s1 ^ z, (s1 & z) | (x & y)
 
 
+def full_adder_fast2(x: Expr, y: Expr, z: Expr) -> Tuple[Expr, Expr]:
+    """Logically identical to `full_adder_fast` (same 5-gate shared-XOR
+    structure), but emits the carry-out with the `(x&y)` term first
+    (`(x & y) | (z & s1)` instead of `(s1 & z) | (x & y)`).
+
+    The two forms compute the same boolean function, but the operand
+    order affects the emitted Verilog wire ordering and thus can impact
+    downstream techmap optimizations.
+    """
+    s1 = x ^ y
+    return s1 ^ z, (x & y) | (z & s1)
+
+
 def full_adder_low_area(x: Expr, y: Expr, z: Expr) -> Tuple[Expr, Expr]:
+    """Textbook majority full adder: 7 gates, no sharing. Sometimes wins
+    when downstream techmap can re-factor the symmetric majority form."""
     s = x ^ y ^ z
     return s, (x & y) | (y & z) | (z & x)
 
@@ -357,6 +374,14 @@ class RippleCarryFinalAdder(FinalStageAdderBase):
         max_weight = self.config.out_width
         result_bits: List[Expr] = []
         carry: Optional[Expr] = carry_in
+        # Pick FA form per optim_type so the eval DB can record real
+        # area-vs-speed deltas. Previously this hardcoded full_adder_fast
+        # (shared XOR), making optim_type a no-op for this FSA.
+        _fa = (
+            full_adder_low_area
+            if self.config.optim_type == "area"
+            else full_adder_fast
+        )
 
         for weight in range(max_weight):
             bits = list(columns.get(weight, []))
@@ -373,7 +398,7 @@ class RippleCarryFinalAdder(FinalStageAdderBase):
                 s, carry = half_adder(bits[0], bits[1])
                 result_bits.append(s)
             elif len(bits) == 3:
-                s, carry = full_adder_fast(bits[0], bits[1], bits[2])
+                s, carry = _fa(bits[0], bits[1], bits[2])
                 result_bits.append(s)
             else:
                 raise ValueError(

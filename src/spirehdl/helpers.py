@@ -357,6 +357,56 @@ def extract_yosys_metrics_from_verilog_file(filename: str, deepsyn=False) -> dic
     return extract_yosys_metrics_from_verilog(verilog_lines, deepsyn=deepsyn)
 
 
+def _run_yosys_heavy_metric_flow(read_cmd: str, auto_top: bool = False,
+                                  suppress_stderr: bool = True) -> dict:
+    """Yosys flow using the full `synth; clean -purge` pipeline.
+
+    Mirrors `core/cost.py`'s `yosys_transistors` measurement: full multi-pass `synth` (proc/opt/wreduce/alumacc/share/peepopt/techmap/abc -fast/opt/etc.)
+    followed by `clean -purge`. Reads the recursive `Estimated number of transistors:` line from text `stat -tech cmos -top top`.
+
+    Returns the same flat dict as `_run_yosys_metric_flow` for caller convenience.
+    """
+    fd, stat_tmp_file = tempfile.mkstemp(suffix=".txt")
+    os.close(fd)
+
+    try:
+        with _suppress_output(stderr=suppress_stderr):
+            ys.run_pass("design -reset")
+            ys.run_pass(read_cmd)
+            if auto_top:
+                ys.run_pass("hierarchy -check -auto-top")
+            ys.run_pass("rename -top top")
+            ys.run_pass("hierarchy -check")
+            ys.run_pass("synth -top top")
+            ys.run_pass("clean -purge")
+            ys.run_pass(f"tee -q -o {stat_tmp_file} stat -top top -tech cmos")
+        text = open(stat_tmp_file).read()
+    finally:
+        if os.path.exists(stat_tmp_file):
+            os.remove(stat_tmp_file)
+
+    import re as _re
+    matches = _re.findall(r"Estimated number of transistors:\s+(\d+)", text)
+    if not matches:
+        raise ValueError("Could not parse heavy transistor estimate from yosys stat output")
+    # Last match is the hierarchy roll-up (or the sole module if flat).
+    return {"estimated_num_transistors": int(matches[-1])}
+
+
+def extract_yosys_heavy_metrics_from_verilog(verilog_lines: list[str]) -> dict:
+    """Heavy-pipeline counterpart to `extract_yosys_metrics_from_verilog`.
+    """
+    fd, verilog_tmp_file = tempfile.mkstemp(suffix=".v")
+    os.close(fd)
+    with open(verilog_tmp_file, "w") as f:
+        f.write("\n".join(verilog_lines) + "\n")
+    try:
+        return _run_yosys_heavy_metric_flow(
+            f"read_verilog -sv {verilog_tmp_file}", auto_top=True)
+    finally:
+        os.remove(verilog_tmp_file)
+
+
 def get_yosys_metrics(m: Module, n_iter_optimizations: Optional[int] = None, deepsyn=False, suppress_stderr: bool = True, via_aig=True) -> int:
     if via_aig:
         with _suppress_output(stderr=suppress_stderr):

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Callable, ClassVar, Dict, List, Optional, Set, Tuple
 
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import FinalStageAdderBase
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
+    FinalStageAdderBase, full_adder_fast, full_adder_fast2, full_adder_low_area,
+)
 from spirehdl.arithmetic.prefix_adders.prefix_adder_topologies import P_brent_kung, P_han_carlson, P_kogge_stone, P_ladner_fischer, P_ripple_carry, P_sklansky, P_sparse_kogge_stone_2, P_sparse_kogge_stone_4, Pair, analyze_prefix_matrix, legalize_P
 from spirehdl.arithmetic.prefix_adders.prefix_adder_specials import ZCG_n, multi_scan_n
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, UInt, fit_type
@@ -94,16 +96,13 @@ class NaiveRippleCarryFinalStage(FinalStageAdderBase):
                 sum_bits.append(a ^ carry)
                 carry = a & carry
             else:  # len(bits) == 2
-                # Textbook FA recurrence with the (a^b) partial propagate
-                # shared between the sum and carry expressions. This mirrors
-                # ``full_adder_fast`` but is inlined here to avoid the
-                # per-column ``half_adder`` + ``full_adder_fast`` split that
-                # ``RippleCarryFinalAdder`` uses; the flatter chain maps to
-                # a cheaper cell mix through yosys ``read_verilog`` tech map.
-                a, b = bits[0], bits[1]
-                p = a ^ b
-                sum_bits.append(p ^ carry)
-                carry = (a & b) | (carry & p)
+                # Dispatch on optim_type. For "speed" we use the `_fast2` variant — same shared-XOR logic as `full_adder_fast`, but
+                # empirically lands fewer transistors.
+                fa = (full_adder_low_area
+                      if self.config.optim_type == "area"
+                      else full_adder_fast2)
+                s, carry = fa(bits[0], bits[1], carry)
+                sum_bits.append(s)
 
         return sum_bits
 

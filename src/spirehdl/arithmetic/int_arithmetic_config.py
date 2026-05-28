@@ -11,7 +11,7 @@ from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib 
     TwoInputAritEncodings,
 )
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
-from spirehdl.arithmetic.eval.auto_config import lookup_best_config
+from spirehdl.arithmetic.eval.auto_config import DEFAULT_LOOKUP_METRIC, lookup_best_config
 from spirehdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder, StageBasedSubtractor
 from spirehdl.spirehdl import Const, Expr, Op2, SInt, Signal, UInt, fit_type
 
@@ -46,6 +46,7 @@ def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig | ArithmeticAu
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, swap = lookup_best_arithmetic_config(
             "*", a.typ.width, b.typ.width, signed, mult_cfg.objective,
+            getattr(mult_cfg, "metric", DEFAULT_LOOKUP_METRIC),
         )
         if swap:
             a, b = b, a
@@ -96,6 +97,7 @@ def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig | ArithmeticAutoConfig)
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, swap = lookup_best_arithmetic_config(
             "+", a.typ.width, b.typ.width, signed, adder_cfg.objective,
+            getattr(adder_cfg, "metric", DEFAULT_LOOKUP_METRIC),
         )
         if swap:
             a, b = b, a
@@ -144,12 +146,74 @@ class SubtractorConfig:
     full_output_bit: bool = True
 
 
+def build_multi_input_add(operands: Sequence[Expr],
+                          adder_cfg: ArithmeticAutoConfig) -> Expr:
+    """N-input adder via a carry-save tree + final 2-input adder.
+
+    Mirrors the spire inner product: instead of chaining N-1 two-input adders, we reduce via a common compressor tree.
+    PPA, FSA, and `optim_type` are looked up from the dedicated MIA DB (`lookup_best_mia_config`).
+    Requires at least 3 operands; smaller chains fall back to the regular `+` operator.
+    """
+    from spirehdl.arithmetic.int_multipliers.stages.ppa_fsa_util import (
+        OutputConfig, compressor_sum,
+    )
+
+    if len(operands) < 3:
+        # Caller should not invoke for 2 operands; fall back regardless.
+        from functools import reduce
+        return reduce(lambda x, y: x + y, operands)
+
+    any_signed = any(getattr(op.typ, "signed", False) for op in operands)
+    if any_signed:
+        # Signed multi-input add isn't supported yet — fall back to chained `+`.
+        from functools import reduce
+        return reduce(lambda x, y: x + y, operands)
+
+    max_w = max(op.typ.width for op in operands)
+    # Output width: ceil(log2(N)) extra bits to accommodate the sum.
+    n = len(operands)
+    extra = max(1, (n - 1).bit_length())
+    out_w = max_w + extra
+
+    # Look up the best (ppa_opt × fsa_opt × optim_type) for this N-input chain in the dedicated MIA DB.
+    # The MIA sweep evaluates the whole tuple per (N, width) shape, so the lookup picks a meaningful combo — not a 2-input-adder proxy whose `optim_type` field would be unreliable on prefix-FSA winners.
+    from spirehdl.arithmetic.eval.auto_config import lookup_best_mia_config
+    mia_metric = getattr(adder_cfg, "metric", DEFAULT_LOOKUP_METRIC)
+    mia_entry = lookup_best_mia_config(
+        n_inputs=n, n_bits=max_w, signed=False,
+        objective=adder_cfg.objective, metric=mia_metric,
+    )
+    if mia_entry is None:
+        raise RuntimeError(
+            f"No MIA DB entry for n_inputs={n}, width={max_w}, "
+            f"objective={adder_cfg.objective}, metric={mia_metric}. "
+            f"Rebuild the DB with "
+            f"`python -m spirehdl.arithmetic.eval.run_arithmetic_eval` "
+            f"(don't pass `--skip mia`)."
+        )
+    ppa_cls = PPAOption[mia_entry["ppa_opt"]].value
+    fsa_cls = FSAOption[mia_entry["fsa_opt"]].value
+    optim_type = mia_entry.get("optim_type") or "speed"
+
+    config = OutputConfig(out_width=out_w, optim_type=optim_type)
+    sum_expr = compressor_sum(config, list(operands), ppa_cls, fsa_cls)
+
+    # `compressor_sum` returns a Concat sized to whatever the columns produced.
+    # Trim / pad to the expected output width.
+    if sum_expr.typ.width > out_w:
+        sum_expr = sum_expr[0:out_w]
+    elif sum_expr.typ.width < out_w:
+        sum_expr = fit_type(sum_expr, UInt(out_w))
+    return sum_expr
+
+
 def build_subtractor(a: Expr, b: Expr, sub_cfg: SubtractorConfig | ArithmeticAutoConfig) -> Expr:
     if isinstance(sub_cfg, ArithmeticAutoConfig):
 
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, _ = lookup_best_arithmetic_config(
             "-", a.typ.width, b.typ.width, signed, sub_cfg.objective,
+            getattr(sub_cfg, "metric", DEFAULT_LOOKUP_METRIC),
         )
         encoding = Encoding.twos_complement if signed else Encoding.unsigned
         sub_cfg = SubtractorConfig(
@@ -217,15 +281,19 @@ class ArithmeticConfig:
 class ArithmeticAutoConfig:
     """Auto-selects the best per-operation config from the evaluation database.
 
-    Parameters
-    ----------
-    objective : "area" | "delay" | "adp"
-        - ``"area"``:  minimize yosys transistor count
-        - ``"delay"``: minimize AIG depth (proxy for critical-path delay)
-        - ``"adp"``:   minimize area-delay product (transistor_count * aig_depth)
+    ``objective`` controls how candidates are scored against ``metric``:
+        - ``"area"``:  minimize ``metric`` (tiebreak: aig_depth)
+        - ``"delay"``: minimize aig_depth (tiebreak: ``metric``)
+        - ``"adp"``:   minimize ``metric`` × aig_depth (tiebreak: ``metric``)
+
+    ``metric`` is the final size metric being optimized for (see ``auto_config.py`` for column details):
+        - ``"transistors_heavy"`` (default): yosys transistors under the full ``synth; clean -purge`` pipeline.
+        - ``"transistors"``: yosys transistors under the lite ``abc -fast`` pipeline.
+        - ``"aig_count"``: AIG gate count, post-synth via aigverse.
     """
 
     objective: Literal["area", "delay", "adp"] = "area"
+    metric: Literal["transistors", "transistors_heavy", "aig_count"] = DEFAULT_LOOKUP_METRIC
 
 
 def lookup_best_arithmetic_config(
@@ -234,9 +302,10 @@ def lookup_best_arithmetic_config(
     b_w: int,
     signed: bool,
     objective: Literal["area", "delay", "adp"] = "area",
+    metric: Literal["transistors", "transistors_heavy", "aig_count"] = DEFAULT_LOOKUP_METRIC,
 ):
     """Return ``(ArithmeticConfig, swap)`` for the empirically best configuration."""
-    entry, swap = lookup_best_config(op, a_w, b_w, signed, objective)
+    entry, swap = lookup_best_config(op, a_w, b_w, signed, objective, metric)
     encoding = Encoding.twos_complement if signed else Encoding.unsigned
 
     if entry is None:
@@ -411,6 +480,91 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
     # Actual consumed nodes — populated during replacement when fusion succeeds
     chain_consumed: set[int] = set()
 
+    # --- Pure-add chain detection (pre-pass, runs AFTER MAC detection) ---
+    # Look for chains of `+` operators that do NOT contain `*` operands; replace with a carry-save reduction + final 2-input adder (mirrors yosys's `alumacc` pass).
+    # Chains of length >=3 operands benefit; chains of length 2 fall through to per-node replacement.
+    # We walk left-associative `+` chains (the natural SpireHDL output of `a + b + c + d`). MAC chains have already been marked in `chain_member_candidates`; we skip those.
+
+    def _is_plus_op(expr: Expr) -> Op2 | None:
+        """Return the underlying Op2<+> if expr is one (possibly Signal-wrapped), and single-consumer at both wrapper and underlying node."""
+        if isinstance(expr, Op2) and expr.op == "+":
+            return expr
+        if isinstance(expr, Signal) and expr._driver is not None:
+            drv = expr._driver
+            if isinstance(drv, Op2) and drv.op == "+":
+                if (ref_count.get(id(expr), 0) == 1
+                        and ref_count.get(id(drv), 0) == 1):
+                    return drv
+        return None
+
+    def _collect_add_chain(root: Op2):
+        """For a left-associative chain `((((a+b)+c)+d)+e)`, return (leaves, intermediates)
+        where leaves=[a,b,c,d,e] and intermediates is the list of `+` Op2 nodes (including the root) that are consumed.
+
+        Returns None if the chain has fewer than 3 leaves, contains a `*` operand, or overlaps with a MAC chain.
+        """
+        if id(root) in chain_member_candidates:
+            return None
+        leaves: list[Expr] = []
+        intermediates: list[Op2] = []
+        current: Expr = root
+        while True:
+            plus = current if (isinstance(current, Op2) and current.op == "+") else None
+            if plus is None:
+                leaves.append(current)
+                break
+            if id(plus) in chain_member_candidates:
+                leaves.append(plus)
+                break
+            # require single-consumer for non-root pluses (root may be top-level)
+            if plus is not root and ref_count.get(id(plus), 0) != 1:
+                leaves.append(plus)
+                break
+            intermediates.append(plus)
+            a, b = plus.a, plus.b
+            # Try descending through the left side first (left-associative)
+            a_plus = _is_plus_op(a)
+            b_plus = _is_plus_op(b)
+            if (a_plus is not None
+                    and id(a_plus) not in chain_member_candidates):
+                leaves.append(b)
+                current = a_plus
+            elif (b_plus is not None
+                    and id(b_plus) not in chain_member_candidates):
+                leaves.append(a)
+                current = b_plus
+            else:
+                # Both sides are leaves
+                leaves.append(a)
+                leaves.append(b)
+                break
+        if len(leaves) < 3:
+            return None
+        # Reject if any leaf is a `*` (should not happen since MAC detection would have caught it, but guard anyway).
+        for leaf in leaves:
+            if _unwrap_mul(leaf) is not None:
+                return None
+        return (leaves, intermediates)
+
+    add_chain_roots: dict[int, tuple[list[Expr], list[Op2]]] = {}
+    add_chain_candidates: set[int] = set()
+
+    if isinstance(config, ArithmeticAutoConfig):
+        for node in order:
+            if not isinstance(node, Op2) or node.op != "+":
+                continue
+            if id(node) in chain_member_candidates:
+                continue
+            if id(node) in add_chain_candidates:
+                continue
+            result = _collect_add_chain(node)
+            if result is None:
+                continue
+            leaves, intermediates = result
+            add_chain_roots[id(node)] = (leaves, intermediates)
+            for plus in intermediates:
+                add_chain_candidates.add(id(plus))
+
     # Build replacement map bottom-up
     replacements: dict[int, Expr] = {}
 
@@ -481,11 +635,13 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
             if n_terms >= 2:
                 strategy, dot_cfg = pick_best_dot_strategy(
                     n_terms, max_mul_w, any_signed, config.objective,
+                    getattr(config, "metric", DEFAULT_LOOKUP_METRIC),
                 )
             else:
                 # Single MAC
                 strategy, dot_cfg = pick_best_mac_strategy(
                     max_mul_w, c_resolved.typ.width, any_signed, config.objective,
+                    getattr(config, "metric", DEFAULT_LOOKUP_METRIC),
                 )
 
             if strategy in ("dot", "mac") and dot_cfg is not None:
@@ -533,10 +689,28 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
                 continue
             # else: fall through to separate replacement below
 
+        # Pure-add chain replacement (carry-save tree + final adder)
+        if id(node) in add_chain_roots and isinstance(config, ArithmeticAutoConfig):
+            leaves, intermediates = add_chain_roots[id(node)]
+            # Resolve leaves through the replacement map in case some were already rewritten by an earlier pass.
+            resolved = [get(leaf) for leaf in leaves]
+            result = build_multi_input_add(resolved, config)
+            # build_multi_input_add returns the natural width (max_w + log2 carry bits); fit to the node's expected width if needed.
+            if (result.typ.width != node.typ.width
+                    or result.typ.signed != node.typ.signed):
+                result = fit_type(result, node.typ)
+            replacements[id(node)] = result
+            # Mark all intermediate `+` nodes consumed so the per-node loop skips them.
+            for plus in intermediates:
+                chain_consumed.add(id(plus))
+                replacements[id(plus)] = result
+            continue
+
         # Resolve per-node config when using auto mode
         if isinstance(config, ArithmeticAutoConfig):
             node_cfg, swap = lookup_best_arithmetic_config(
                 node.op, a_w, b_w, signed_a or signed_b, config.objective,
+                getattr(config, "metric", DEFAULT_LOOKUP_METRIC),
             )
             if swap:
                 a_expr, b_expr = b_expr, a_expr
@@ -545,10 +719,9 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
         else:
             node_cfg = config
 
-        # Structurally infer whether the replacement needs the extra top
-        # (carry-out) bit: spirehdl's Op2<+/-> always produces
-        # ``max(a_w, b_w) + 1``, but hand-constructed DAGs may use the
-        # truncated width. Reading it from the node type is always right.
+        # Structurally infer whether the replacement needs the extra top (carry-out) bit:
+        # spirehdl's Op2<+/-> always produces ``max(a_w, b_w) + 1``, but hand-constructed DAGs may use the truncated width.
+        # Reading it from the node type is always right.
         effective_full_bit = node.typ.width > max(a_w, b_w)
 
         if node.op == "+":
