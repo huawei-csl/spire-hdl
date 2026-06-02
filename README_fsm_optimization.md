@@ -151,7 +151,9 @@ the design (and any subsequent uses).
 | `predefined` | `n ≤ 2` | Tries `BINARY` and `GRAY` codes (no widening). 2 cost-fn calls. |
 | `exhaustive` | `n! ≤ 5040` (so `n ≤ 7`) | All permutations of `n` codes from the universe of `2^width`. Up to ~5 040 cost-fn calls. |
 | `swap` | otherwise | Pair-swap accept-on-improvement, 4 random restarts × 200 iters. ~800 cost-fn calls. |
+| `adjacency` | never (opt-in) | Two-stage: synthesis-free weighted-Hamming screen over every encoding (sub-second), then verify the real `cost_fn` on the top `top_k` (default 64). Falls back to `swap` when nested `optimized_fsm` groups are present or the transition table can't be extracted. Faster than `exhaustive`; more robust than `swap` for noisy objectives (e.g. `adp_proxy`). See [`_adjacency.py`](src/spirehdl/optimize/fsm/_adjacency.py). |
 | `anneal` | never (future work) | Reserved name; currently raises `NotImplementedError`. |
+| `auto` | — | Meta-strategy: picks one of the above based on `n` (see column above). Default. |
 
 Override the choice explicitly:
 
@@ -161,6 +163,9 @@ with optimized_encoding(MyStates, module=m, search="exhaustive"):
 
 with optimized_encoding(MyStates, module=m, search="swap"):
     ...
+
+with optimized_encoding(MyStates, module=m, search="adjacency", top_k=64):
+    ...
 ```
 
 ### Parameters
@@ -169,10 +174,11 @@ with optimized_encoding(MyStates, module=m, search="swap"):
 |-----------|---------|-------------|
 | `state_cls` | — | The State subclass to re-encode. |
 | `module` | — | The `Module` whose Verilog gets synthesised for each candidate assignment. |
-| `objective` | `"cells"` | Synthesis metric to minimise. One of `cells`, `wires`, `transistors` (via in-process pyosys), `aig_gates`, `aig_depth` (via aigverse). |
-| `search` | `"auto"` | Strategy (see ladder above). |
+| `objective` | `"cells"` | Synthesis metric to minimise. One of `cells`, `wires`, `transistors` (via in-process pyosys), `aig_gates`, `aig_depth`, `adp_proxy` (= `aig_gates × aig_depth`, a PDK-free area×delay proxy; AIG metrics via aigverse). AIG objectives require the combinational cone, so `adp_proxy` auto-enables `bit_level_emit`. |
+| `search` | `"auto"` | Strategy (see ladder above). One of `predefined`, `exhaustive`, `swap`, `adjacency`, `anneal`, `auto`. |
 | `width` | `state_cls._width` | Width of the encoding. Width-changing search (widen for `ONEHOT`, etc.) is **future work** — must equal the current width. |
 | `cost_fn` | `None` | Custom callable `assignment → float`. When `None`, defaults to `make_yosys_cost_fn`. |
+| `top_k` | `64` | `search="adjacency"` only: how many screen-ranked candidates to re-score with the real `cost_fn`. Ignored by other strategies. |
 
 ### Custom cost functions
 

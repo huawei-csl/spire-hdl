@@ -18,12 +18,17 @@ from spirehdl.optimize.fsm._emit import apply_encoding, restore_encoding, snapsh
 from spirehdl.optimize.fsm._encoding_search import search_encoding
 from spirehdl.optimize.fsm._hopcroft import equivalence_classes, minimize_fsm
 from spirehdl.optimize.fsm.optimized_encoding import optimized_encoding
+from spirehdl.optimize.fsm._adjacency import adjacency_search
+from spirehdl.optimize.fsm._minimize_emit import build_comb_cone, minimize_and_rewrite
 from spirehdl.optimize.fsm.optimized_fsm import optimized_fsm
 
 __all__ = [
     "optimized_fsm",
     "optimized_encoding",
     "minimize_fsm",
+    "minimize_and_rewrite",
+    "adjacency_search",
+    "build_comb_cone",
     "search_encoding",
     "apply_encoding",
     "snapshot_encoding",

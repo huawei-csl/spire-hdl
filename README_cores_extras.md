@@ -234,6 +234,7 @@ For some scripts you might need to add `PYTHONPATH=$(pwd)` before running the co
 - new synthax of control strucutres is _if, _else. maybe change to when and otherwise or elsewhen, so we can drop the underscore.
 - document aggregate types
 - content-addressed cache for `optimized_fsm` / `optimized_encoding` (same idea as `@abc_optimized` / `@flowy_optimized`) — key on `(state_cls, module-hash, objective, strategy, width)` and store the winning assignment, so re-runs of the encoding search are instant.
+- merge inner product and mia and allow for mixed fusion of the ppa, e.g. a+b*c+d, see eg run_arithmetic_eval.py.
 
 Contributions are welcome—feel free to open issues or submit pull requests with improvements or new hardware components.
 

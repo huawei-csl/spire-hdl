@@ -114,6 +114,14 @@ Each `+`, `-`, and `*` in the expression graph is independently replaced with th
 
 The optimizer also detects **multiply-accumulate (MAC) patterns** (`a * b + c`) and fuses them into a single hardware unit, absorbing the accumulate operand directly into the multiplier's column reduction and eliminating a full adder stage.
 
+It also detects **multi-input add chains** (`a + b + c + d + ...`, 3+ operands) and replaces them with a carry-save reduction tree plus a single final 2-input adder (mirroring what yosys's `alumacc` does internally). The chain's `(ppa, fsa, optim_type)` is picked from a dedicated `miaN` DB sweep. Example:
+
+```python
+@arithmetic_optimized(objective="area")
+def add_chain(a, b, c, d, cin):
+    return a + b + c + d + cin    # one CSA tree + final adder, not 4 chained 2-input adders
+```
+
 ## Example: 4-tap FIR filter with MAC fusion
 
 A common DSP pattern where MAC fusion shines — each tap is `coeff[i] * x[i]` accumulated into a sum:

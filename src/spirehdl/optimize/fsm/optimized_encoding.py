@@ -34,8 +34,8 @@ if TYPE_CHECKING:
     from spirehdl.spirehdl_state import State
 
 
-Strategy = Literal["predefined", "exhaustive", "swap", "anneal", "auto"]
-Objective = Literal["cells", "wires", "transistors", "aig_gates", "aig_depth"]
+Strategy = Literal["predefined", "exhaustive", "swap", "anneal", "auto", "adjacency"]
+Objective = Literal["cells", "wires", "transistors", "aig_gates", "aig_depth", "adp_proxy"]
 
 
 class optimized_encoding:
@@ -48,13 +48,38 @@ class optimized_encoding:
     module : Module
         The Module the user populates inside the ``with`` block. Required so
         the cost oracle can synthesise candidate encodings.
-    objective : "cells" | "wires" | "transistors" | "aig_gates" | "aig_depth"
-        Synthesis metric to minimise.
+    objective : "cells" | "wires" | "transistors" | "aig_gates" | "aig_depth" | "adp_proxy"
+        Synthesis metric to minimise. ``adp_proxy`` = ``aig_gates × aig_depth``,
+        a PDK-free area×delay proxy (no liberty / STA needed); it implies
+        ``bit_level_emit`` since it is measured on the combinational cone.
     search : strategy name (see ``_encoding_search.search_encoding``)
     width : optional int (currently must equal ``state_cls._width``)
     cost_fn : optional Callable[[assignment], float]
         Custom cost function. When ``None`` (default), uses
         ``_cost_oracle.make_cost_fn`` (in-process pyosys + aigverse).
+    bit_level_emit : bool
+        When True, after the encoding is chosen the FSM's next-state bits and
+        outputs are rewritten as **minimised bit-level Boolean expressions** over
+        the state-register bits (via ``_minimize_emit.minimize_and_rewrite``),
+        instead of leaving the ``state == CODE`` mux tree. This stops Yosys from
+        re-encoding the FSM (which would discard the search's encoding) and lets
+        the chosen encoding reach realised PPA. The search is also measured on
+        this emitted form. Requires sympy. See ``INVESTIGATION_fsm_encoding_api.md``.
+    dont_cares : bool
+        Feed unused state codes to the minimiser as don't-cares. Objective-
+        dependent: shrinks gate/area count but can lengthen the critical path
+        (helps cells/area, can hurt ADP). Default False.
+    top_k : int
+        For ``search="adjacency"``: how many screen-ranked candidates to verify
+        with the real objective. Default 64. (Ignored by other strategies.)
+
+    Search strategies
+    -----------------
+    ``"adjacency"`` is a fast two-stage search (see ``_adjacency``): it screens
+    every encoding with a synthesis-free weighted-Hamming cost in <1 s, then
+    runs the real ``cost_fn`` only on the ``top_k`` best — far faster than
+    ``exhaustive`` and, because it verifies the real objective on the screened
+    set, more robust than ``swap`` for noisy objectives like ``adp_proxy``.
     """
 
     def __init__(
@@ -66,6 +91,9 @@ class optimized_encoding:
         search: Strategy = "auto",
         width: int | None = None,
         cost_fn: Callable[[dict[str, int]], float] | None = None,
+        bit_level_emit: bool = False,
+        dont_cares: bool = False,
+        top_k: int = 64,
     ) -> None:
         self.state_cls = state_cls
         self.module = module
@@ -73,6 +101,11 @@ class optimized_encoding:
         self.search = search
         self.width = width
         self.cost_fn = cost_fn
+        # adp_proxy is an AIG (combinational-cone) metric, so it requires the
+        # bit-level emit path both to measure and to make the win real.
+        self.bit_level_emit = bit_level_emit or objective == "adp_proxy"
+        self.dont_cares = dont_cares
+        self.top_k = top_k
         self._snap: SharedCacheSnapshot | None = None
 
     def __enter__(self) -> "optimized_encoding":
@@ -96,19 +129,40 @@ class optimized_encoding:
         if not found:
             return False
 
-        cost_fn = self.cost_fn or make_cost_fn(self.module, self.state_cls, objective=self.objective)
+        cost_fn = self.cost_fn or make_cost_fn(
+            self.module, self.state_cls, objective=self.objective,
+            bit_level_emit=self.bit_level_emit, dont_cares=self.dont_cares)
 
         # Detect existing equivalence groups (e.g. produced by a nested ``optimized_fsm`` that merged states via
         # Hopcroft). Names sharing the same current value are in the same group and must continue to share a value
         # during the encoding search — otherwise the search would re-spread merged states.
         groups = _equivalence_groups(self.state_cls)
 
-        best = _search_group_aware(self.state_cls, cost_fn, groups, strategy=self.search, width=self.width)
+        best = None
+        if self.search == "adjacency" and all(len(g) == 1 for g in groups):
+            # Two-stage: synthesis-free adjacency screen → verify top_k with cost_fn.
+            from spirehdl.optimize.fsm._adjacency import adjacency_search
+            best = adjacency_search(self.state_cls, cost_fn, self.module,
+                                    width=self.width, top_k=self.top_k)
+            # Fall back to swap if the table couldn't be extracted (best is None).
+            if best is None:
+                best = _search_group_aware(self.state_cls, cost_fn, groups,
+                                           strategy="swap", width=self.width)
+        else:
+            strat = "swap" if self.search == "adjacency" else self.search
+            best = _search_group_aware(self.state_cls, cost_fn, groups, strategy=strat, width=self.width)
 
         # Commit the chosen encoding. The cost_fn already restored after the final trial — re-apply the winner here
         # so it sticks.
         from spirehdl.optimize.fsm._emit import apply_encoding
         apply_encoding(self.state_cls, best, width=self.width)
+
+        # Bit-level emit: rewrite the FSM logic as minimised Boolean expressions
+        # over the state-register bits so Yosys can't re-encode it away.
+        if self.bit_level_emit:
+            from spirehdl.optimize.fsm._minimize_emit import minimize_and_rewrite
+            minimize_and_rewrite(self.module, self.state_cls,
+                                 dont_cares=self.dont_cares)
         return False
 
 

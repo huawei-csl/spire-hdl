@@ -29,6 +29,7 @@ class _SharedCache:
     index: int = 0                           # for naming sig_{index}
     uid = itertools.count(1)                 # unique id for each expression
     used_names: set[str] = set()             # avoid duplicate auto-generated names
+    opportunistic: bool = True               # wrap every subexpr into a wire (see flat_emit)
 
     @classmethod
     def reset(cls):
@@ -37,11 +38,31 @@ class _SharedCache:
         cls.wires.clear()
         cls.index = 0
         cls.used_names.clear()
+        # note: `opportunistic` is intentionally NOT reset — it's a caller policy (see flat_emit), not per-module state.
 
 
 def reset_shared_cache():
     """Call this before emitting each Verilog module to avoid cross-module bleed."""
     _SharedCache.reset()
+
+
+import contextlib as _contextlib
+
+
+@_contextlib.contextmanager
+def flat_emit(enabled: bool = True):
+    """Emit Verilog without *opportunistic* common-subexpression sharing.
+
+    By default SpireHDL wraps every non-leaf subexpression into a named wire (``assign sig_k = ...``) 
+    to shrink the emitted Verilog. This context manager disables this behavior, 
+    The emitted Verilog is larger but can give better PPA results in some cases.
+    """
+    old = _SharedCache.opportunistic
+    _SharedCache.opportunistic = not enabled
+    try:
+        yield
+    finally:
+        _SharedCache.opportunistic = old
 
 
 def get_shared_wires() -> list["Signal"]:
@@ -82,17 +103,19 @@ def _maybe_share(e: "Expr", force_share=False) -> "Expr":
         e._cse_uid = uid
     cnt = _SharedCache.counts.get(uid, 0) + 1
     _SharedCache.counts[uid] = cnt
-    cnt_share = 1 # at what count start sharing
-    if cnt == cnt_share or (force_share and cnt <= 1):
+
+    # Reuse an already-created wire for this exact instance.
+    if uid in _SharedCache.expr2sig:
+        return _SharedCache.expr2sig[uid]
+
+    cnt_share = 1  # at what count start sharing
+    opportunistic = _SharedCache.opportunistic and cnt == cnt_share
+    if (force_share and cnt <= 1) or opportunistic:
         sig = _create_new_shared_wire(e.typ, getattr(e, "_suggested_name", None))
         sig._driver = e  # continuous assignment: assign sig = <original expr>;
         _SharedCache.expr2sig[uid] = sig
         return sig
-    elif cnt > cnt_share:
-        return _SharedCache.expr2sig[uid]
-    else:
-        # 1st sighting: return original expr
-        return e
+    return e
 
 
 # -----------------------------
