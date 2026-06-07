@@ -1,10 +1,14 @@
-"""``MemoryPrimitive`` — array-of-registers memory built as a regular ``Component``.
+"""``MemoryPrimitive`` — array memory built as a regular ``Component``.
 
-Synthesisable Verilog comes from ``custom_verilog()`` (a Yosys-inferable RAM idiom,
-identical in shape to the one the built-in ``Memory`` emits). Python simulation
-runs ``elaborate()``'s reference model: per-cell ``Register`` plus a linear mux tree
-for reads and per-cell conditional updates for writes. The two paths describe the
-same hardware; the framework cannot prove equivalence — the tests do.
+Synthesisable Verilog comes from ``custom_verilog()`` (a Yosys-inferable RAM idiom).
+Python simulation is backed by the core's O(1) ``_MemoryStore`` (Middle path B):
+``elaborate()`` instantiates a sim-only store and wires this primitive's ``.io``
+ports to it; the store emits no Verilog of its own (``custom_verilog()`` is the
+single synthesis source). The two paths describe the same hardware; the framework
+cannot prove equivalence — the tests do.
+
+The legacy O(depth) register-bank model is preserved as ``MemoryPrimitive_via_reg``
+(``primitive_memory_via_reg.py``) for comparison / fallback.
 
 Aggregate element types are supported via user-side pack / unpack at the port
 boundary. The port wires are always ``UInt(elem_w)``; callers do::
@@ -34,10 +38,8 @@ from typing import Optional, Sequence
 from spirehdl.spirehdl import (
     Bool,
     Const,
-    Register,
     Signal,
     UInt,
-    mux,
 )
 from spirehdl.spirehdl_module import Component
 from spirehdl.aggregate.hdl_aggregate import HDLAggregate
@@ -148,40 +150,32 @@ class MemoryPrimitive(Component):
     # --------------------------------------------------------- sim model
 
     def elaborate(self) -> None:
-        """Python sim model: register file + explicit mux tree.
+        """Python sim model: wire this primitive's ``.io`` to a core ``_MemoryStore``.
 
-        This describes the same hardware as ``custom_verilog()`` but is shaped so the
-        Spire simulator can evaluate it directly (no special-case handler). It is
-        ``O(depth)`` per cycle in expression evaluations — acceptable for the
-        small-depth tests; would need attention for very large memories.
+        The store gives O(1) simulation (``_mem_state`` array + ``step`` + the
+        ``_ArrayIndex`` read leaf) and emits no Verilog — ``custom_verilog()``
+        below is the sole synthesis source.
         """
-        cells = []
-        for i in range(self._depth):
-            init_v = self._init[i] if self._init is not None else 0
-            c = Register(UInt(self._elem_w), init=init_v, name=f"cell_{self._uid}_{i}")
-            cells.append(c)
+        from spirehdl.spirehdl import _MemoryStore
 
-        # write (with optional reset arm taking priority)
-        for i, c in enumerate(cells):
-            write_match = self.io.write_enable & (self.io.write_addr == i)
-            next_v = mux(write_match, self.io.write_data, c)
-            if self._with_reset_arm:
-                next_v = mux(self.io.reset_enable,
-                             Const(self._reset_value, UInt(self._elem_w)),
-                             next_v)
-            c <<= next_v
-
-        # read: linear mux tree over all cells, indexed by read_addr
-        read_expr = cells[0]
-        for i in range(1, self._depth):
-            read_expr = mux(self.io.read_addr == i, cells[i], read_expr)
-
+        m = _MemoryStore(
+            UInt(self._elem_w), self._depth,
+            init=self._init,
+            registered_read=self._registered_read,
+            name=self._instance_name,
+        )
+        m.write_addr   <<= self.io.write_addr
+        m.write_data   <<= self.io.write_data
+        m.write_enable <<= self.io.write_enable
+        if self._with_reset_arm:
+            m.reset_enable <<= self.io.reset_enable
+            if self._reset_value != 0:
+                m.reset_value <<= Const(self._reset_value, UInt(self._elem_w))
+        m.read_addr <<= self.io.read_addr
         if self._registered_read:
-            rd = Register(UInt(self._elem_w), init=0, name=f"rd_{self._uid}")
-            rd <<= mux(self.io.read_enable, read_expr, rd)
-            self.io.read_data <<= rd
-        else:
-            self.io.read_data <<= read_expr
+            m.read_enable <<= self.io.read_enable
+        self.io.read_data <<= m.read_data
+        self._store = m
 
     # ------------------------------------------------- synthesis verilog
 

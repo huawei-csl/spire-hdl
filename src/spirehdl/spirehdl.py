@@ -394,27 +394,29 @@ class Wire(Signal):
 # Memory primitive
 # -----------------------------
 
-class Memory(Signal):
-    """Array-of-registers storage. Emits `reg [W-1:0] name[0:depth-1];`.
+class _MemoryStore(Signal):
+    """Sim-only array storage for ``custom_verilog`` memory primitives (Middle path B).
 
-    Memory exposes its read/write/reset ports as Signal attributes. Users wire them with ``<<=`` just like any
-    other signal::
+    Provides O(1) simulation (``_mem_state`` array + ``step`` + the ``_ArrayIndex`` read
+    leaf) and plugs into signal collection via its port wires' ``_memory_parent``
+    back-edges. It emits **no Verilog of its own** — synthesis comes entirely from the
+    wrapping primitive's ``custom_verilog()``. Construction marks the store and its ports
+    no-emit so the parent emitter skips them.
 
-        mem = Memory(UInt(9), depth=16, name="fifo")
+    Ports are Signal attributes wired with ``<<=`` inside a primitive's ``elaborate()``::
+
+        mem = _MemoryStore(UInt(9), depth=16, name="fifo")
         mem.write_addr   <<= addr_w
         mem.write_data   <<= din
-        mem.write_enable <<= we       # default 1 if user omits; gate writes with this
+        mem.write_enable <<= we       # default 1 if omitted
         mem.reset_enable <<= clr      # presence activates the reset arm
-        mem.reset_value  <<= 0        # default 0; usually omitted
         mem.read_addr    <<= addr_r
         dout             <<= mem.read_data
 
-    Sync read: ``Memory(..., registered_read=True)`` makes ``read_data`` a Register clocked by the memory's own
-    always block (yosys-friendly idiom). The Memory also gets a ``read_enable`` port, defaulting to 1.
+    ``registered_read=True`` makes ``read_data`` a Register captured by ``step`` (the
+    primitive's clock-only always block mirrors this in verilog).
 
-    There are no ``write()``/``reset()``/``registered_read()`` methods — everything is just port wiring. Verilog
-    emission and simulation live on Memory itself (``emit_decl``, ``emit_initial``, ``emit_always``,
-    ``init_sim_state``, ``step``) and are called by Module/Simulator.
+    Not user-facing — designs use ``MemoryPrimitive`` / ``FIFOPrimitive``.
     """
 
     def __init__(self, elem_type: HDLType, depth: int, *,
@@ -424,10 +426,10 @@ class Memory(Signal):
         if name is None:
             name = infer_signal_name_from_assignment("mem", "mem", __file__)
         if depth <= 0:
-            raise ValueError(f"Memory depth must be > 0; got {depth}")
+            raise ValueError(f"_MemoryStore depth must be > 0; got {depth}")
         if init is not None and len(init) != depth:
             raise ValueError(
-                f"Memory init must have length == depth ({depth}); got {len(init)}")
+                f"_MemoryStore init must have length == depth ({depth}); got {len(init)}")
         super().__init__(name, elem_type, kind="mem")
         self.depth = depth
         self.init = list(init) if init is not None else None
@@ -461,11 +463,11 @@ class Memory(Signal):
             self.read_data = _port("rdata", elem_type)
             self.read_data._driver = _ArrayIndex(self, self.read_addr, elem_type)
 
-    def to_verilog(self) -> str:
-        # A Memory is an array; it can never appear as a scalar operand. Raise instead of silently producing
-        # invalid verilog like `assign out = fifo;`.
-        raise RuntimeError(
-            f"Memory '{self.name}' cannot appear in an expression; use mem.read_data.")
+        # Sim-only store: never emits its own Verilog (the wrapping primitive's
+        # custom_verilog does). Mark self + ports no-emit so the parent emitter skips them.
+        for s in (self, *self._iter_ports()):
+            s._no_emit_decl = True
+            s._no_emit_drive = True
 
     # ----------------------------- introspection helpers ----------------------
 
@@ -481,66 +483,6 @@ class Memory(Signal):
 
     def _has_reset_arm(self) -> bool:
         return self.reset_enable._driver is not None
-
-    # ----------------------------- verilog emission ---------------------------
-
-    def emit_decl_lines(self) -> "list[str]":
-        sign = "signed " if self.typ.signed else ""
-        rng = self.typ.range_str()
-        return [f"  reg {sign}{rng} {self.name}[0:{self.depth-1}];"]
-
-    def emit_initial_lines(self) -> "list[str]":
-        if self.init is None:
-            return []
-        out = ["initial begin"]
-        for i, v in enumerate(self.init):
-            out.append(f"  {self.name}[{i}] = {Const(v, self.typ).to_verilog()};")
-        out.append("end")
-        return out
-
-    def emit_always_lines(self, clk_name: str) -> "list[str]":
-        has_w = self._has_write_port()
-        has_r = self._has_reset_arm()
-        has_rr = self._registered_read
-        if not (has_w or has_r or has_rr):
-            return []
-
-        n = self.name
-        out = [f"  always @(posedge {clk_name}) begin"]
-        if has_r and has_w:
-            out.append(f"    if ({self.reset_enable.name}) begin")
-            for i in range(self.depth):
-                out.append(f"      {n}[{i}] <= {self.reset_value.name};")
-            out.append(f"    end else if ({self.write_enable.name}) begin")
-            out.append(f"      {n}[{self.write_addr.name}] <= {self.write_data.name};")
-            out.append(f"    end")
-        elif has_r:
-            out.append(f"    if ({self.reset_enable.name}) begin")
-            for i in range(self.depth):
-                out.append(f"      {n}[{i}] <= {self.reset_value.name};")
-            out.append(f"    end")
-        elif has_w:
-            out.append(f"    if ({self.write_enable.name}) begin")
-            out.append(f"      {n}[{self.write_addr.name}] <= {self.write_data.name};")
-            out.append(f"    end")
-        if has_rr:
-            out.append(f"    if ({self.read_enable.name}) begin")
-            out.append(f"      {self.read_data.name} <= {n}[{self.read_addr.name}];")
-            out.append(f"    end")
-        out.append("  end")
-        return out
-
-    def validate(self) -> None:
-        """Raise if required ports are partially wired (called by to_verilog)."""
-        wa = self.write_addr._driver is not None
-        wd = self.write_data._driver is not None
-        if wa != wd:
-            raise ValueError(
-                f"Memory '{self.name}': write_addr and write_data must both be "
-                f"connected or both left unconnected (got addr={wa}, data={wd}).")
-        if self._registered_read and self.read_addr._driver is None:
-            raise ValueError(
-                f"Memory '{self.name}': registered_read=True requires read_addr to be connected.")
 
     # ----------------------------- simulator hooks ----------------------------
 
@@ -592,7 +534,7 @@ class _ArrayIndex(Expr):
     simulator's ``visit_array_index`` reads from ``_mem_state``.
     """
 
-    def __init__(self, mem: "Memory", addr_wire: Signal, typ: HDLType):
+    def __init__(self, mem: "_MemoryStore", addr_wire: Signal, typ: HDLType):
         self.mem = mem
         self.addr_wire = addr_wire
         self.typ = typ

@@ -6,7 +6,7 @@ import time
 
 
 from spirehdl import VERILOG_BANNER
-from spirehdl.spirehdl import Bool, Const, Expr, ExprLike, HDLType, Memory, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
+from spirehdl.spirehdl import Bool, Const, Expr, ExprLike, HDLType, _MemoryStore, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
 
 
 from typing import Any, Dict, Iterable, List, Optional
@@ -350,24 +350,15 @@ class Module:
                 if apply_structural_cse(self):
                     self.collect_signals()
 
-        # Validate memory connections first (cheap, fails early).
-        mems = self._internals_of("mem")
-        for m in mems:
-            m.validate()
-
-        # Memory-owned rdata Registers get their next-state written inside the memory's own always block; exclude
-        # from the normal reg always block.
-        mem_owned_reg_ids = {id(m.read_data) for m in mems if m._registered_read}
-
         # Basic checks. Signals tagged `_no_emit_drive` (custom-Verilog replacement) are exempt — the custom block
-        # provides their value.
+        # provides their value. Memory stores (`_MemoryStore`) are sim-only and always no-emit, so they and their
+        # rdata registers fall through these checks without special-casing.
         for s in self._signals:
             if s.kind in ("wire", "output") and s._driver is None and not s._no_emit_drive:
                 if s.kind == "output":
                     raise ValueError(f"Output '{s.name}' has no driver.")
             if s.kind == "reg" and s._driver is None and not s._no_emit_drive:
-                if id(s) not in mem_owned_reg_ids:
-                    raise ValueError(f"Register '{s.name}' has no next-state assignment.")
+                raise ValueError(f"Register '{s.name}' has no next-state assignment.")
 
         # Collect custom-Verilog blocks from any Component that owns part of this module's design graph (top-level
         # Component via `module.component`, plus embedded Components reached through `_owning_component` back-edges
@@ -403,7 +394,7 @@ class Module:
             wires += [s for s in get_shared_wires() if not any(s is w for w in wires)]
 
         regs_all = self._internals_of("reg")
-        regs = [r for r in regs_all if id(r) not in mem_owned_reg_ids]
+        regs = regs_all
 
         lines.append('// Wires')
         for w in wires:
@@ -419,16 +410,9 @@ class Module:
             sign = "signed " if r.typ.signed else ""
             rng = r.typ.range_str()
             lines.append(f"  reg {sign}{rng} {r.name};")
-        if mems:
-            lines.append('// Memories')
-            for m in mems:
-                if m._no_emit_decl:
-                    continue
-                lines += m.emit_decl_lines()
 
-        # Combinational assigns for wires/outputs. Memory port wires (wires with `_memory_parent`) come through this
-        # loop too — their drivers are either user-set (write_addr/data/enable, reset_*, read_addr/enable) or the
-        # default `Const(1)`/`Const(0)`/`_ArrayIndex` set at memory construction.
+        # Combinational assigns for wires/outputs. `_MemoryStore` port wires are no-emit (the wrapping primitive's
+        # custom_verilog drives the storage), so they're skipped here via the `_no_emit_drive` guard.
         lines.append("// Combinational assignments")
         for s in [*wires, *self._ports_of("output")]:
             if s._no_emit_drive:
@@ -436,12 +420,6 @@ class Module:
             if s._driver is not None:
                 rhs = fit_width(s._driver, s.typ).to_verilog()
                 lines.append(f"  assign {s.name} = {rhs};")
-
-        # Memory init-block (ROM-style).
-        for m in mems:
-            if m._no_emit_decl:
-                continue
-            lines += m.emit_initial_lines()
 
         # Sequential logic for normal regs.
         lines.append("// Sequential logic")
@@ -466,15 +444,6 @@ class Module:
                 for r in emit_regs:
                     lines.append(f"    {r.name} <= {fit_width(r._driver, r.typ).to_verilog()};")
             lines.append("  end")
-
-        # Memory always blocks — clock-only, yosys-recognised idiom.
-        for m in mems:
-            if m._no_emit_drive:
-                continue
-            mem_lines = m.emit_always_lines(self.clk.name if self.with_clock else "")
-            if mem_lines and not self.with_clock:
-                raise ValueError(f"Memory '{m.name}' has sequential ports but module has no clock.")
-            lines += mem_lines
 
         # Custom Verilog blocks (one per Component that provides `custom_verilog`).
         if custom_blocks:
@@ -594,7 +563,7 @@ class _SignalCollector(ExprVisitor[None]):
         # Walk children explicitly. Unlike `expr_children` (which treats regs as comb-depth-zero leaves for
         # analyzer purposes), the collector must traverse reg drivers too — otherwise externally-created
         # Registers/Wires chained to module outputs would be missed.
-        if isinstance(s, Memory):
+        if isinstance(s, _MemoryStore):
             for p in s._iter_ports():
                 self.visit(p)
         else:
@@ -650,7 +619,7 @@ class _SignalCollector(ExprVisitor[None]):
                 self.name_to_sig[candidate] = sig
                 # If we just renamed a Memory, propagate to its port wires that have already been uniquified
                 # (we'll see new ports later via traversal, but already-cached ones won't be revisited).
-                if isinstance(sig, Memory):
+                if isinstance(sig, _MemoryStore):
                     for port in sig._iter_ports():
                         old = port.name
                         new = f"{sig.name}__{port._port_suffix}"

@@ -1,6 +1,6 @@
 from spirehdl.spirehdl_module import Module
 from spirehdl.spirehdl import *
-from spirehdl.spirehdl import Signal, Expr, Const, Op1, Op2, Ternary, Concat, Slice, Resize, Memory, _ArrayIndex
+from spirehdl.spirehdl import Signal, Expr, Const, Op1, Op2, Ternary, Concat, Slice, Resize, _MemoryStore, _ArrayIndex
 from spirehdl.spirehdl_simulator_base import SimulatorBase
 from spirehdl.spirehdl_visitor import ExprVisitor
 
@@ -287,7 +287,7 @@ class Simulator(SimulatorBase):
         with each entry as an unsigned bit-pattern of width `mem.typ.width`. The returned list is a copy —
         mutating it does not affect simulation state.
         """
-        if isinstance(ref, Memory):
+        if isinstance(ref, _MemoryStore):
             mem = ref
         elif isinstance(ref, str):
             for m in self.mems:

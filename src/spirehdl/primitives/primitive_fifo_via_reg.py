@@ -1,26 +1,13 @@
-"""``FIFOPrimitive`` — standard synchronous FIFO built as a ``Component``.
+"""``FIFOPrimitive_via_reg`` — register-bank synchronous FIFO (legacy reference).
 
-Synthesisable Verilog comes from ``custom_verilog()``; Python simulation runs
-``elaborate()``'s register-file reference model. Aggregate element types are
-supported via user-side pack / unpack at the port boundary.
+Original ``FIFOPrimitive`` implementation: storage is an inline per-cell
+``Register`` bank + mux tree (O(depth) sim). The canonical ``FIFOPrimitive``
+(in ``primitive_fifo.py``) now backs storage with the core's O(1) ``_MemoryStore``;
+this variant is kept for comparison / fallback. The synthesisable Verilog is
+identical between the two.
 
-Semantics (one-cycle read latency, *not* first-word-fallthrough):
-  * Push when ``push & ~full``: ``din`` is written to ``mem[wr_ptr]`` and ``wr_ptr`` advances.
-  * Pop when ``pop & ~empty``: ``mem[rd_ptr]`` is captured into ``dout`` and ``rd_ptr`` advances.
-    Result: after a pop on cycle T, ``dout`` shows the popped value on cycle T+1.
-  * Simultaneous push + pop on a non-empty/non-full FIFO leaves ``count`` unchanged.
-  * Underflow (pop while empty) and overflow (push while full) are silently ignored — the
-    request gates itself off via ``~empty`` / ``~full``.
-
-v1 requires ``depth`` to be a power of two so pointer wrap is free (no explicit modulo).
-
-Storage is backed by the core's O(1) ``_MemoryStore`` (Middle path B): ``elaborate()``
-uses it for the data array and keeps the pointers / count / flags / dout register as
-ordinary ``Register``/``Wire`` logic. ``custom_verilog()`` emits one self-contained
-block (the store contributes no Verilog of its own).
-
-The legacy O(depth) register-bank model is preserved as ``FIFOPrimitive_via_reg``
-(``primitive_fifo_via_reg.py``) for comparison / fallback.
+Semantics (one-cycle read latency, *not* first-word-fallthrough) — see
+``primitive_fifo.py`` for the full description.
 """
 
 from __future__ import annotations
@@ -40,25 +27,8 @@ from spirehdl.spirehdl_module import Component
 from spirehdl.primitives.primitive_memory import _elem_bit_width, _next_uid
 
 
-class FIFOPrimitive(Component):
-    """Standard sync FIFO with registered output (one-cycle read latency).
-
-    Parameters:
-      ``elem_type``  HDLType or HDLAggregate (class / instance).
-      ``depth``      Power of two, ``>= 2``.
-      ``name``       Optional instance name; used as Verilog mem-array prefix.
-
-    Ports:
-      | name      | dir | width                        |
-      |-----------|-----|------------------------------|
-      | ``push``    | in  | 1                            |
-      | ``pop``     | in  | 1                            |
-      | ``din``     | in  | ``elem_w``                   |
-      | ``dout``    | out | ``elem_w`` (registered head) |
-      | ``full``    | out | 1                            |
-      | ``empty``   | out | 1                            |
-      | ``count``   | out | ``log2(depth)+1``            |
-    """
+class FIFOPrimitive_via_reg(Component):
+    """Register-bank sync FIFO (O(depth) sim). Same ``.io`` as ``FIFOPrimitive``."""
 
     def __init__(
         self,
@@ -103,29 +73,19 @@ class FIFOPrimitive(Component):
 
     @property
     def name(self) -> str:
-        return f"FIFOPrimitive_{self._uid}"
+        return f"FIFOPrimitive_via_reg_{self._uid}"
 
     # --------------------------------------------------------- sim model
 
     def elaborate(self) -> None:
-        """Python sim model: O(1) ``_MemoryStore`` data array + pointer/count/flag logic.
-
-        Combinational intermediates are wrapped in tagged ``Wire``s so the
-        ``_apply_custom_verilog_tags`` walker marks them no-emit (otherwise CSE
-        might lift a duplicate sub-expression into an auto-generated wire that the
-        emitter does *not* skip, leaking into the Verilog output). The store reads
-        ``mem[rd_ptr]`` combinationally (pre-edge) and writes ``mem[wr_ptr]`` at the
-        edge — matching the via_reg model and the verilog NBA semantics.
-        """
-        from spirehdl.spirehdl import _MemoryStore
-
+        """Python sim model: register file + pointers + count + dout register."""
         u = self._uid
         elem_w = self._elem_w
         addr_w = self._addr_w
         count_w = self._count_w
         depth = self._depth
 
-        store = _MemoryStore(UInt(elem_w), depth, name=f"{self._instance_name}__store")
+        cells = [Register(UInt(elem_w), init=0, name=f"fcell_{u}_{i}") for i in range(depth)]
         wr_ptr   = Register(UInt(addr_w),  init=0, name=f"wrptr_{u}")
         rd_ptr   = Register(UInt(addr_w),  init=0, name=f"rdptr_{u}")
         count_r  = Register(UInt(count_w), init=0, name=f"cnt_{u}")
@@ -142,11 +102,10 @@ class FIFOPrimitive(Component):
         do_push <<= self.io.push & ~full_w
         do_pop  <<= self.io.pop  & ~empty_w
 
-        # Storage: write at wr_ptr (gated by do_push), async read at rd_ptr.
-        store.write_addr   <<= wr_ptr
-        store.write_data   <<= self.io.din
-        store.write_enable <<= do_push
-        store.read_addr    <<= rd_ptr
+        # Per-cell write
+        for i, c in enumerate(cells):
+            match = do_push & (wr_ptr == i)
+            c <<= mux(match, self.io.din, c)
 
         # Pointers
         wr_ptr <<= mux(do_push, wr_ptr + 1, wr_ptr)
@@ -158,15 +117,17 @@ class FIFOPrimitive(Component):
         count_r <<= mux(push_only, count_r + 1,
                         mux(pop_only, count_r - 1, count_r))
 
-        # Read: capture mem[rd_ptr] (pre-edge) into dout_r when do_pop fires.
-        dout_r <<= mux(do_pop, store.read_data, dout_r)
+        # Read: linear mux tree over cells, captured into dout_r when do_pop fires.
+        read_expr = cells[0]
+        for i in range(1, depth):
+            read_expr = mux(rd_ptr == i, cells[i], read_expr)
+        dout_r <<= mux(do_pop, read_expr, dout_r)
 
         # Outputs
         self.io.dout  <<= dout_r
         self.io.full  <<= full_w
         self.io.empty <<= empty_w
         self.io.count <<= count_r
-        self._store = store
 
     # ------------------------------------------------- synthesis verilog
 
@@ -197,7 +158,7 @@ class FIFOPrimitive(Component):
         dpo    = f"{n}__do_pop"
 
         L: list[str] = []
-        L.append(f"  // --- FIFOPrimitive (uid={u}, depth={D}, width={W}) ---")
+        L.append(f"  // --- FIFOPrimitive_via_reg (uid={u}, depth={D}, width={W}) ---")
         L.append(f"  reg [{W-1}:0] {mem}[0:{D-1}];")
         L.append(f"  reg [{AW-1}:0] {wr_ptr};")
         L.append(f"  reg [{AW-1}:0] {rd_ptr};")

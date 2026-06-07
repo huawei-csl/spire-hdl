@@ -15,7 +15,7 @@ from spirehdl.spirehdl import (
     Concat,
     Const,
     Expr,
-    Memory,
+    _MemoryStore,
     Op1,
     Op2,
     Resize,
@@ -50,7 +50,7 @@ def expr_children(e: Expr) -> Tuple[Expr, ...]:
     if isinstance(e, _ArrayIndex):
         return ()
     if isinstance(e, Signal):
-        if isinstance(e, Memory):
+        if isinstance(e, _MemoryStore):
             return tuple(e._iter_ports())
         if getattr(e, "_memory_parent", None) is not None:
             parent = e._memory_parent
