@@ -21,8 +21,7 @@ clock-only `always` block — the shape yosys's `memory` pass recognises (so `me
 the core's O(1) `_MemoryArray` (an internal, sim-only storage object you never touch
 directly). The two paths describe the same hardware; the tests pin the equivalence.
 
-> **Why primitives, not a built-in `Memory` class?** The core was deliberately kept lean
-> (see [`internal_docs/memory_lean_core_multiport.md`](internal_docs/memory_lean_core_multiport.md)):
+> **Why primitives, not a built-in `Memory` class?** The core was deliberately kept lean:
 > all Verilog emission, port shapes, and flavors live in user-space primitives; the core
 > only provides fast simulation storage. There is no user-facing `Memory` class — use the
 > primitives below.
@@ -265,13 +264,8 @@ sim.get_mem("ram")     # → [0, 0, 0, 0xAB, …]   (length == depth, unsigned b
 
 ## See also
 
-- Design rationale, capability matrix, and the multi-port port-factory design:
-  [`internal_docs/memory_lean_core_multiport.md`](internal_docs/memory_lean_core_multiport.md)
-  (companions: `memory_primitive_vs_builtin.md`, `memory_refactor.md`).
 - Tests (in [`testing/memory/`](testing/memory/)):
   [`test_memory.py`](testing/memory/test_memory.py) (behaviour via primitives),
   [`test_primitive_memory.py`](testing/memory/test_primitive_memory.py),
   [`test_primitive_ram.py`](testing/memory/test_primitive_ram.py),
   [`test_primitive_fifo.py`](testing/memory/test_primitive_fifo.py).
-- A real FIFO using `MemoryPrimitive` for storage:
-  [`benchmarks/dr_rtl_spirehdl/router/context/starting_point.py`](benchmarks/dr_rtl_spirehdl/router/context/starting_point.py).

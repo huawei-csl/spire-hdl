@@ -266,12 +266,6 @@ sequential state in `elaborate()` (Registers + mux trees), aggregate-type
 support, and per-instance internal-name uniquification so multiple
 instances inside the same parent don't collide on inlined names.
 
-A standalone analysis of when to use this pattern vs. baking storage into
-the SpireHDL core lives in
-[`docs/memory_primitive_vs_builtin.md`](docs/memory_primitive_vs_builtin.md)
-— useful background if you're deciding between "build it as a primitive"
-and "extend the core".
-
 ## See also
 
 - Tests covering both flavours:
@@ -282,7 +276,7 @@ and "extend the core".
   (top-level, embedded, multi-instance blackboxes; the walker-reachability
   fix is exercised in `test_embedded_blackbox_parent_helper_is_reachable`).
 - Primitives tests:
-  [`testing/test_primitive_memory.py`](testing/test_primitive_memory.py)
+  [`testing/memory/test_primitive_memory.py`](testing/memory/test_primitive_memory.py)
   (10 cases including an `AggregateRecord` element-type round-trip) and
-  [`testing/test_primitive_fifo.py`](testing/test_primitive_fifo.py)
+  [`testing/memory/test_primitive_fifo.py`](testing/memory/test_primitive_fifo.py)
   (8 cases including underflow/overflow safety and aggregate element types).

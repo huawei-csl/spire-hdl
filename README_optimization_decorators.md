@@ -9,7 +9,7 @@ design is first lowered to gates by a fixed *prep* leg (`techmap; opt; abc -fast
 then your `abc_script` runs on that AIG via a standalone `abc` subprocess.  This ordering
 matters: ABC has no rewriter for coarse cells like `$mul`/`$add`, so the script must run
 *after* `techmap` to have any effect.  (Earlier versions ran the script before `techmap`,
-where it was essentially inert — see `internal_docs/abc_optimize_post_pipeline_investigation.md`.)
+where it was essentially inert.)
 
 ```python
 from spirehdl.optimize import abc_optimized, ABC_RECIPES

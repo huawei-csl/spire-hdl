@@ -8,9 +8,9 @@ A modern Python HDL that compiles concise, composable hardware descriptions to s
 
 - **Designed for humans and agents to be effective:** a small surface that reads well to engineers and LLMs alike
 - **Reduces area and delay vs. a traditional Verilog flow:** optimization is part of the compile, not an afterthought
-- **Integrated with ABC and mockturtle** — modern synthesis optimization wired directly into the compilation pipeline
-- **Arithmetic library with automated replacement:** swap adders, multipliers, and FP cores against an area/delay objective
-- **Cycle-accurate Python simulator"** drive inputs, tick clocks, inspect any expression, and capture probes without leaving Python
+- **Integrated with ABC and mockturtle:** modern synthesis optimization wired directly into the compilation pipeline
+- **Arithmetic library with automated replacement:** swap adders, multipliers, and FP cores driven by an objective
+- **Cycle-accurate Python simulator"** drive inputs, tick clocks, inspect expressions/outputs without leaving Python
 - **Content-addressed optimization cache:** instant re-runs via `@flowy_optimized` / `@abc_optimized` decorators
 
 # Optimizations built in ⚡ 
@@ -19,7 +19,7 @@ SpireHDL supports **source-embedded optimization intent**: the designer marks *w
 
 These optimization layers run *inside* the compile pipeline, so emitted Verilog is already small and fast before external tools see it. The numbers below are measured against a plain Yosys flow on the same RTL.
 
-### 🔢 Arithmetic auto-replacement — `replace_arithmetic_ops`
+### 🔢 Arithmetic auto-replacement: `replace_arithmetic_ops`
 
 Drops in topology-tuned adders, multipliers, and MAC fusions against an `area` / `delay` / `adp` objective. On an 8-bit ALU (add + sub + mul):
 
@@ -29,7 +29,7 @@ Drops in topology-tuned adders, multipliers, and MAC fusions against an `area` /
 
 MAC patterns (`a*b + c`) are fused into single column-reduction units, eliminating a full adder stage. See [`README_arithmetic_optimization.md`](README_arithmetic_optimization.md).
 
-### 🧠 ABC + mockturtle decorators — `@abc_optimized` / `@flowy_optimized`
+### 🧠 ABC + mockturtle decorators: `@abc_optimized` / `@flowy_optimized`
 
 One decorator stacks modern AIG synthesis (`resyn2`, `&deepsyn`, mockturtle) onto any `Module` or `Component`, with a content-addressed cache for instant re-runs:
 
@@ -39,7 +39,7 @@ One decorator stacks modern AIG synthesis (`resyn2`, `&deepsyn`, mockturtle) ont
 
 See [`README_optimization_decorators.md`](README_optimization_decorators.md).
 
-### 🎯 FSM + encoding search — `optimized_fsm` / `optimized_encoding`
+### 🎯 FSM + encoding search: `optimized_fsm` / `optimized_encoding`
 
 Hopcroft state minimisation and bit-assignment search as two composable context managers. On the canonical 7-state `case10` Moore FSM:
 
@@ -49,9 +49,9 @@ Hopcroft state minimisation and bit-assignment search as two composable context 
 
 An 8-opcode CPU decoder sees **−66.7% cells** from a single `optimized_encoding`, because the search discovers an opcode layout where each wide OR collapses to one bit-test. See [`README_fsm_optimization.md`](README_fsm_optimization.md).
 
-### 🛠️ Fine-grained architecture selection — `arithmetic_generator`
+### 🛠️ Fine-grained architecture selection:  `arithmetic_generator`
 
-Beyond the automatic passes above, the unified arithmetic generator lets you hand-pick the exact micro-architecture of an adder, multiplier, MAC, or matmul — partial-product generation, compression-tree topology, and final-stage adder — then emit Verilog/AAG, simulate, and collect Yosys metrics for direct comparison. Use it to explore the design space at full granularity when you want to drive the architecture choice yourself rather than leaving it to the objective-driven replacer. See [`README_arithmetic_generator.md`](README_arithmetic_generator.md).
+Beyond the automatic passes above, the unified arithmetic generator lets you hand-pick the exact micro-architecture of an adder, multiplier, MAC, or matmul (partial-product generation, compression-tree topology, and final-stage adder), then emit Verilog/AAG, simulate, and collect Yosys metrics for direct comparison. Use it to explore the design space at full granularity when you want to drive the architecture choice yourself rather than leaving it to the objective-driven replacer. See [`README_arithmetic_generator.md`](README_arithmetic_generator.md).
 
 # Overview
 
@@ -174,7 +174,7 @@ class SimpleAdder(Component):
     def elaborate(self):
         self.io.sum <<= self.io.a + self.io.b
 
-class Sum3Hier(Component):
+class Sum3Hierarchical(Component):
     def __init__(self):
         @dataclass
         class IO:
@@ -199,7 +199,7 @@ class Sum3Hier(Component):
         add_abc.io.b <<= self.io.c
         self.io.sum <<= add_abc.io.sum
 
-module = Sum3Hier().to_module(name="Sum3Hier")
+module = Sum3Hierarchical().to_module(name="Sum3Hier")
 print(module.to_verilog())  # one top module, built from internal components
 ```
 
@@ -209,11 +209,11 @@ Components are ideal for assembling hierarchical designs: they let you instantia
 
 ## Aggregate data types
 
-SpireHDL includes structured, bit-packable aggregates for cleaner interfaces and bulk assignments ([`aggregate/`](src/sprouthdl/aggregate)).  See [`README_aggregate_types.md`](README_aggregate_types.md) for the full reference with an example for every type:
+SpireHDL includes structured, bit-packable aggregates for cleaner interfaces and bulk assignments ([`aggregate/`](src/spirehdl/aggregate)).  See [`README_aggregate_types.md`](README_aggregate_types.md) for the full reference with an example for every type:
 
-- `HDLAggregate` defines the base “pack to bits” API that powers all aggregates ([`hdl_aggregate.py`](src/sprouthdl/aggregate/hdl_aggregate.py)).
-- `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or aggregates ([`aggregate_array.py`](src/sprouthdl/aggregate/aggregate_array.py)).
-- `AggregateRecord` lets you declare bundle-like classes with named fields that remain packable to a flat bitvector ([`aggregate_record.py`](src/sprouthdl/aggregate/aggregate_record.py)).
+- `HDLAggregate` defines the base “pack to bits” API that powers all aggregates ([`hdl_aggregate.py`](src/spirehdl/aggregate/hdl_aggregate.py)).
+- `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or aggregates ([`aggregate_array.py`](src/spirehdl/aggregate/aggregate_array.py)).
+- `AggregateRecord` lets you declare bundle-like classes with named fields that remain packable to a flat bitvector ([`aggregate_record.py`](src/spirehdl/aggregate/aggregate_record.py)).
 - `AggregateRecordDynamic` is the dataclass-friendly variant whose fields are defined per-instance, ideal for parameterized IO records ([`aggregate_record_dynamic.py`](src/spirehdl/aggregate/aggregate_record_dynamic.py)).
 - `FixedPoint` wraps a `Wire` or view with explicit total/frac widths and quantization helpers, keeping arithmetic readable while staying hardware-friendly ([`aggregate_fixed_point.py`](src/spirehdl/aggregate/aggregate_fixed_point.py)).
 - `FloatingPoint` provides an IEEE-style view with `add`/`mul` helpers parameterized by exponent / fraction widths ([`aggregate_floating_point.py`](src/spirehdl/aggregate/aggregate_floating_point.py)).
