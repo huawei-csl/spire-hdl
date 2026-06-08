@@ -227,9 +227,17 @@ def test_objectives_produce_different_configs():
 
 
 def test_swap_selection():
-    """Commutative ops: calling with (a,b) vs (b,a) must pick equal-cost
-    hardware, and for at least one asymmetric shape the swap flag must flip."""
+    """Commutative ops: calling with (a,b) vs (b,a) must pick hardware that is equal
+    on the *selection metric*, and for at least one asymmetric shape the swap flag must flip.
+
+    The comparison uses ``transistor_count_heavy`` (== ``DEFAULT_LOOKUP_METRIC``), i.e. the
+    column the lookup actually optimizes — NOT the secondary ``transistor_count`` (light)
+    field. When the two orientations are co-optimal on the heavy metric, the lookup's
+    tie-break may return configs whose light count differs by a couple transistors; that's an
+    acceptable tie, not an asymmetry in what gets optimized.
+    """
     from spirehdl.arithmetic.eval.auto_config import lookup_best_config
+
     from itertools import product
 
     widths = [1, 2, 4, 8, 16]
@@ -244,7 +252,7 @@ def test_swap_selection():
                     cfg_ba, swap_ba = lookup_best_config(op, b_w, a_w, signed, objective)
                     if cfg_ab is None or cfg_ba is None:
                         continue
-                    assert cfg_ab["transistor_count"] == cfg_ba["transistor_count"]
+                    assert cfg_ab["transistor_count_heavy"] == cfg_ba["transistor_count_heavy"]
                     assert cfg_ab["aig_depth"] == cfg_ba["aig_depth"]
                     if swap_ab != swap_ba:
                         flips += 1

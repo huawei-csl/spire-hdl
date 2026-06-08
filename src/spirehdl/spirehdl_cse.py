@@ -35,9 +35,9 @@ from spirehdl.spirehdl import (
     Signal,
     Slice,
     Ternary,
-    _ArrayIndex,
     _create_new_shared_wire,
 )
+from spirehdl.spirehdl_memory import _ArrayIndex
 from spirehdl.spirehdl_visitor import ExprVisitor
 
 _SYMMETRIC_OPS = frozenset({"&", "|", "^", "==", "!=", "nand"})

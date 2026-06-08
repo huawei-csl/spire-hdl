@@ -6,7 +6,8 @@ import time
 
 
 from spirehdl import VERILOG_BANNER
-from spirehdl.spirehdl import Bool, Const, Expr, ExprLike, HDLType, _MemoryStore, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
+from spirehdl.spirehdl import Bool, Const, Expr, ExprLike, HDLType, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
+from spirehdl.spirehdl_memory import _MemoryArray
 
 
 from typing import Any, Dict, Iterable, List, Optional
@@ -351,7 +352,7 @@ class Module:
                     self.collect_signals()
 
         # Basic checks. Signals tagged `_no_emit_drive` (custom-Verilog replacement) are exempt — the custom block
-        # provides their value. Memory stores (`_MemoryStore`) are sim-only and always no-emit, so they and their
+        # provides their value. Memory stores (`_MemoryArray`) are sim-only and always no-emit, so they and their
         # rdata registers fall through these checks without special-casing.
         for s in self._signals:
             if s.kind in ("wire", "output") and s._driver is None and not s._no_emit_drive:
@@ -411,7 +412,7 @@ class Module:
             rng = r.typ.range_str()
             lines.append(f"  reg {sign}{rng} {r.name};")
 
-        # Combinational assigns for wires/outputs. `_MemoryStore` port wires are no-emit (the wrapping primitive's
+        # Combinational assigns for wires/outputs. `_MemoryArray` port wires are no-emit (the wrapping primitive's
         # custom_verilog drives the storage), so they're skipped here via the `_no_emit_drive` guard.
         lines.append("// Combinational assignments")
         for s in [*wires, *self._ports_of("output")]:
@@ -563,7 +564,7 @@ class _SignalCollector(ExprVisitor[None]):
         # Walk children explicitly. Unlike `expr_children` (which treats regs as comb-depth-zero leaves for
         # analyzer purposes), the collector must traverse reg drivers too — otherwise externally-created
         # Registers/Wires chained to module outputs would be missed.
-        if isinstance(s, _MemoryStore):
+        if isinstance(s, _MemoryArray):
             for p in s._iter_ports():
                 self.visit(p)
         else:
@@ -619,7 +620,7 @@ class _SignalCollector(ExprVisitor[None]):
                 self.name_to_sig[candidate] = sig
                 # If we just renamed a Memory, propagate to its port wires that have already been uniquified
                 # (we'll see new ports later via traversal, but already-cached ones won't be revisited).
-                if isinstance(sig, _MemoryStore):
+                if isinstance(sig, _MemoryArray):
                     for port in sig._iter_ports():
                         old = port.name
                         new = f"{sig.name}__{port._port_suffix}"

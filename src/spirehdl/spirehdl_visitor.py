@@ -15,15 +15,14 @@ from spirehdl.spirehdl import (
     Concat,
     Const,
     Expr,
-    _MemoryStore,
     Op1,
     Op2,
     Resize,
     Signal,
     Slice,
     Ternary,
-    _ArrayIndex,
 )
+from spirehdl.spirehdl_memory import _MemoryArray, _ArrayIndex
 
 T = TypeVar("T")
 
@@ -50,7 +49,7 @@ def expr_children(e: Expr) -> Tuple[Expr, ...]:
     if isinstance(e, _ArrayIndex):
         return ()
     if isinstance(e, Signal):
-        if isinstance(e, _MemoryStore):
+        if isinstance(e, _MemoryArray):
             return tuple(e._iter_ports())
         if getattr(e, "_memory_parent", None) is not None:
             parent = e._memory_parent

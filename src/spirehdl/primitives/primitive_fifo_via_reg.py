@@ -2,7 +2,7 @@
 
 Original ``FIFOPrimitive`` implementation: storage is an inline per-cell
 ``Register`` bank + mux tree (O(depth) sim). The canonical ``FIFOPrimitive``
-(in ``primitive_fifo.py``) now backs storage with the core's O(1) ``_MemoryStore``;
+(in ``primitive_fifo.py``) now backs storage with the core's O(1) ``_MemoryArray``;
 this variant is kept for comparison / fallback. The synthesisable Verilog is
 identical between the two.
 

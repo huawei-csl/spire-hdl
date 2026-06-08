@@ -1,6 +1,7 @@
 from spirehdl.spirehdl_module import Module
 from spirehdl.spirehdl import *
-from spirehdl.spirehdl import Signal, Expr, Const, Op1, Op2, Ternary, Concat, Slice, Resize, _MemoryStore, _ArrayIndex
+from spirehdl.spirehdl import Signal, Expr, Const, Op1, Op2, Ternary, Concat, Slice, Resize
+from spirehdl.spirehdl_memory import _MemoryArray, _ArrayIndex
 from spirehdl.spirehdl_simulator_base import SimulatorBase
 from spirehdl.spirehdl_visitor import ExprVisitor
 
@@ -149,18 +150,15 @@ class Simulator(SimulatorBase):
 
     def __init__(self, module: "Module"):
         self.m = module
-        # Memory + its port wires + any rdata reg are constructed standalone. Collecting signals pulls them all in
-        # via the design graph (the walker traverses through `read_data._memory_parent` back-edges and Memory's
-        # port-children).
+        # A _MemoryArray and its port wires are constructed standalone. Collecting signals pulls them in via the
+        # design graph (the walker traverses `read_data._memory_parent` back-edges and the store's port-children).
+        # Registered reads are ordinary capture Registers in the primitive — no store-owned regs to special-case.
         self.m.collect_signals()
         self.inputs = [s for s in self.m._ports if s.kind == "input"]
         self.outputs = [s for s in self.m._ports if s.kind == "output"]
         self.regs = [s for s in self.m._signals if s.kind == "reg"]
         self.wires = [s for s in self.m._signals if s.kind == "wire"]
         self.mems = [s for s in self.m._signals if s.kind == "mem"]
-        # Memory rdata registers (sync-read) skip the normal reg next-state loop; they're updated by Memory.step
-        # instead. Identity-based to avoid Expr.__eq__.
-        self._mem_owned_reg_ids = {id(m.read_data) for m in self.mems if m._registered_read}
 
         def check_or_duplicate_name(signals):
             seen = set()
@@ -287,7 +285,7 @@ class Simulator(SimulatorBase):
         with each entry as an unsigned bit-pattern of width `mem.typ.width`. The returned list is a copy —
         mutating it does not affect simulation state.
         """
-        if isinstance(ref, _MemoryStore):
+        if isinstance(ref, _MemoryArray):
             mem = ref
         elif isinstance(ref, str):
             for m in self.mems:
@@ -319,20 +317,15 @@ class Simulator(SimulatorBase):
         self._cache_sig.clear()
 
     def _compute_next_state(self) -> dict[int, int]:
-        """Compute next-state values for normal regs without committing.
+        """Compute next-state values for all registers without committing.
 
-        Memory rdata registers (sync read) are excluded — their next-state is computed by ``Memory.step`` after
-        this loop, mirroring the verilog idiom of emitting rdata capture inside the memory's clock-only always
-        block (no async-rst).
+        A memory's registered read is an ordinary capture ``Register`` in the primitive (it
+        has a real ``_driver``), so there is no longer any externally-managed register to skip
+        here — it evaluates like any other reg, sampling pre-edge memory before ``step`` runs.
         """
         res: dict[int, int] = {}
         rst_high = self.m.with_reset and self._in.get(_sid(self.m.rst), 0) != 0
         for r in self.regs:
-            if id(r) in self._mem_owned_reg_ids:
-                # rdata reg — initialised lazily, otherwise managed by Memory.step.
-                if _sid(r) not in self._reg:
-                    self._reg[_sid(r)] = 0
-                continue
             if rst_high:
                 if r._init is not None:
                     init_bits = self._eval_expr_bits(r._init)

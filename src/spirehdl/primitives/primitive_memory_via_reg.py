@@ -3,7 +3,7 @@
 This is the original ``MemoryPrimitive`` implementation: the Python sim model
 (``elaborate()``) is a per-cell ``Register`` bank plus a linear mux tree, which
 is **O(depth)** per access. The canonical ``MemoryPrimitive`` (in
-``primitive_memory.py``) now backs simulation with the core's O(1) ``_MemoryStore``
+``primitive_memory.py``) now backs simulation with the core's O(1) ``_MemoryArray``
 instead; this variant is kept for comparison / fallback.
 
 The synthesisable Verilog (``custom_verilog()``) is identical between the two —

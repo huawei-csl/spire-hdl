@@ -1,283 +1,277 @@
 # Memories
 
-SpireHDL's `Memory` is the primitive for arrays of registers — FIFOs, ROMs,
-scratchpad RAMs, lookup tables. It emits as a Verilog `reg [W-1:0] name[0:D-1];`
-declaration plus an always block, in the shape that yosys's `memory` pass
-recognises (so `memory_dff`, `memory_share`, `memory_bmux2rom` fire automatically).
+Memory in SpireHDL is provided by **Component primitives** — you instantiate one,
+wire its `.io` ports, and embed it with `.make_internal()`. Four primitives cover
+the common cases:
 
-The module lives in [`spirehdl/spirehdl.py`](src/spirehdl/spirehdl.py).
-
-## Quick intro
-
-A `Memory` is a `Signal` whose attributes are themselves Signals — the read /
-write / reset ports. You wire those ports with `<<=` just like any other signal.
-There are no `write()` / `reset()` / `registered_read()` methods; everything is
-plain port wiring.
+| Primitive | Use for | Shape |
+|---|---|---|
+| [`MemoryPrimitive`](src/spirehdl/primitives/primitive_memory.py) | scratchpad RAM, single-port BRAM | 1 write + 1 read (async or registered), optional reset arm / write mask |
+| [`RamPrimitive`](src/spirehdl/primitives/primitive_ram.py) | multi-port RAM, true dual-port, register files | N write + N read + N read/write (`rw`) ports over one array |
+| [`RomPrimitive`](src/spirehdl/primitives/primitive_rom.py) | read-only memory, lookup tables | init-backed, 1 read (async or registered), no write port |
+| [`FIFOPrimitive`](src/spirehdl/primitives/primitive_fifo.py) | ready-made synchronous FIFO | push / pop / full / empty / count |
 
 ```python
-from spirehdl.spirehdl import Bool, Memory, UInt
-from spirehdl.spirehdl_module import Module
-
-m = Module("scratch", with_reset=True)
-we     = m.input(Bool(), "we")
-clr    = m.input(Bool(), "clr")
-addr_w = m.input(UInt(4), "addr_w")
-addr_r = m.input(UInt(4), "addr_r")
-din    = m.input(UInt(9), "din")
-dout   = m.output(UInt(9), "dout")
-
-ram = Memory(UInt(9), depth=16)        # name "ram" inferred from variable
-ram.write_addr   <<= addr_w
-ram.write_data   <<= din
-ram.write_enable <<= we
-ram.reset_enable <<= clr     # broadcast-clear all entries when high
-# ram.reset_value defaults to Const(0) — override only for a non-zero clear value.
-ram.read_addr    <<= addr_r
-dout             <<= ram.read_data
+from spirehdl.primitives import MemoryPrimitive, RamPrimitive, RomPrimitive, FIFOPrimitive
 ```
 
-That's the whole API. The shape above — single write port + optional
-broadcast-clear + async read — covers most scratchpad-RAM use cases. (Building
-a proper FIFO needs additional head/tail pointer logic on top; `Memory` is
-just the storage element.)
+Each primitive emits its storage as a Verilog `reg [W-1:0] name[0:D-1];` array plus a
+clock-only `always` block — the shape yosys's `memory` pass recognises (so `memory_dff`,
+`memory_share`, `memory_bmux2rom` fire automatically). For simulation they are backed by
+the core's O(1) `_MemoryArray` (an internal, sim-only storage object you never touch
+directly). The two paths describe the same hardware; the tests pin the equivalence.
 
-## Ports
+> **Why primitives, not a built-in `Memory` class?** The core was deliberately kept lean
+> (see [`internal_docs/memory_lean_core_multiport.md`](internal_docs/memory_lean_core_multiport.md)):
+> all Verilog emission, port shapes, and flavors live in user-space primitives; the core
+> only provides fast simulation storage. There is no user-facing `Memory` class — use the
+> primitives below.
 
-| Port | Direction | Type | Default | Required if… |
-|---|---|---|---|---|
-| `write_addr`   | in  | `UInt(clog2(depth))`  | —          | a write port is active |
-| `write_data`   | in  | `elem_type`           | —          | a write port is active |
-| `write_enable` | in  | `Bool()`              | `Const(1)` | optional gating |
-| `reset_value`  | in  | `elem_type`           | `Const(0)` | optional |
-| `reset_enable` | in  | `Bool()`              | —          | broadcast-clear arm |
-| `read_addr`    | in  | `UInt(clog2(depth))`  | —          | `read_data` is consumed |
-| `read_data`    | out | `elem_type`           | (derived)  | — |
-| `read_enable`  | in  | `Bool()`              | `Const(1)` | only present with `registered_read=True` |
-
-Defaults are applied at construction; override any of them with `<<=`. The
-write port is "active" if `write_addr` is driven; both `write_addr` and
-`write_data` must then be driven (validation raises otherwise). The reset arm
-is active if `reset_enable` is driven.
-
-## Examples
-
-### Read-only ROM with initial values
-
-```python
-m = Module("rom8")
-addr = m.input(UInt(3), "addr")
-dout = m.output(UInt(8), "dout")
-
-rom = Memory(UInt(8), depth=8,
-             init=[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80])
-rom.read_addr <<= addr
-dout          <<= rom.read_data
-```
-
-The `init=[…]` emits as a Verilog `initial begin name[i] = …; end` block.
-
-### Synchronous read (one-cycle latency)
-
-Pass `registered_read=True` to get a clocked output. Read latency = 1 cycle.
-
-```python
-re   = m.input(Bool(), "re")
-rom  = Memory(UInt(8), depth=8, registered_read=True,
-              init=[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80])
-rom.read_addr   <<= addr
-rom.read_enable <<= re        # default is 1 (always-read)
-dout            <<= rom.read_data
-```
-
-The `read_enable` port lets you hold the rdata register's previous value when
-low — same idiom as a typical block-RAM `re` input.
-
-### A real FIFO as a Component
-
-`Memory` is just the storage element — a working FIFO also needs head/tail
-pointers and a count register. Here it is as a SpireHDL
-[`Component`](src/spirehdl/spirehdl_module.py), which makes the FIFO reusable
-and parameterisable in depth and element type.
+## MemoryPrimitive — single-port RAM / ROM
 
 ```python
 from dataclasses import dataclass
-from spirehdl.spirehdl import Bool, Memory, Register, Signal, UInt, mux
+from spirehdl.spirehdl import Bool, Signal, UInt
 from spirehdl.spirehdl_module import Component
+from spirehdl.primitives import MemoryPrimitive
 
 
-class Fifo(Component):
-    """Synchronous FIFO. Storage is a Memory; control is head/tail/count regs.
-
-    Depth must be a power of two so that pointer increments wrap naturally
-    (the address signal is `clog2(depth)` bits wide, so `tail + 1` wraps at
-    `depth` with no explicit modulo).
-    """
-
-    def __init__(self, elem_type, depth):
-        if depth & (depth - 1):
-            raise ValueError("FIFO depth must be a power of two")
-        self.elem_type, self.depth = elem_type, depth
-        self._addr_t  = UInt(max(1, (depth - 1).bit_length()))
-        self._count_t = UInt(depth.bit_length())   # holds 0..depth inclusive
-
+class Scratch(Component):
+    def __init__(self):
         @dataclass
         class IO:
-            push:  Signal
-            pop:   Signal
-            din:   Signal
-            dout:  Signal
-            full:  Signal
-            empty: Signal
-
+            we: Signal; aw: Signal; ar: Signal; din: Signal; dout: Signal
         self.io = IO(
-            push  = Signal("push",  Bool(),    "input"),
-            pop   = Signal("pop",   Bool(),    "input"),
-            din   = Signal("din",   elem_type, "input"),
-            dout  = Signal("dout",  elem_type, "output"),
-            full  = Signal("full",  Bool(),    "output"),
-            empty = Signal("empty", Bool(),    "output"),
+            we   = Signal("we",   Bool(),   "input"),
+            aw   = Signal("aw",   UInt(4),  "input"),
+            ar   = Signal("ar",   UInt(4),  "input"),
+            din  = Signal("din",  UInt(9),  "input"),
+            dout = Signal("dout", UInt(9),  "output"),
         )
         self.elaborate()
 
     def elaborate(self):
-        head  = Register(self._addr_t,  init=0)
-        tail  = Register(self._addr_t,  init=0)
-        count = Register(self._count_t, init=0)
+        mem = MemoryPrimitive(UInt(9), depth=16, name="ram").make_internal()
+        mem.io.write_addr   <<= self.io.aw
+        mem.io.write_data   <<= self.io.din
+        mem.io.write_enable <<= self.io.we
+        mem.io.read_addr    <<= self.io.ar
+        self.io.dout        <<= mem.io.read_data
 
-        # Flags from count.
-        self.io.empty <<= count == 0
-        self.io.full  <<= count == self.depth
-
-        # Guarded request signals — ignore push when full, pop when empty.
-        do_push = self.io.push & ~self.io.full
-        do_pop  = self.io.pop  & ~self.io.empty
-
-        # Storage: write at `tail`, async-read at `head`.
-        store = Memory(self.elem_type, depth=self.depth)
-        store.write_addr   <<= tail
-        store.write_data   <<= self.io.din
-        store.write_enable <<= do_push
-        store.read_addr    <<= head
-        self.io.dout       <<= store.read_data
-
-        # Pointer + count next-state. The `+1` wraps naturally for power-of-two depth.
-        head  <<= mux(do_pop,  head + 1, head)
-        tail  <<= mux(do_push, tail + 1, tail)
-        count <<= mux(do_push & ~do_pop, count + 1,
-                  mux(~do_push & do_pop, count - 1, count))
+module = Scratch().to_module(name="scratch", with_clock=True, with_reset=True)
 ```
 
-Instantiate and use:
+### Constructor
 
 ```python
-from spirehdl.spirehdl_simulator import Simulator
-
-fifo   = Fifo(UInt(8), depth=4)
-module = fifo.to_module(name="Fifo8x4", with_clock=True, with_reset=True)
-
-# Verilog
-verilog = module.to_verilog()
-
-# Simulation
-sim = Simulator(module)
-sim.deassert_reset()
-for x in (0xA, 0xB, 0xC):
-    sim.set("push", 1).set("din", x).step()      # push 3 values
-sim.set("push", 0)
-assert sim.get("empty") == 0 and sim.get("full") == 0
-
-for expected in (0xA, 0xB, 0xC):
-    assert sim.get("dout") == expected           # async read at `head`
-    sim.set("pop", 1).step()
-sim.set("pop", 0)
-assert sim.get("empty") == 1
+MemoryPrimitive(elem_type, depth, *,
+                init=None,                  # list[int] length==depth → ROM initial values
+                registered_read=False,      # True → 1-cycle registered read + read_enable port
+                with_reset_arm=False,       # True → reset_enable port broadcast-clears all cells
+                reset_value=0,              # static clear value used by the reset arm
+                mask_chunks=0,              # >1 → per-chunk write mask (byte/sub-word enables)
+                read_under_write="readFirst",  # or "writeFirst" (async read) / "dontCare"
+                name=None)
 ```
 
-The Memory's reset arm isn't used here — FIFO reset is achieved by clearing
-the pointers and count via their `init=0`, which is enough because `count`
-tracks the number of valid entries. The Module's `with_reset=True` reset
-auto-clears every internal Register to its `init`; the Memory storage itself
-is not affected. To also clear the storage on reset, add an explicit
-`rst: Signal` field to the Component's `IO` and wire
-`store.reset_enable <<= self.io.rst`.
+`elem_type` is an `HDLType` (`UInt`/`SInt`/`Bool`) **or** an `HDLAggregate` — see
+[Aggregate element types](#aggregate-element-types).
+
+### Ports (`mem.io.*`)
+
+| Port | Dir | Type | Present when |
+|---|---|---|---|
+| `write_addr`   | in  | `UInt(clog2(depth))` | always |
+| `write_data`   | in  | `UInt(elem_w)`       | always |
+| `write_enable` | in  | `Bool()`             | always |
+| `read_addr`    | in  | `UInt(clog2(depth))` | always |
+| `read_data`    | out | `UInt(elem_w)`       | always |
+| `write_mask`   | in  | `UInt(mask_chunks)`  | `mask_chunks > 1` |
+| `reset_enable` | in  | `Bool()`             | `with_reset_arm=True` |
+| `read_enable`  | in  | `Bool()`             | `registered_read=True` |
+
+### ROM with init + registered read
+
+```python
+rom = MemoryPrimitive(UInt(8), depth=8, registered_read=True,
+                      init=[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80],
+                      name="rom").make_internal()
+rom.io.read_addr   <<= self.io.addr
+rom.io.read_enable <<= self.io.re      # hold the registered output when low
+self.io.dout       <<= rom.io.read_data
+# write port is required at the boundary; tie it off for a pure ROM:
+rom.io.write_addr <<= Const(0, UInt(3))
+rom.io.write_data <<= Const(0, UInt(8))
+rom.io.write_enable <<= Const(0, Bool())
+```
+
+`init=[…]` emits a Verilog `initial begin name[i] = …; end` block. `registered_read=True`
+gives one cycle of read latency; `read_enable` low holds the previous output.
+
+### Write mask (byte / sub-word enables)
+
+`mask_chunks=N` splits each word into `N` equal chunks; `write_mask[i]` enables chunk `i`
+(read-modify-write — unmasked chunks keep their old value).
+
+```python
+mem = MemoryPrimitive(UInt(16), depth=4, mask_chunks=2, name="mr").make_internal()
+mem.io.write_mask <<= self.io.byte_en   # 2-bit: bit0=low byte, bit1=high byte
+```
+
+### Read-under-write
+
+`read_under_write="writeFirst"` forwards the just-written data onto a same-address async
+read (the BRAM WRITE_FIRST idiom). `readFirst` (default) returns the old value; `dontCare`
+emits readFirst and lets synthesis pick. *writeFirst is async-read only* — combine with the
+default `registered_read=False`.
+
+## RamPrimitive — multi-port / true dual-port
+
+Multiple read/write ports and read/write (`rw`) ports over **one shared array** — the
+shapes `MemoryPrimitive` can't express.
+
+```python
+RamPrimitive(elem_type, depth, *,
+             num_read_ports=1, num_write_ports=1, rw_ports=0,
+             mask_chunks=0, read_under_write="readFirst",
+             registered_read=False, init=None, name=None)
+```
+
+Ports are **indexed** (`k` from 0):
+
+| Port group | Names |
+|---|---|
+| write `k` | `w{k}_addr` `w{k}_data` `w{k}_en` (+ `w{k}_mask`) |
+| read `k`  | `r{k}_addr` `r{k}_data` (+ `r{k}_en` if `registered_read`) |
+| rw `k`    | `rw{k}_addr` `rw{k}_din` `rw{k}_write` `rw{k}_en` `rw{k}_dout` (+ `rw{k}_mask`) |
+
+An `rw` port writes `din` when `en & write`, and `dout` reads `mem[addr]` (readFirst, or
+writeFirst-forwarded from this port's own write). Multiple writers to the same address
+resolve last-write-wins (registration order), matching Verilog NBA.
+
+```python
+# Simple dual-port: 1 write + 2 independent reads
+ram = RamPrimitive(UInt(8), depth=4, num_write_ports=1, num_read_ports=2).make_internal()
+ram.io.w0_addr <<= wa; ram.io.w0_data <<= wd; ram.io.w0_en <<= we
+ram.io.r0_addr <<= ra0; d0 <<= ram.io.r0_data
+ram.io.r1_addr <<= ra1; d1 <<= ram.io.r1_data
+
+# True dual-port (2RW): two ports that each read or write per cycle
+dp = RamPrimitive(UInt(8), depth=4, rw_ports=2,
+                  num_read_ports=0, num_write_ports=0).make_internal()
+for p, (addr, din, wr, en, dout) in (("rw0", a_sigs), ("rw1", b_sigs)):
+    getattr(dp.io, f"{p}_addr")  <<= addr
+    getattr(dp.io, f"{p}_din")   <<= din
+    getattr(dp.io, f"{p}_write") <<= wr
+    getattr(dp.io, f"{p}_en")    <<= en
+    dout <<= getattr(dp.io, f"{p}_dout")
+```
+
+## RomPrimitive — read-only memory / lookup table
+
+Init-backed, single read port, **no write port** — the contents are fixed. Async read needs
+no clock at all (combinational `assign read_data = rom[read_addr];`); `registered_read=True`
+adds a 1-cycle registered output with a `read_enable` hold.
+
+```python
+RomPrimitive(elem_type, depth, init, *, registered_read=False, name=None)
+# ports: read_addr, read_data (+ read_enable if registered_read)
+
+rom = RomPrimitive(UInt(8), depth=8,
+                   init=[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80]).make_internal()
+rom.io.read_addr <<= self.io.addr
+self.io.dout     <<= rom.io.read_data        # async: combinational lookup, no step() needed
+```
+
+It's sugar over `MemoryPrimitive(..., init=…)` with the write port tied off — same emitted
+storage idiom, but a clean read-only interface and no empty clocked block for the async case.
+
+## FIFOPrimitive — ready-made synchronous FIFO
+
+A complete sync FIFO (pointers + count + flags), one-cycle registered read latency. `depth`
+must be a power of two ≥ 2.
+
+```python
+fifo = FIFOPrimitive(UInt(8), depth=4, name="fifo").make_internal()
+fifo.io.push <<= self.io.push
+fifo.io.pop  <<= self.io.pop
+fifo.io.din  <<= self.io.din
+self.io.dout  <<= fifo.io.dout      # popped value appears one cycle after pop
+self.io.full  <<= fifo.io.full
+self.io.empty <<= fifo.io.empty
+self.io.count <<= fifo.io.count
+```
+
+Ports: `push`, `pop`, `din` (in); `dout`, `full`, `empty`, `count` (out). Simultaneous
+push+pop on a non-empty/non-full FIFO leaves `count` unchanged; underflow/overflow self-gate.
+
+## Aggregate element types
+
+Any primitive's `elem_type` may be an `HDLAggregate` (record). Boundary ports are flat
+`UInt(width)`; pack/unpack at the edge with `to_bits()` / `from_bits()`:
+
+```python
+class Bus(AggregateRecord):
+    data  = Wire(UInt(8))
+    valid = Wire(UInt(1))
+
+mem = MemoryPrimitive(Bus, depth=16).make_internal()      # 9-bit storage
+bus_in = Bus(); bus_in.data <<= d; bus_in.valid <<= v
+mem.io.write_data <<= bus_in.to_bits()
+out = Bus(); out <<= mem.io.read_data                     # from_bits view
+data_out <<= out.data; valid_out <<= out.valid
+```
 
 ## Simulation
 
-Memories work seamlessly with the built-in simulator. The Memory state lives
-inside the simulator and is updated on each `step()`.
+Primitives simulate with the built-in `Simulator` — no setup beyond building the module.
 
 ```python
 from spirehdl.spirehdl_simulator import Simulator
 
-sim = Simulator(m)
+sim = Simulator(module)
 sim.deassert_reset()
-
-# Drive writes
-sim.set("we", 1).set("addr_w", 3).set("din", 0xAB).step()
-sim.set("addr_w", 5).set("din", 0xCD).step()
-sim.set("we", 0)
-
-# Drive an async read
-sim.set("addr_r", 3).eval()
+sim.set("we", 1).set("aw", 3).set("din", 0xAB).step()
+sim.set("we", 0).set("ar", 3).eval()       # async read needs only eval(), no step()
 assert sim.get("dout") == 0xAB
 ```
 
-### Inspecting current memory state
+- **Async read** (`registered_read=False`): `read_data` reflects `mem[read_addr]`
+  combinationally — `eval()` after setting the address is enough.
+- **Registered read** (`registered_read=True`): output updates on the clock edge; `step()`
+  to advance, value lags `read_addr` by one cycle.
+- **Write-before-read** at the same address in one cycle: a registered read captures the
+  **old** value (readFirst / Verilog NBA semantics).
 
-Use `Simulator.get_mem(...)` to read the full array as a Python list. You can
-pass either the Memory name (string) or the Memory object itself:
+### Inspecting array contents
+
+`Simulator.get_mem(name)` returns the underlying array as a Python list copy. Use the
+primitive's `name` (the inlined array name):
 
 ```python
-sim.get_mem("ram")             # → [0, 0, 0, 0xAB, 0, 0xCD, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-sim.get_mem(ram)               # same, by reference
+sim.get_mem("ram")     # → [0, 0, 0, 0xAB, …]   (length == depth, unsigned bit-patterns)
 ```
 
-The returned list is a copy — mutating it does not affect simulation state.
-Each entry is an unsigned bit-pattern of width `mem.typ.width`.
+## Notes
 
-This is useful for assertions in tests, post-step debugging, or capturing
-periodic memory snapshots in a longer simulation.
-
-### Async vs. sync read in sim
-
-- **Async** (`registered_read=False`, default): `mem.read_data` reflects
-  `mem[read_addr]` combinationally. `sim.eval()` after setting `addr_r`
-  is enough — no `step()` needed.
-- **Sync** (`registered_read=True`): `mem.read_data` updates on the next
-  clock edge; you must `step()` to advance, and the value lags `read_addr`
-  by one cycle.
-
-### Write-before-read on the same address
-
-If a write and a registered read target the same address in the same cycle,
-the rdata register captures the **old** value (pre-write). This matches the
-Verilog non-blocking semantics emitted by the always block.
-
-## Behaviour notes
-
-- **Address width** is inferred as `max(1, ceil(log2(depth)))`. For
-  `depth=1` you still get a 1-bit address.
-- **Port wire names** in the emitted Verilog are `{mem.name}__waddr`,
-  `{mem.name}__we`, etc. They appear as identity `assign` lines connecting
-  your driver expressions to the always block (yosys folds them away
-  during synthesis).
-- **Memory directly in an expression raises.** Writing `out <<= mem` (without
-  `.read_data`) is a user mistake; SpireHDL raises a clear `RuntimeError`
-  instead of producing invalid Verilog like `assign out = mem;`.
-- **Single port per kind (MVP).** One write port, one sync-read port, one
-  reset arm. Async reads through `read_data` are also single-port. Multi-port
-  support is a planned extension.
-- **Reset wins over write.** If both `reset_enable` and `write_enable` are
-  high in the same cycle, the broadcast clear takes priority — this matches
-  the `if (reset) … else if (we) …` idiom yosys recognises.
+- **Reset wins over write.** If a `MemoryPrimitive` reset arm and a write fire in the same
+  cycle, the broadcast clear takes priority (`if (reset) … else if (we) …`).
+- **Register-bank fallback.** `MemoryPrimitive_via_reg` / `FIFOPrimitive_via_reg` are
+  drop-in variants whose sim model is an explicit register file (O(depth), no array
+  inference) — kept for comparison/debug. The synthesised Verilog is the same array idiom.
+- **Internal store is not user-facing.** `_MemoryArray` (in
+  `src/spirehdl/spirehdl_memory.py`) is the sim backend the primitives wire up via a port
+  factory; designs always go through the primitives' `.io`.
 
 ## See also
 
-- The FIFO example in
-  [`benchmarks/dr_rtl_spirehdl/router/context/starting_point.py`](benchmarks/dr_rtl_spirehdl/router/context/starting_point.py)
-  (16 × 9-bit FIFO).
-- Tests in [`testing/test_memory.py`](testing/test_memory.py) cover Verilog
-  emission, validation, and simulation patterns.
-- The design rationale and the previous-vs-current API comparison live in
-  [`docs/memory_refactor.md`](docs/memory_refactor.md) and
-  [`docs/memory_design_vs_magma.md`](docs/memory_design_vs_magma.md).
+- Design rationale, capability matrix, and the multi-port port-factory design:
+  [`internal_docs/memory_lean_core_multiport.md`](internal_docs/memory_lean_core_multiport.md)
+  (companions: `memory_primitive_vs_builtin.md`, `memory_refactor.md`).
+- Tests (in [`testing/memory/`](testing/memory/)):
+  [`test_memory.py`](testing/memory/test_memory.py) (behaviour via primitives),
+  [`test_primitive_memory.py`](testing/memory/test_primitive_memory.py),
+  [`test_primitive_ram.py`](testing/memory/test_primitive_ram.py),
+  [`test_primitive_fifo.py`](testing/memory/test_primitive_fifo.py).
+- A real FIFO using `MemoryPrimitive` for storage:
+  [`benchmarks/dr_rtl_spirehdl/router/context/starting_point.py`](benchmarks/dr_rtl_spirehdl/router/context/starting_point.py).

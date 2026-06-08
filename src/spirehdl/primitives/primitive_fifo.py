@@ -14,7 +14,7 @@ Semantics (one-cycle read latency, *not* first-word-fallthrough):
 
 v1 requires ``depth`` to be a power of two so pointer wrap is free (no explicit modulo).
 
-Storage is backed by the core's O(1) ``_MemoryStore`` (Middle path B): ``elaborate()``
+Storage is backed by the core's O(1) ``_MemoryArray`` (Middle path B): ``elaborate()``
 uses it for the data array and keeps the pointers / count / flags / dout register as
 ordinary ``Register``/``Wire`` logic. ``custom_verilog()`` emits one self-contained
 block (the store contributes no Verilog of its own).
@@ -108,7 +108,7 @@ class FIFOPrimitive(Component):
     # --------------------------------------------------------- sim model
 
     def elaborate(self) -> None:
-        """Python sim model: O(1) ``_MemoryStore`` data array + pointer/count/flag logic.
+        """Python sim model: O(1) ``_MemoryArray`` data array + pointer/count/flag logic.
 
         Combinational intermediates are wrapped in tagged ``Wire``s so the
         ``_apply_custom_verilog_tags`` walker marks them no-emit (otherwise CSE
@@ -117,7 +117,7 @@ class FIFOPrimitive(Component):
         ``mem[rd_ptr]`` combinationally (pre-edge) and writes ``mem[wr_ptr]`` at the
         edge — matching the via_reg model and the verilog NBA semantics.
         """
-        from spirehdl.spirehdl import _MemoryStore
+        from spirehdl.spirehdl_memory import _MemoryArray
 
         u = self._uid
         elem_w = self._elem_w
@@ -125,7 +125,7 @@ class FIFOPrimitive(Component):
         count_w = self._count_w
         depth = self._depth
 
-        store = _MemoryStore(UInt(elem_w), depth, name=f"{self._instance_name}__store")
+        store = _MemoryArray(UInt(elem_w), depth, name=f"{self._instance_name}__store")
         wr_ptr   = Register(UInt(addr_w),  init=0, name=f"wrptr_{u}")
         rd_ptr   = Register(UInt(addr_w),  init=0, name=f"rdptr_{u}")
         count_r  = Register(UInt(count_w), init=0, name=f"cnt_{u}")
@@ -143,10 +143,12 @@ class FIFOPrimitive(Component):
         do_pop  <<= self.io.pop  & ~empty_w
 
         # Storage: write at wr_ptr (gated by do_push), async read at rd_ptr.
-        store.write_addr   <<= wr_ptr
-        store.write_data   <<= self.io.din
-        store.write_enable <<= do_push
-        store.read_addr    <<= rd_ptr
+        wport = store.write_port()
+        wport.addr   <<= wr_ptr
+        wport.data   <<= self.io.din
+        wport.enable <<= do_push
+        rport = store.read_port()
+        rport.addr <<= rd_ptr
 
         # Pointers
         wr_ptr <<= mux(do_push, wr_ptr + 1, wr_ptr)
@@ -159,7 +161,7 @@ class FIFOPrimitive(Component):
                         mux(pop_only, count_r - 1, count_r))
 
         # Read: capture mem[rd_ptr] (pre-edge) into dout_r when do_pop fires.
-        dout_r <<= mux(do_pop, store.read_data, dout_r)
+        dout_r <<= mux(do_pop, rport.data, dout_r)
 
         # Outputs
         self.io.dout  <<= dout_r

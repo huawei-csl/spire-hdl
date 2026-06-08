@@ -130,8 +130,8 @@ def test_emits_reset_then_write_else_block():
     assert "if (reset_enable) begin" in v
     assert "fifo[0] <= 9'd0;" in v
     assert "fifo[15] <= 9'd0;" in v
-    assert "end else if (write_enable) begin" in v
-    assert "fifo[write_addr] <= write_data;" in v
+    assert "end else begin" in v
+    assert "if (write_enable) fifo[write_addr] <= write_data;" in v
 
 
 def test_combinational_read_emits_array_index():
@@ -147,15 +147,14 @@ def test_registered_read_emits_in_own_always_block():
     v = m.to_verilog()
     # Storage + internal rdata register declared inside the custom block.
     assert "reg [7:0] rom[0:7];" in v
-    assert "reg [7:0] rom__rd;" in v
+    assert "reg [7:0] rom__rd0;" in v
     # Init block populated from the list.
     assert "initial begin" in v
     assert "rom[0] = 8'd16;" in v
     assert "rom[7] = 8'd128;" in v
     # Clock-only sensitivity (yosys-recognised memory idiom).
     assert "always @(posedge clk) begin" in v
-    assert "if (read_enable) begin" in v
-    assert "rom__rd <= rom[read_addr];" in v
+    assert "if (read_enable) rom__rd0 <= rom[read_addr];" in v
     # No async-rst sensitivity on the memory always block.
     assert "posedge clk or posedge rst" not in v.split("// --- MemoryPrimitive")[1]
 

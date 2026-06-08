@@ -1,7 +1,7 @@
 """``MemoryPrimitive`` — array memory built as a regular ``Component``.
 
 Synthesisable Verilog comes from ``custom_verilog()`` (a Yosys-inferable RAM idiom).
-Python simulation is backed by the core's O(1) ``_MemoryStore`` (Middle path B):
+Python simulation is backed by the core's O(1) ``_MemoryArray`` (Middle path B):
 ``elaborate()`` instantiates a sim-only store and wires this primitive's ``.io``
 ports to it; the store emits no Verilog of its own (``custom_verilog()`` is the
 single synthesis source). The two paths describe the same hardware; the framework
@@ -38,11 +38,14 @@ from typing import Optional, Sequence
 from spirehdl.spirehdl import (
     Bool,
     Const,
+    Register,
     Signal,
     UInt,
+    mux,
 )
 from spirehdl.spirehdl_module import Component
 from spirehdl.aggregate.hdl_aggregate import HDLAggregate
+from spirehdl.primitives._ram_template import ram_block
 
 
 # Per-process counter that suffixes internal Verilog names so multiple primitive
@@ -107,6 +110,8 @@ class MemoryPrimitive(Component):
         registered_read: bool = False,
         with_reset_arm: bool = False,
         reset_value: int = 0,
+        mask_chunks: int = 0,
+        read_under_write: str = "readFirst",
         name: Optional[str] = None,
     ):
         if depth <= 0:
@@ -115,6 +120,11 @@ class MemoryPrimitive(Component):
             raise ValueError(
                 f"MemoryPrimitive init must have length == depth ({depth}); got {len(init)}"
             )
+        if read_under_write not in ("readFirst", "writeFirst", "dontCare"):
+            raise ValueError(f"read_under_write must be readFirst/writeFirst/dontCare; got {read_under_write!r}")
+        if read_under_write == "writeFirst" and registered_read:
+            raise ValueError("MemoryPrimitive: writeFirst is supported for async read only "
+                             "(registered_read=False); use RamPrimitive for registered RUW.")
 
         self._elem_type = elem_type
         self._depth = depth
@@ -122,7 +132,11 @@ class MemoryPrimitive(Component):
         self._registered_read = registered_read
         self._with_reset_arm = with_reset_arm
         self._reset_value = reset_value
+        self._read_under_write = read_under_write
         self._elem_w = _elem_bit_width(elem_type)
+        if mask_chunks and mask_chunks > 1 and self._elem_w % mask_chunks != 0:
+            raise ValueError(f"mask_chunks={mask_chunks} must divide elem width {self._elem_w}")
+        self._mask_chunks = mask_chunks if (mask_chunks and mask_chunks > 1) else 0
         self._addr_w = max(1, (depth - 1).bit_length())
         self._uid = _next_uid()
         self._instance_name = name or f"mem_{self._uid}"
@@ -134,6 +148,8 @@ class MemoryPrimitive(Component):
             read_addr    = Signal("read_addr",    UInt(self._addr_w), "input"),
             read_data    = Signal("read_data",    UInt(self._elem_w), "output"),
         )
+        if self._mask_chunks:
+            kwargs["write_mask"] = Signal("write_mask", UInt(self._mask_chunks), "input")
         if with_reset_arm:
             kwargs["reset_enable"] = Signal("reset_enable", Bool(), "input")
         if registered_read:
@@ -150,86 +166,65 @@ class MemoryPrimitive(Component):
     # --------------------------------------------------------- sim model
 
     def elaborate(self) -> None:
-        """Python sim model: wire this primitive's ``.io`` to a core ``_MemoryStore``.
+        """Python sim model: wire this primitive's ``.io`` to a core ``_MemoryArray``.
 
         The store gives O(1) simulation (``_mem_state`` array + ``step`` + the
         ``_ArrayIndex`` read leaf) and emits no Verilog — ``custom_verilog()``
         below is the sole synthesis source.
         """
-        from spirehdl.spirehdl import _MemoryStore
+        from spirehdl.spirehdl_memory import _MemoryArray
 
-        m = _MemoryStore(
-            UInt(self._elem_w), self._depth,
-            init=self._init,
-            registered_read=self._registered_read,
-            name=self._instance_name,
-        )
-        m.write_addr   <<= self.io.write_addr
-        m.write_data   <<= self.io.write_data
-        m.write_enable <<= self.io.write_enable
+        m = _MemoryArray(UInt(self._elem_w), self._depth, init=self._init, name=self._instance_name)
+        wp = m.write_port(mask_chunks=self._mask_chunks)
+        wp.addr   <<= self.io.write_addr
+        wp.data   <<= self.io.write_data
+        wp.enable <<= self.io.write_enable
+        if self._mask_chunks:
+            wp.mask <<= self.io.write_mask
         if self._with_reset_arm:
-            m.reset_enable <<= self.io.reset_enable
+            ra = m.reset_arm()
+            ra.enable <<= self.io.reset_enable
             if self._reset_value != 0:
-                m.reset_value <<= Const(self._reset_value, UInt(self._elem_w))
-        m.read_addr <<= self.io.read_addr
+                ra.value <<= Const(self._reset_value, UInt(self._elem_w))
+        rp = m.read_port()
+        rp.addr <<= self.io.read_addr
         if self._registered_read:
-            m.read_enable <<= self.io.read_enable
-        self.io.read_data <<= m.read_data
+            # Registered read = capture the async read into a Register, composed here (not in
+            # the store). The simulator evaluates this reg's next-state before the store's
+            # step(), so it samples pre-edge memory → readFirst. The reg is auto-tagged
+            # no-emit (reachable from read_data); custom_verilog emits the BRAM-idiom rdata reg.
+            rd = Register(UInt(self._elem_w), init=0, name=f"{self._instance_name}__rdata")
+            rd <<= mux(self.io.read_enable, rp.data, rd)
+            self.io.read_data <<= rd
+        elif self._read_under_write == "writeFirst":  # async only (validated in __init__)
+            collision = self.io.write_enable & (self.io.write_addr == self.io.read_addr)
+            self.io.read_data <<= mux(collision, self.io.write_data, rp.data)
+        else:
+            self.io.read_data <<= rp.data
         self._store = m
 
     # ------------------------------------------------- synthesis verilog
 
     def custom_verilog(self) -> str:
-        n = self._instance_name
         W = self._elem_w
-        D = self._depth
-        wa = self.io.write_addr.name
-        wd = self.io.write_data.name
-        we = self.io.write_enable.name
-        ra = self.io.read_addr.name
-        rd_port = self.io.read_data.name
-
-        lines: list[str] = []
-        lines.append(f"  // --- MemoryPrimitive (uid={self._uid}, depth={D}, width={W}) ---")
-        lines.append(f"  reg [{W-1}:0] {n}[0:{D-1}];")
-
+        write = dict(addr=self.io.write_addr.name, data=self.io.write_data.name,
+                     en=self.io.write_enable.name)
+        if self._mask_chunks:
+            write.update(mask=self.io.write_mask.name, mask_chunks=self._mask_chunks,
+                         chunk_w=W // self._mask_chunks)
+        read = dict(addr=self.io.read_addr.name, out=self.io.read_data.name,
+                    registered=self._registered_read)
         if self._registered_read:
-            rd_internal = f"{n}__rd"
-            lines.append(f"  reg [{W-1}:0] {rd_internal};")
-
-        if self._init is not None:
-            lines.append("  initial begin")
-            for i, v in enumerate(self._init):
-                lines.append(f"    {n}[{i}] = {W}'d{v};")
-            lines.append("  end")
-
-        # clock-only always (yosys-recognised memory inference idiom)
-        lines.append("  always @(posedge clk) begin")
+            read["en"] = self.io.read_enable.name
+        if self._read_under_write == "writeFirst":
+            read["ruw"] = "writeFirst"
+            read["fwd"] = dict(en=self.io.write_enable.name, addr=self.io.write_addr.name,
+                               data=self.io.write_data.name)
+        reset = None
         if self._with_reset_arm:
-            rst_en = self.io.reset_enable.name
-            lines.append(f"    if ({rst_en}) begin")
-            for i in range(D):
-                lines.append(f"      {n}[{i}] <= {W}'d{self._reset_value};")
-            lines.append(f"    end else if ({we}) begin")
-            lines.append(f"      {n}[{wa}] <= {wd};")
-            lines.append("    end")
-        else:
-            lines.append(f"    if ({we}) begin")
-            lines.append(f"      {n}[{wa}] <= {wd};")
-            lines.append("    end")
-
-        if self._registered_read:
-            re_name = self.io.read_enable.name
-            rd_internal = f"{n}__rd"
-            lines.append(f"    if ({re_name}) begin")
-            lines.append(f"      {rd_internal} <= {n}[{ra}];")
-            lines.append("    end")
-        lines.append("  end")
-
-        if self._registered_read:
-            rd_internal = f"{n}__rd"
-            lines.append(f"  assign {rd_port} = {rd_internal};")
-        else:
-            lines.append(f"  assign {rd_port} = {n}[{ra}];")
-
-        return "\n".join(lines)
+            reset = dict(en=self.io.reset_enable.name, val=f"{W}'d{self._reset_value}")
+        return ram_block(
+            name=self._instance_name, depth=self._depth, elem_w=W,
+            writes=[write], reads=[read], reset=reset, init=self._init,
+            comment=f"--- MemoryPrimitive (uid={self._uid}, depth={self._depth}, width={W}) ---",
+        )

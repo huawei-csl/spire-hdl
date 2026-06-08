@@ -15,9 +15,9 @@ A modern Python HDL that compiles concise, composable hardware descriptions to s
 
 # Optimizations built in ⚡ 
 
-Multiple layers of synthesis-aware optimization run *inside* the compile, so the Verilog SpireHDL emits is already small and fast before any external tool sees it. Numbers below are measured against a plain Yosys flow on the same RTL.
+SpireHDL supports **source-embedded optimization intent**: the designer marks *what* to optimize (e.g. a module, FSM, or arithmetic block) directly in the HDL source, and the compiler realizes it through synthesis-aware passes.
 
-Together these features enable **language-embedded optimization intent**: the designer marks *what* to optimize — a module to rewrite, an FSM to re-encode, an arithmetic block to retopologize — directly in the HDL source, and a compile-time pass realizes it. This makes optimization scope explicit and machine-readable, which is what lets both humans and agents drive the flow from the same surface.
+These optimization layers run *inside* the compile pipeline, so emitted Verilog is already small and fast before external tools see it. The numbers below are measured against a plain Yosys flow on the same RTL.
 
 ### 🔢 Arithmetic auto-replacement — `replace_arithmetic_ops`
 
@@ -31,7 +31,7 @@ MAC patterns (`a*b + c`) are fused into single column-reduction units, eliminati
 
 ### 🧠 ABC + mockturtle decorators — `@abc_optimized` / `@flowy_optimized`
 
-One decorator stacks modern AIG synthesis (`resyn2`, `&deepsyn`, RL-guided rewriting via Flowy) onto any `Module` or `Component`, with a content-addressed cache for instant re-runs:
+One decorator stacks modern AIG synthesis (`resyn2`, `&deepsyn`, mockturtle) onto any `Module` or `Component`, with a content-addressed cache for instant re-runs:
 
 - **−69% AIG gates** on an 8-bit multiplier (`resyn2`)
 - **−83%** on a 16-bit multiplier

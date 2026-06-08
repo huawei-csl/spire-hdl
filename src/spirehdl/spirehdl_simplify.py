@@ -40,8 +40,8 @@ from spirehdl.spirehdl import (
     Signal,
     Slice,
     Ternary,
-    _ArrayIndex,
 )
+from spirehdl.spirehdl_memory import _ArrayIndex
 from spirehdl.spirehdl_visitor import ExprVisitor
 
 

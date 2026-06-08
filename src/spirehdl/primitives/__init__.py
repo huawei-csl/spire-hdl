@@ -11,12 +11,16 @@ boundary is always a flat ``UInt(width)``, and the user packs / unpacks with
 
 from spirehdl.primitives.primitive_memory import MemoryPrimitive
 from spirehdl.primitives.primitive_fifo import FIFOPrimitive
+from spirehdl.primitives.primitive_ram import RamPrimitive
+from spirehdl.primitives.primitive_rom import RomPrimitive
 from spirehdl.primitives.primitive_memory_via_reg import MemoryPrimitive_via_reg
 from spirehdl.primitives.primitive_fifo_via_reg import FIFOPrimitive_via_reg
 
 __all__ = [
     "MemoryPrimitive",
     "FIFOPrimitive",
+    "RamPrimitive",
+    "RomPrimitive",
     "MemoryPrimitive_via_reg",
     "FIFOPrimitive_via_reg",
 ]
