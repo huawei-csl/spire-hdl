@@ -107,8 +107,11 @@ multiplier and the adder).
 | `cache_write` | `"both"` | Which caches to populate: same values |
 | `cache_dir` | `None` | Override cache directory |
 
-> An `abc` binary is required (the standalone ABC subprocess).  Discovery order:
-> `$SPIREHDL_ABC`, then `abc` on `PATH`, then Yosys's bundled `yosys-abc`.
+> A standalone `abc` binary enables the effective out-of-process optimization. Discovery
+> order: `$SPIREHDL_ABC`, then `abc` on `PATH`, then `yosys-abc`. If none is found,
+> `abc_optimize` automatically falls back to an in-process pyosys path (legacy ordering,
+> largely inert on coarse cells) and emits a `RuntimeWarning` — so it still runs on a
+> pure-pyosys install, just without the gains.
 
 ### Lower-level function
 

@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import warnings
 from dataclasses import make_dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
@@ -878,6 +879,46 @@ def _find_abc_binary() -> str:
     )
 
 
+def _abc_optimize_via_pyosys(
+    verilog_content: str, abc_script: str, prep_script: str, suppress_stderr: bool,
+) -> List[str]:
+    """In-process pyosys fallback used when no standalone abc binary exists.
+
+    Runs the abc script through yosys's bundled abc with the *legacy* ordering
+    (script before the prep leg), so the result reintegrates as AIG cells rather
+    than the ``$lut`` cells the post-prep in-process path would emit (which crash
+    ``write_aiger``). Less effective than the out-of-process path — the script is
+    largely inert on coarse cells — but needs no external binary, so pure-pyosys
+    installs keep working.
+    """
+    from pyosys import libyosys as ys
+    from spirehdl.aig.aig_aigerverse import file_to_lines
+    from spirehdl.helpers import _suppress_output
+
+    fd_v, v_tmp = tempfile.mkstemp(suffix=".v"); os.close(fd_v)
+    fd_a, abc_tmp = tempfile.mkstemp(suffix=".abc"); os.close(fd_a)
+    fd_o, aag_tmp = tempfile.mkstemp(suffix=".aag"); os.close(fd_o)
+    try:
+        with open(v_tmp, "w") as f:
+            f.write(verilog_content)
+        with open(abc_tmp, "w") as f:
+            f.write(abc_script + "\n")
+        with _suppress_output(stderr=suppress_stderr):
+            ys.run_pass("design -reset")
+            ys.run_pass(f"read_verilog -sv {v_tmp}")
+            ys.run_pass("hierarchy -check -auto-top")
+            ys.run_pass("proc; opt; fsm; memory; opt")
+            ys.run_pass(f"abc -script {abc_tmp}")
+            ys.run_pass(prep_script)
+            ys.run_pass("aigmap")
+            ys.run_pass(f"write_aiger -ascii -symbols -no-startoffset {aag_tmp}")
+        return file_to_lines(aag_tmp)
+    finally:
+        for p in (v_tmp, abc_tmp, aag_tmp):
+            if os.path.exists(p):
+                os.remove(p)
+
+
 def abc_optimize(
     m: Module | Component,
     abc_script: str = _DEFAULT_ABC_SCRIPT,
@@ -929,7 +970,22 @@ def abc_optimize(
         m = m.to_module("mydesign_comb")
 
     verilog_content: str = m.to_verilog()
-    abc_bin: str = _find_abc_binary()
+
+    try:
+        abc_bin: str = _find_abc_binary()
+    except RuntimeError:
+        # No standalone abc binary — fall back to the in-process pyosys path so
+        # pure-pyosys installs (and CI without abc) keep working.
+        warnings.warn(
+            "No standalone abc binary found; using the in-process pyosys fallback "
+            "for abc_optimize. The abc_script runs pre-techmap (legacy ordering) and "
+            "is largely inert on coarse cells — install abc or set $SPIREHDL_ABC for "
+            "the effective out-of-process optimization.",
+            RuntimeWarning, stacklevel=2,
+        )
+        return _abc_optimize_via_pyosys(
+            verilog_content, abc_script, prep_script, suppress_stderr,
+        )
 
     fd_v, verilog_tmp = tempfile.mkstemp(suffix=".v")
     os.close(fd_v)
