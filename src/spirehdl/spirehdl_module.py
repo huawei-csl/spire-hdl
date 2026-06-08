@@ -174,6 +174,15 @@ class Component(abc.ABC):
                     node._no_emit_drive = True
                 if node._driver is not None:
                     stack.append(node._driver)
+                # Mirror `collect_signals`' store traversal: the `_ArrayIndex` leaf stops the driver walk, so
+                # follow store ↔ port-wire edges explicitly — else state reachable only through a store (e.g. a
+                # FIFO's write pointer via `store.write_addr`) is collected but never tagged, leaking into the Verilog.
+                if isinstance(node, _MemoryArray):
+                    for p in node._iter_ports():
+                        stack.append(p)
+                parent = getattr(node, "_memory_parent", None)
+                if parent is not None:
+                    stack.append(parent)
             else:
                 for ch in expr_children(node):
                     stack.append(ch)

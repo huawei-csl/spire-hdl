@@ -209,6 +209,16 @@ class FIFOPrimitive(Component):
         L.append(f"  wire {fl_w} = ({cnt} == {D});")
         L.append(f"  wire {dpu} = {push} & ~{fl_w};")
         L.append(f"  wire {dpo} = {pop}  & ~{ep_w};")
+        # Storage write lives in its OWN clock-only always block (no `posedge rst` in the
+        # sensitivity list). yosys can only infer a memory for `mem` when its write port is
+        # single-clock; with the write inside the async-reset block below it would flatten to
+        # D discrete flip-flops. The async read `mem[rd_ptr]` (captured into dout_r) then
+        # becomes the inferred memory's read port. Both blocks are posedge-clk NBA, so the
+        # write/read ordering (readFirst) is unchanged.
+        L.append(f"  always @(posedge clk) begin")
+        L.append(f"    if ({dpu}) {mem}[{wr_ptr}] <= {din};")
+        L.append(f"  end")
+        # Control state (pointers / count / registered output) keeps the async reset.
         L.append(f"  always @(posedge clk or posedge rst) begin")
         L.append(f"    if (rst) begin")
         L.append(f"      {wr_ptr} <= 0;")
@@ -216,10 +226,7 @@ class FIFOPrimitive(Component):
         L.append(f"      {cnt}    <= 0;")
         L.append(f"      {dout_r} <= 0;")
         L.append(f"    end else begin")
-        L.append(f"      if ({dpu}) begin")
-        L.append(f"        {mem}[{wr_ptr}] <= {din};")
-        L.append(f"        {wr_ptr} <= {wr_ptr} + 1;")
-        L.append(f"      end")
+        L.append(f"      if ({dpu}) {wr_ptr} <= {wr_ptr} + 1;")
         L.append(f"      if ({dpo}) begin")
         L.append(f"        {dout_r} <= {mem}[{rd_ptr}];")
         L.append(f"        {rd_ptr} <= {rd_ptr} + 1;")
