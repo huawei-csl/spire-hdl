@@ -4,6 +4,7 @@ from spirehdl.optimize.optimize import (  # noqa: F401
     # Public API
     abc_optimize,
     abc_optimized,
+    ABC_RECIPES,
     arithmetic_optimized,
     flowy_optimize,
     flowy_optimized,

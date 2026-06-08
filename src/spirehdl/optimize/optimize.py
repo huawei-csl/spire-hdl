@@ -18,6 +18,7 @@ import inspect
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import time
 from dataclasses import make_dataclass
@@ -838,21 +839,82 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
 # ABC / DeepSyn optimization
 # ---------------------------------------------------------------------------
 
+# Convenience abc scripts. The user passes a raw ``abc_script`` string; these are
+# curated starting points referenced directly at the call site, e.g.
+# ``@abc_optimized(abc_script=ABC_RECIPES["area"])``. Each runs AFTER the prep leg
+# (``techmap; opt; abc -fast; opt``) has lowered coarse cells ($mul/$add/…) to
+# gates, so the script actually optimizes (see this module's investigation doc).
+ABC_RECIPES: Dict[str, str] = {
+    # smallest AIG; trades depth for gates. Good when gate-count-bound with slack.
+    "area": "strash; &get -n; &deepsyn -T 10; &put",
+    # strict Pareto wins (gates+depth+transistors) on multiplier-class circuits, ~40ms.
+    "balanced": "strash; dch -f; balance",
+    # gentler structure than dch; wins depth where dch over-restructures (e.g. mult16).
+    "depth": "strash; balance; rewrite; balance; refactor; balance",
+}
+
+_DEFAULT_ABC_SCRIPT: str = ABC_RECIPES["balanced"]
+_DEFAULT_PREP_SCRIPT: str = "techmap; opt; abc -fast; opt"
+
+
+def _find_abc_binary() -> str:
+    """Locate a standalone ``abc`` binary for out-of-process optimization.
+
+    Order: ``$SPIREHDL_ABC`` → ``abc`` on PATH → yosys's bundled ``yosys-abc``.
+    Yosys ships abc, so the last fallback is the same engine the in-process
+    ``abc`` pass would call. Raises ``RuntimeError`` with a clear diagnostic if
+    none is found.
+    """
+    env = os.environ.get("SPIREHDL_ABC")
+    if env and os.path.exists(env):
+        return env
+    for cand in ("abc", "yosys-abc"):
+        found = shutil.which(cand)
+        if found:
+            return found
+    raise RuntimeError(
+        "No abc binary found. Install abc, ensure 'abc' or 'yosys-abc' is on PATH, "
+        "or set $SPIREHDL_ABC to the abc binary path."
+    )
+
+
 def abc_optimize(
     m: Module | Component,
-    abc_script: str = "strash; &get -n; &deepsyn -T 10; &put",
+    abc_script: str = _DEFAULT_ABC_SCRIPT,
+    prep_script: str = _DEFAULT_PREP_SCRIPT,
     suppress_stderr: bool = True,
+    timeout: float | None = 120,
 ) -> List[str]:
-    """Run yosys synthesis + ABC script optimization and return optimized AAG lines.
+    """Run yosys prep + an ABC script and return optimized AAG lines.
+
+    The ``abc_script`` runs **after** ``prep_script`` has lowered the design to
+    gate level, executed by a standalone ``abc`` subprocess on the prep AIG. This
+    is the fix for the long-standing ordering bug where the user script ran before
+    ``techmap`` and saw coarse ``$mul``/``$add`` cells abc cannot rewrite — see
+    ``internal_docs/abc_optimize_post_pipeline_investigation.md``.
+
+    Pipeline:
+      1. yosys: ``proc; opt; fsm; memory; opt; <prep_script>; aigmap`` → binary AIG.
+      2. abc subprocess: ``read_aiger; <abc_script>; write_aiger`` (AIG → AIG).
+      3. yosys: read the optimized AIG back, emit ASCII AAG.
 
     Parameters
     ----------
     m : Module or Component
         The design to optimize.
     abc_script : str
-        ABC commands to execute (e.g. ``"strash; &get -n; &deepsyn -T 10; &put"``).
+        ABC commands run on the gate-level AIG. Pass a raw string, or reference a
+        curated one via ``ABC_RECIPES`` (e.g. ``ABC_RECIPES["area"]``). Defaults to
+        ``ABC_RECIPES["balanced"]``.
+    prep_script : str
+        yosys passes that lower coarse cells to AIG-friendly gates before abc.
+        Rarely changed; defaults to ``"techmap; opt; abc -fast; opt"``.
     suppress_stderr : bool
         Suppress yosys/ABC output.
+    timeout : float or None
+        Wall-clock seconds allowed for the abc subprocess. Defaults to ``120``.
+        Long-running scripts (e.g. ``&deepsyn``/``&transtoch`` with large budgets
+        or many restarts) may need more; pass ``None`` to wait indefinitely.
 
     Returns
     -------
@@ -867,33 +929,52 @@ def abc_optimize(
         m = m.to_module("mydesign_comb")
 
     verilog_content: str = m.to_verilog()
+    abc_bin: str = _find_abc_binary()
 
     fd_v, verilog_tmp = tempfile.mkstemp(suffix=".v")
     os.close(fd_v)
-    fd_abc, abc_tmp = tempfile.mkstemp(suffix=".abc")
-    os.close(fd_abc)
+    fd_p, prep_bin = tempfile.mkstemp(suffix=".aig")
+    os.close(fd_p)
+    fd_o, opt_bin = tempfile.mkstemp(suffix=".aig")
+    os.close(fd_o)
     fd_aag, aag_out_tmp = tempfile.mkstemp(suffix=".aag")
     os.close(fd_aag)
 
     try:
         with open(verilog_tmp, "w") as f:
             f.write(verilog_content)
-        with open(abc_tmp, "w") as f:
-            f.write(abc_script + "\n")
 
+        # Stage 1 — yosys prep, dump binary AIG with I/O symbol names preserved.
         with _suppress_output(stderr=suppress_stderr):
             ys.run_pass("design -reset")
             ys.run_pass(f"read_verilog -sv {verilog_tmp}")
             ys.run_pass("hierarchy -check -auto-top")
             ys.run_pass("proc; opt; fsm; memory; opt")
-            ys.run_pass(f"abc -script {abc_tmp}")
-            ys.run_pass("techmap; opt; abc -fast; opt")
+            ys.run_pass(prep_script)
             ys.run_pass("aigmap")
+            ys.run_pass(f"write_aiger -symbols {prep_bin}")
+
+        # Stage 2 — standalone abc; AIG → AIG, no BLIF reintegration in the loop.
+        # ``-s`` on write_aiger preserves the I/O symbol table for stage 3.
+        res = subprocess.run(
+            [abc_bin, "-c",
+             f"read_aiger {prep_bin}; {abc_script}; write_aiger -s {opt_bin}"],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        if res.returncode != 0 or not os.path.getsize(opt_bin):
+            raise RuntimeError(
+                f"abc failed (rc={res.returncode}): {res.stderr[-300:]}"
+            )
+
+        # Stage 3 — yosys converts binary AIG → ASCII AAG that AigerImporter consumes.
+        with _suppress_output(stderr=suppress_stderr):
+            ys.run_pass("design -reset")
+            ys.run_pass(f"read_aiger {opt_bin}")
             ys.run_pass(f"write_aiger -ascii -symbols -no-startoffset {aag_out_tmp}")
 
         return file_to_lines(aag_out_tmp)
     finally:
-        for p in (verilog_tmp, abc_tmp, aag_out_tmp):
+        for p in (verilog_tmp, prep_bin, opt_bin, aag_out_tmp):
             if os.path.exists(p):
                 os.remove(p)
 
@@ -901,7 +982,9 @@ def abc_optimize(
 def abc_optimized(
     _fn: Callable[..., Any] | None = None,
     *,
-    abc_script: str = "strash; &get -n; &deepsyn -T 10; &put",
+    abc_script: str = _DEFAULT_ABC_SCRIPT,
+    prep_script: str = _DEFAULT_PREP_SCRIPT,
+    timeout: float | None = 120,
     cache_read: CacheSpec = "both",
     cache_write: CacheSpec = "both",
     cache_dir: str | Path | None = None,
@@ -910,12 +993,32 @@ def abc_optimized(
 
     Usage::
 
-        @abc_optimized(abc_script="strash; &get -n; &deepsyn -T 30; &put")
+        @abc_optimized                                    # bare: ABC_RECIPES["balanced"]
         def my_mult(a, b):
             return a * b
 
+        @abc_optimized(abc_script=ABC_RECIPES["area"])    # a curated recipe
+        def small_mult(a, b):
+            return a * b
+
+        @abc_optimized(abc_script="strash; &get -n; &deepsyn -T 30; &put")  # raw
+        def custom_mult(a, b):
+            return a * b
+
     At call time, Expr arguments are detected and the function is converted to
-    a Component, optimized via ``abc_optimize``, and the result is cached.
+    a Component, optimized via ``abc_optimize`` (which runs ``abc_script`` AFTER
+    the gate-level prep leg), and the result is cached.
+
+    Parameters
+    ----------
+    abc_script : str
+        ABC commands run on the gate-level AIG. Raw string, or an ``ABC_RECIPES``
+        entry. Defaults to ``ABC_RECIPES["balanced"]``.
+    prep_script : str
+        yosys passes that lower coarse cells before abc. Rarely changed.
+    timeout : float or None
+        Wall-clock seconds for the abc subprocess (default ``120``). Raise it for
+        long scripts; ``None`` waits indefinitely.
 
     Cache read/write controls (``cache_read`` / ``cache_write``):
       Each takes one of ``"none"``, ``"mem"``, ``"disk"``, ``"both"``.
@@ -963,8 +1066,8 @@ def abc_optimized(
                 cache_read, cache_write,
             )
 
-            # Cache key includes the abc script
-            optimize_kwargs = {"abc_script": abc_script}
+            # Cache key includes the abc script and the prep script
+            optimize_kwargs = {"abc_script": abc_script, "prep_script": prep_script}
             resolved_cache_dir: Path | None = (
                 _resolve_cache_dir(fn, cache_dir) if (read_disk or write_disk) else None
             )
@@ -982,7 +1085,10 @@ def abc_optimized(
                 )
 
             # Cache miss — optimize
-            raw_aag: List[str] = abc_optimize(module, abc_script)
+            raw_aag: List[str] = abc_optimize(
+                module, abc_script=abc_script, prep_script=prep_script,
+                timeout=timeout,
+            )
 
             # Regroup bit-blasted ports to match original widths
             opt_module: Module = AigerImporter(raw_aag).get_spirehdl_module()
