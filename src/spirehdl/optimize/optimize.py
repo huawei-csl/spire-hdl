@@ -924,7 +924,7 @@ def abc_optimize(
     abc_script: str = _DEFAULT_ABC_SCRIPT,
     prep_script: str = _DEFAULT_PREP_SCRIPT,
     suppress_stderr: bool = True,
-    timeout: float | None = 120,
+    timeout: float | None = None,
 ) -> List[str]:
     """Run yosys prep + an ABC script and return optimized AAG lines.
 
@@ -953,9 +953,12 @@ def abc_optimize(
     suppress_stderr : bool
         Suppress yosys/ABC output.
     timeout : float or None
-        Wall-clock seconds allowed for the abc subprocess. Defaults to ``120``.
-        Long-running scripts (e.g. ``&deepsyn``/``&transtoch`` with large budgets
-        or many restarts) may need more; pass ``None`` to wait indefinitely.
+        Wall-clock seconds allowed for the abc subprocess. Defaults to ``None``
+        (wait indefinitely) so long-running scripts (e.g. ``&deepsyn``/
+        ``&transtoch`` with large budgets or many restarts) are not cut off; pass
+        a float to impose a limit. Note the abc subprocess is typically nested
+        inside an outer compile timeout (rtl_scout's ``SPIREHDL_TIMEOUT``), which
+        still acts as a hard ceiling.
 
     Returns
     -------
@@ -1040,7 +1043,7 @@ def abc_optimized(
     *,
     abc_script: str = _DEFAULT_ABC_SCRIPT,
     prep_script: str = _DEFAULT_PREP_SCRIPT,
-    timeout: float | None = 120,
+    timeout: float | None = None,
     cache_read: CacheSpec = "both",
     cache_write: CacheSpec = "both",
     cache_dir: str | Path | None = None,
@@ -1073,8 +1076,9 @@ def abc_optimized(
     prep_script : str
         yosys passes that lower coarse cells before abc. Rarely changed.
     timeout : float or None
-        Wall-clock seconds for the abc subprocess (default ``120``). Raise it for
-        long scripts; ``None`` waits indefinitely.
+        Wall-clock seconds for the abc subprocess. Defaults to ``None`` (wait
+        indefinitely); pass a float to impose a limit. The outer compile timeout
+        (rtl_scout's ``SPIREHDL_TIMEOUT``) still bounds a hung run.
 
     Cache read/write controls (``cache_read`` / ``cache_write``):
       Each takes one of ``"none"``, ``"mem"``, ``"disk"``, ``"both"``.

@@ -17,3 +17,4 @@
 - document aggregate types
 - content-addressed cache for `optimized_fsm` / `optimized_encoding` (same idea as `@abc_optimized` / `@flowy_optimized`) — key on `(state_cls, module-hash, objective, strategy, width)` and store the winning assignment, so re-runs of the encoding search are instant.
 - merge inner product and mia and allow for mixed fusion of the ppa, e.g. a+b*c+d, see eg run_arithmetic_eval.py.
+- rename canonical to depth_driven in the ppas (make sure the name is correct), (lifo is the other option)
