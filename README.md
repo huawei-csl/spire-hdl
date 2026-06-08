@@ -6,12 +6,12 @@
 
 A modern Python HDL that compiles concise, composable hardware descriptions to synthesizable Verilog and AIG/AAG netlists — with synthesis optimization and a cycle-accurate simulator built in.
 
-- **Designed for humans and agents to be effective** — a small, regular surface that reads well to engineers and LLMs alike
-- **Reduces area and delay vs. a traditional Verilog flow** — optimization is part of the compile, not an afterthought
+- **Designed for humans and agents to be effective:** a small surface that reads well to engineers and LLMs alike
+- **Reduces area and delay vs. a traditional Verilog flow:** optimization is part of the compile, not an afterthought
 - **Integrated with ABC and mockturtle** — modern synthesis optimization wired directly into the compilation pipeline
-- **Arithmetic library with automated replacement** — swap adders, multipliers, and FP cores against an area/delay objective
-- **Cycle-accurate Python simulator** — drive inputs, tick clocks, inspect any expression, and capture probes without leaving Python
-- **Content-addressed optimization cache** — instant re-runs via `@flowy_optimized` / `@abc_optimized` decorators
+- **Arithmetic library with automated replacement:** swap adders, multipliers, and FP cores against an area/delay objective
+- **Cycle-accurate Python simulator"** drive inputs, tick clocks, inspect any expression, and capture probes without leaving Python
+- **Content-addressed optimization cache:** instant re-runs via `@flowy_optimized` / `@abc_optimized` decorators
 
 # Optimizations built in ⚡ 
 
@@ -49,6 +49,10 @@ Hopcroft state minimisation and bit-assignment search as two composable context 
 
 An 8-opcode CPU decoder sees **−66.7% cells** from a single `optimized_encoding`, because the search discovers an opcode layout where each wide OR collapses to one bit-test. See [`README_fsm_optimization.md`](README_fsm_optimization.md).
 
+### 🛠️ Fine-grained architecture selection — `arithmetic_generator`
+
+Beyond the automatic passes above, the unified arithmetic generator lets you hand-pick the exact micro-architecture of an adder, multiplier, MAC, or matmul — partial-product generation, compression-tree topology, and final-stage adder — then emit Verilog/AAG, simulate, and collect Yosys metrics for direct comparison. Use it to explore the design space at full granularity when you want to drive the architecture choice yourself rather than leaving it to the objective-driven replacer. See [`README_arithmetic_generator.md`](README_arithmetic_generator.md).
+
 # Overview
 
 ### 🪶 Minimal core
@@ -63,7 +67,7 @@ In its simplest form, SpireHDL only needs these core files. This is intentional 
 
 Other markdown documents in this repository:
 
-- [`README_cores_extras.md`](README_cores_extras.md) — cores, generators, evaluation scripts, and extra tooling notes
+- [`README_arithmetic_generator.md`](README_arithmetic_generator.md) — arithmetic generators, evaluation scripts, and extra tooling notes
 - [`README_arithmetic_optimization.md`](README_arithmetic_optimization.md) — automatic arithmetic replacement with `replace_arithmetic_ops` (adders, multipliers, subtractors)
 - [`README_optimization_decorators.md`](README_optimization_decorators.md) — the `@abc_optimized` / `@flowy_optimized` circuit optimization decorators
 - [`README_state_machines.md`](README_state_machines.md) — finite-state-machine declaration with the `State` / `Encoding` API and `switch_`/`case_` bodies
