@@ -585,12 +585,11 @@ def generate_matmul_accumulate(
         add_cfg = MatmulAdderConfig(use_operator=True, encoding=cfg.input_encoding)
     else:
         encodings = TwoInputAritEncodings.with_enc(cfg.input_encoding)
-        ppg_opt = cfg.ppg_opt if not (cfg.ppg_opt == PPGOption.AND and is_signed(cfg.input_encoding)) else PPGOption.BAUGH_WOOLEY
         mult_cfg = MatmulMultiplierConfig(
             use_operator=False,
             multiplier_opt=cfg.multiplier_opt,
             encodings=encodings,
-            ppg_opt=ppg_opt,
+            ppg_opt=cfg.ppg_opt,
             ppa_opt=cfg.ppa_opt,
             fsa_opt=cfg.fsa_opt,
             optim_type=cfg.optim_type,
@@ -643,10 +642,9 @@ def generate_matmul_accumulate_fused(
         else max_y_width_unsigned(cfg.a_width, cfg.a_width, cfg.dim_k, include_carry_from_add=False)
     )
     output_encoding = resolve_mac_output_encoding(cfg.input_encoding, None)
-    ppg_opt = cfg.ppg_opt if not (cfg.ppg_opt == PPGOption.AND and is_signed(cfg.input_encoding)) else PPGOption.BAUGH_WOOLEY
 
     mult_cfg = MatmulFusedMultiplierConfig(
-        ppg_opt=ppg_opt,
+        ppg_opt=cfg.ppg_opt,
         ppa_opt=cfg.ppa_opt,
         fsa_opt=cfg.fsa_opt,
         optim_type=cfg.optim_type,
