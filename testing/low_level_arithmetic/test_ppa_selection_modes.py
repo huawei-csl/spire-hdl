@@ -110,13 +110,13 @@ def make_ppg_columns(config: StageMultiplierConfig):
 
 # (PPA class, expected default mode, alt mode for dual-mode testing)
 PPA_DEFAULTS = [
-    (WallaceTreeAccumulator, "canonical", "lifo"),
-    (DaddaTreeAccumulator, "canonical", "lifo"),
-    (CarrySaveAccumulator, "lifo", "canonical"),
-    (FourTwoCompressorAccumulator, "canonical", "lifo"),
+    (WallaceTreeAccumulator, "earliest", "lifo"),
+    (DaddaTreeAccumulator, "earliest", "lifo"),
+    (CarrySaveAccumulator, "lifo", "earliest"),
+    (FourTwoCompressorAccumulator, "earliest", "lifo"),
     (FourTwoCompressorParallelAccumulator, "lifo", None),
     (FiveTwoCompressorAccumulator, "lifo", None),
-    (CompressorTreeAccumulator, "fifo", "canonical"),
+    (CompressorTreeAccumulator, "fifo", "earliest"),
 ]
 
 
