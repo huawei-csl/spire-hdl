@@ -1,20 +1,15 @@
 from __future__ import annotations
 
-from typing import Callable, ClassVar, Dict, List, Literal, Optional, Set, Tuple
+from typing import Callable, ClassVar, Dict, List, Optional, Set, Tuple
 
 from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
-    FinalStageAdderBase, full_adder_fast, full_adder_fast2, full_adder_low_area,
+    FinalStageAdderBase, SplitMode, full_adder_fast, full_adder_fast2, full_adder_low_area,
 )
 from spirehdl.arithmetic.prefix_adders.prefix_adder_topologies import P_brent_kung, P_han_carlson, P_kogge_stone, P_ladner_fischer, P_ripple_carry, P_sklansky, P_sparse_kogge_stone_2, P_sparse_kogge_stone_4, Pair, analyze_prefix_matrix, legalize_P
 from spirehdl.arithmetic.prefix_adders.prefix_adder_specials import ZCG_n, multi_scan_n
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, UInt, fit_type
 
-
-# How the prefix carry-network picks the split point for each (i, j) group node. A string mode (rather than a bool) so
-# further strategies can be added later. The FSA-stage analogue of the PPA accumulator's ``SelectionMode``.
-#   "min_depth_splits" — split points from analyze_prefix_matrix that minimize the prefix tree's recursion depth
-#   "first_split"      — the first legal split found (_find_split); depth-agnostic
-SplitMode = Literal["min_depth_splits", "first_split"]
+# SplitMode values: "min_depth_splits" (analyze_prefix_matrix, depth-minimizing) | "first_split" (_find_split, depth-agnostic).
 
 
 def _exists(nodes: Set[Pair], i: int, j: int) -> bool:
@@ -125,7 +120,9 @@ class PrefixAdderFinalStage(FinalStageAdderBase):
 
     def __init__(self, config, *, split_mode: Optional[SplitMode] = None) -> None:
         super().__init__(config)
-        self.split_mode: SplitMode = split_mode if split_mode is not None else self.__class__.default_split_mode
+        # Resolution order: explicit arg -> config.split_mode -> this class's default.
+        mode = split_mode if split_mode is not None else getattr(config, "split_mode", None)
+        self.split_mode: SplitMode = mode if mode is not None else self.__class__.default_split_mode
 
     def resolve(self, columns: Dict[int, List[Expr]], carry_in: Optional[Expr] = None) -> List[Expr]:
         """Collapse <=2 bits/column into a final sum using a prefix carry network.

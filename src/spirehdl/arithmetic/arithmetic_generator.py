@@ -46,6 +46,7 @@ from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_fused import (
     MatmulAccumulateComponent as MatmulAccumulateFusedComponent,
     MultiplierConfig as MatmulFusedMultiplierConfig,
 )
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import SelectionMode, SplitMode
 from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_float import (
     FpMMAcCfg,
     FpMMAcDims,
@@ -82,6 +83,9 @@ class MultiplierGeneratorConfig:
     input_encoding: Encoding = Encoding.unsigned
     output_encoding: Encoding | None = None
     optim_type: Literal["area", "speed"] = "area"
+    # None -> the chosen PPA accumulator / prefix-FSA use their class defaults (unchanged behavior).
+    selection_mode: SelectionMode | None = None
+    split_mode: SplitMode | None = None
     module_name: str | None = None
     with_clock: bool = False
     with_reset: bool = False
@@ -111,6 +115,9 @@ class MacGeneratorConfig:
     input_encoding: Encoding = Encoding.unsigned
     output_encoding: Encoding | None = None
     optim_type: Literal["area", "speed"] = "area"
+    # None -> the chosen PPA accumulator / prefix-FSA use their class defaults (unchanged behavior).
+    selection_mode: SelectionMode | None = None
+    split_mode: SplitMode | None = None
     module_name: str | None = None
     with_clock: bool = False
     with_reset: bool = False
@@ -420,6 +427,9 @@ def generate_multiplier(
 
     encodings = _resolve_multiplier_encodings(cfg)
     use_stage_options = supports_stages(cfg.multiplier_opt)
+    # selection_mode/split_mode only apply to the stage-based PPA/FSA; gate them like ppg/ppa/fsa_cls so non-stage
+    # multiplier options never receive an unexpected kwarg.
+    stage_mode_kwargs = dict(selection_mode=cfg.selection_mode, split_mode=cfg.split_mode) if use_stage_options else {}
     component = cfg.multiplier_opt.value(
         a_w=cfg.n_bits,
         b_w=cfg.n_bits,
@@ -429,6 +439,7 @@ def generate_multiplier(
         ppa_cls=cfg.ppa_opt.value if use_stage_options else None,
         fsa_cls=cfg.fsa_opt.value if use_stage_options else None,
         optim_type=cfg.optim_type,
+        **stage_mode_kwargs,
     )
     if not isinstance(component, StageBasedMultiplierBase):
         raise TypeError(f"Expected StageBasedMultiplierBase, got {type(component)}")
@@ -527,6 +538,8 @@ def generate_mac(
             fsa_opt=cfg.fsa_opt,
             encoding=cfg.input_encoding,
             optim_type=cfg.optim_type,
+            selection_mode=cfg.selection_mode,
+            split_mode=cfg.split_mode,
         )
     )
 

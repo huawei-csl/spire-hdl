@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import DefaultDict, List, Literal, Tuple, Type
+from typing import DefaultDict, List, Literal, Optional, Tuple, Type
 
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import FinalStageAdderBase, StageMultiplierConfig, PartialProductAccumulatorBase
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import FinalStageAdderBase, SelectionMode, SplitMode, StageMultiplierConfig, PartialProductAccumulatorBase
 from spirehdl.spirehdl import Concat, Const, Expr
 
 
@@ -9,6 +9,9 @@ from spirehdl.spirehdl import Concat, Const, Expr
 class OutputConfig:
     out_width: int
     optim_type: Literal["area", "speed"]
+    # None -> PPA accumulator / prefix-FSA use their own class defaults (unchanged behavior).
+    selection_mode: Optional[SelectionMode] = None
+    split_mode: Optional[SplitMode] = None
 
 def compressor_sum(
     config: StageMultiplierConfig | OutputConfig,

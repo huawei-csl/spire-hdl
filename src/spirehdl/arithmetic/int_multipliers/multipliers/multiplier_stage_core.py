@@ -46,6 +46,9 @@ def full_adder_low_area(x: Expr, y: Expr, z: Expr) -> Tuple[Expr, Expr]:
 
 
 SelectionMode = Literal["fifo", "lifo", "earliest"]
+# Prefix-FSA carry-tree split strategy (consumed in fsa_stages.py). Defined here, next to SelectionMode, so config
+# objects can carry it without importing the FSA module (which would be an import cycle).
+SplitMode = Literal["min_depth_splits", "first_split"]
 
 
 class _LeveledBit:
@@ -76,6 +79,9 @@ class TwoInputAritConfig:
     signed_a: bool = False
     signed_b: bool = False
     optim_type: Literal["area", "speed"] = "area"
+    # None -> each PPA accumulator / prefix-FSA falls back to its own class default (i.e. unchanged behavior).
+    selection_mode: Optional[SelectionMode] = None
+    split_mode: Optional[SplitMode] = None
 
     @property
     def out_width(self) -> int:
@@ -128,10 +134,9 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
         selection_mode: Optional[SelectionMode] = None,
     ) -> None:
         super().__init__(config)
-        self.selection_mode: SelectionMode = (
-            selection_mode if selection_mode is not None
-            else self.__class__.default_selection_mode
-        )
+        # Resolution order: explicit arg -> config.selection_mode -> this class's default.
+        mode = selection_mode if selection_mode is not None else getattr(config, "selection_mode", None)
+        self.selection_mode: SelectionMode = mode if mode is not None else self.__class__.default_selection_mode
         self._ord_counter = 0
 
     @abc.abstractmethod
@@ -450,8 +455,11 @@ class StageBasedMultiplierBasic(Component):
         ppg_cls: Type[PartialProductGeneratorBase],
         ppa_cls: Type[PartialProductAccumulatorBase] = CompressorTreeAccumulator,
         fsa_cls: Type[FinalStageAdderBase] = RippleCarryFinalAdder,
+        selection_mode: Optional[SelectionMode] = None,
+        split_mode: Optional[SplitMode] = None,
     ) -> None:
-        self.config = StageMultiplierConfig(a_w, b_w, signed_a, signed_b, optim_type)
+        self.config = StageMultiplierConfig(a_w, b_w, signed_a, signed_b, optim_type,
+                                            selection_mode=selection_mode, split_mode=split_mode)
 
         supported = ppg_cls.supported_signatures
         if supported is not None and (signed_a, signed_b) not in supported:

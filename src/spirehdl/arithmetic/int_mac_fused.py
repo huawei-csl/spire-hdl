@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Optional
+
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import SelectionMode, SplitMode
 
 from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
@@ -66,6 +68,9 @@ class MacBuildConfig:
     encoding: Encoding = Encoding.unsigned
     optim_type: Literal["area", "speed"] = "area"
     use_operator: bool = False
+    # None -> the chosen PPA accumulator / prefix-FSA use their class defaults (unchanged behavior).
+    selection_mode: Optional[SelectionMode] = None
+    split_mode: Optional[SplitMode] = None
 
 
 @dataclass
@@ -104,6 +109,8 @@ class FusedMacComponent(Component):
                 ppa_opt=self.cfg.ppa_opt,
                 fsa_opt=self.cfg.fsa_opt,
                 optim_type=self.cfg.optim_type,
+                selection_mode=self.cfg.selection_mode,
+                split_mode=self.cfg.split_mode,
             )
             y_expr = fused_inner_product([self.a], [self.b], self.c, mult_cfg, self.cfg.encoding)
 

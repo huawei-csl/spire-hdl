@@ -5,7 +5,7 @@ from typing import ClassVar, DefaultDict, Dict, List, Literal, Optional, Tuple, 
 import numpy as np
 
 from spirehdl.arithmetic.encoding.sign_magnitude import SignMagnitudeToTwosComplementDecoder
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, SelectionMode, SplitMode, StageBasedMultiplierBasic, StageBasedMultiplierIO
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, from_encoding, to_encoding
 from spirehdl.spirehdl_module import Component
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, Signal, SInt, UInt, mux, mux_if
@@ -24,6 +24,8 @@ class StageBasedMultiplierBase(Component):
         ppg_cls: Optional[Type[PartialProductGeneratorBase]] = None,
         ppa_cls: Optional[Type[PartialProductAccumulatorBase]] = None,
         fsa_cls: Optional[Type[FinalStageAdderBase]] = None,
+        selection_mode: Optional[SelectionMode] = None,
+        split_mode: Optional[SplitMode] = None,
     ) -> None:
 
         self.a_encoding = a_encoding
@@ -34,6 +36,8 @@ class StageBasedMultiplierBase(Component):
         self.ppg_cls = ppg_cls
         self.ppa_cls = ppa_cls
         self.fsa_cls = fsa_cls
+        self.selection_mode = selection_mode
+        self.split_mode = split_mode
 
 class StageBasedMultiplier(StageBasedMultiplierBase):
 
@@ -70,6 +74,8 @@ class StageBasedMultiplier(StageBasedMultiplierBase):
             ppa_cls=self.ppa_cls,
             fsa_cls=self.fsa_cls,
             optim_type=self.optim_type,
+            selection_mode=self.selection_mode,
+            split_mode=self.split_mode,
         ).make_internal()
 
         self.mult = mult
@@ -107,6 +113,8 @@ class StageBasedSignMagnitudeMultiplier(StageBasedMultiplierBase):
             ppa_cls=self.ppa_cls,
             fsa_cls=self.fsa_cls,
             optim_type=self.optim_type,
+            selection_mode=self.selection_mode,
+            split_mode=self.split_mode,
         ).make_internal()
         
         self.mult = mult
@@ -161,6 +169,8 @@ class StageBasedSignMagnitudeExtMultiplier(StageBasedMultiplierBase):
             ppa_cls=self.ppa_cls,
             fsa_cls=self.fsa_cls,
             optim_type=self.optim_type,
+            selection_mode=self.selection_mode,
+            split_mode=self.split_mode,
         ).make_internal()
 
         self.mult = mult
@@ -251,6 +261,8 @@ class StageBasedSignMagnitudeExtUpMultiplier(StageBasedMultiplierBase):
             ppa_cls=self.ppa_cls,
             fsa_cls=self.fsa_cls,
             optim_type=self.optim_type,
+            selection_mode=self.selection_mode,
+            split_mode=self.split_mode,
         ).make_internal()
 
         self.mult = mult
@@ -345,6 +357,8 @@ class StageBasedSignMagnitudeToTwosComplementMultiplier(StageBasedMultiplierBase
             ppa_cls=self.ppa_cls,
             fsa_cls=self.fsa_cls,
             optim_type=self.optim_type,
+            selection_mode=self.selection_mode,
+            split_mode=self.split_mode,
         ).make_internal()      
         mult.io.a <<= self.io.a
         mult.io.b <<= self.io.b
@@ -385,6 +399,8 @@ class StageBasedSignMagnitudeExtToTwosComplementMultiplier(StageBasedMultiplierB
             ppa_cls=self.ppa_cls,
             fsa_cls=self.fsa_cls,
             optim_type=self.optim_type,
+            selection_mode=self.selection_mode,
+            split_mode=self.split_mode,
         ).make_internal()      
         mult.io.a <<= self.io.a
         mult.io.b <<= self.io.b
@@ -425,6 +441,8 @@ class StageBasedSignMagnitudeExtToTwosComplementUpperMultiplier(StageBasedMultip
             ppa_cls=self.ppa_cls,
             fsa_cls=self.fsa_cls,
             optim_type=self.optim_type,
+            selection_mode=self.selection_mode,
+            split_mode=self.split_mode,
         ).make_internal()      
         mult.io.a <<= self.io.a
         mult.io.b <<= self.io.b
