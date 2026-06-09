@@ -46,7 +46,7 @@ def full_adder_low_area(x: Expr, y: Expr, z: Expr) -> Tuple[Expr, Expr]:
 
 
 OptimType = Literal["area", "speed"]
-SelectionMode = Literal["fifo", "lifo", "earliest"]
+SelectionMode = Literal["fifo", "lifo", "canonical"]
 # Prefix-FSA carry-tree split strategy (consumed in fsa_stages.py). Defined here, next to SelectionMode, so config
 # objects can carry it without importing the FSA module (which would be an import cycle).
 SplitMode = Literal["min_depth_splits", "first_split"]
@@ -61,7 +61,7 @@ class _LeveledBit:
 
     - ``fifo``: left-to-right consumption (historical CompressorTree)
     - ``lifo``: stack-style ``pop()`` consumption (historical Wallace/Dadda/CarrySave/FourTwo)
-    - ``earliest``: earliest-arrival-first by ``(level, ord_)``
+    - ``canonical``: earliest-arrival-first by ``(level, ord_)``
     """
 
     __slots__ = ("expr", "level", "ord_")
@@ -121,7 +121,7 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
     # Three modes are available:
     #   "fifo"      — consume bits from the front of the column (FIFO)
     #   "lifo"      — consume bits from the back of the column (LIFO / pop)
-    #   "earliest" — consume the k earliest-arriving bits by (level, ord_)
+    #   "canonical" — consume the k earliest-arriving bits by (level, ord_)
     #
     # Per-PPA defaults are set on concrete subclasses. Users can
     # override per-instance via the ``selection_mode`` constructor arg.
@@ -179,7 +179,7 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
         self, bits: List[_LeveledBit], k: int,
     ) -> List[_LeveledBit]:
         """Pop ``k`` bits from ``bits`` using ``self.selection_mode``."""
-        if self.selection_mode == "earliest":
+        if self.selection_mode == "canonical":
             return self._take_earliest(bits, k)
         if self.selection_mode == "lifo":
             return self._take_lifo(bits, k)
@@ -322,7 +322,7 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
         )
 
     def accumulate(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
-        if self.selection_mode == "earliest":
+        if self.selection_mode == "canonical":
             return self._accumulate_earliest(columns)
         return self._accumulate_fifo_lifo(columns)
 
@@ -376,7 +376,7 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
     def _compress_column(self, bits: List[Expr]) -> Tuple[List[Expr], List[Expr]]:
         sum_bits: List[Expr] = []
         carry_bits: List[Expr] = []
-        # fifo consumes from the front (default); lifo consumes from the back. earliest never routes here.
+        # fifo consumes from the front (default); lifo consumes from the back. canonical never routes here.
         work_bits = list(bits) if self.selection_mode != "lifo" else list(reversed(bits))
         while len(work_bits) >= 3:
             x, y, z = work_bits[:3]

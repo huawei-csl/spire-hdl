@@ -24,7 +24,7 @@ class WallaceTreeAccumulator(PartialProductAccumulatorBase):
     # small earliest win at width 4 (-1 depth, -1 gate). Default to
     # earliest because it matches the scripted-policy action sequence
     # that every downstream ml_ppa study assumes.
-    default_selection_mode: ClassVar[SelectionMode] = "earliest"
+    default_selection_mode: ClassVar[SelectionMode] = "canonical"
 
     def __init__(
         self,
@@ -40,7 +40,7 @@ class WallaceTreeAccumulator(PartialProductAccumulatorBase):
         )
 
     def accumulate(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
-        if self.selection_mode == "earliest":
+        if self.selection_mode == "canonical":
             return self._accumulate_earliest(columns)
         return self._accumulate_fifo_lifo(columns)
 
@@ -122,7 +122,7 @@ class BalancedDelayWallaceAccumulator(WallaceTreeAccumulator):
     bit selection.
     """
 
-    default_selection_mode: ClassVar[SelectionMode] = "earliest"
+    default_selection_mode: ClassVar[SelectionMode] = "canonical"
 
     @staticmethod
     def _fa_output_level(bits: List[_LeveledBit]) -> Optional[int]:
@@ -189,7 +189,7 @@ class EagerWallaceAccumulator(WallaceTreeAccumulator):
     Only supports earliest mode.
     """
 
-    default_selection_mode: ClassVar[SelectionMode] = "earliest"
+    default_selection_mode: ClassVar[SelectionMode] = "canonical"
 
     def _accumulate_earliest(
         self, columns: Dict[int, List[Expr]]
@@ -225,7 +225,7 @@ class DaddaTreeAccumulator(PartialProductAccumulatorBase):
 
     # Dadda is where earliest selection shines: depth drops by 60% on
     # average. Default to earliest.
-    default_selection_mode: ClassVar[SelectionMode] = "earliest"
+    default_selection_mode: ClassVar[SelectionMode] = "canonical"
 
     def __init__(
         self,
@@ -296,7 +296,7 @@ class CarrySaveAccumulator(PartialProductAccumulatorBase):
         )
 
     def accumulate(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
-        if self.selection_mode == "earliest":
+        if self.selection_mode == "canonical":
             return self._accumulate_earliest(columns)
         return self._accumulate_fifo_lifo(columns)
 
@@ -370,7 +370,7 @@ class FourTwoCompressorAccumulator(PartialProductAccumulatorBase):
 
     # FourTwoCompressor earliest is a Pareto improvement at every
     # tested width. Default to earliest.
-    default_selection_mode: ClassVar[SelectionMode] = "earliest"
+    default_selection_mode: ClassVar[SelectionMode] = "canonical"
 
     def __init__(
         self,
@@ -387,7 +387,7 @@ class FourTwoCompressorAccumulator(PartialProductAccumulatorBase):
         self._zero = Const(False, Bool())
 
     def accumulate(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
-        if self.selection_mode == "earliest":
+        if self.selection_mode == "canonical":
             return self._accumulate_earliest(columns)
         return self._accumulate_fifo_lifo(columns)
 
@@ -541,7 +541,7 @@ class FiveTwoCompressorAccumulator(PartialProductAccumulatorBase):
         self._zero = Const(False, Bool())
 
     def accumulate(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
-        if self.selection_mode == "earliest":
+        if self.selection_mode == "canonical":
             return self._accumulate_earliest(columns)
         return self._accumulate_fifo_lifo(columns)
 
