@@ -20,9 +20,9 @@ from spirehdl.spirehdl import Bool, Const, Expr
 class WallaceTreeAccumulator(PartialProductAccumulatorBase):
     """Classic Wallace tree reduction of partial-product columns."""
 
-    # Wallace is a tie between LIFO and earliest at widths 6-16 and a
-    # small earliest win at width 4 (-1 depth, -1 gate). Default to
-    # earliest because it matches the scripted-policy action sequence
+    # Wallace is a tie between LIFO and canonical at widths 6-16 and a
+    # small canonical win at width 4 (-1 depth, -1 gate). Default to
+    # canonical because it matches the scripted-policy action sequence
     # that every downstream ml_ppa study assumes.
     default_selection_mode: ClassVar[SelectionMode] = "canonical"
 
@@ -117,8 +117,8 @@ class WallaceTreeAccumulator(PartialProductAccumulatorBase):
 class BalancedDelayWallaceAccumulator(WallaceTreeAccumulator):
     """Wallace reduction with cross-column priority-queue scheduling.
 
-    Only supports earliest mode — the priority-queue scheduling
-    requires arrival-level tracking which is specific to earliest
+    Only supports canonical mode — the priority-queue scheduling
+    requires arrival-level tracking which is specific to canonical
     bit selection.
     """
 
@@ -186,7 +186,7 @@ class EagerWallaceAccumulator(WallaceTreeAccumulator):
     """Wallace reduction with live column heights instead of a
     per-iteration snapshot.
 
-    Only supports earliest mode.
+    Only supports canonical mode.
     """
 
     default_selection_mode: ClassVar[SelectionMode] = "canonical"
@@ -223,8 +223,8 @@ class DaddaTreeAccumulator(PartialProductAccumulatorBase):
     identical — only the bit-picking rule differs.
     """
 
-    # Dadda is where earliest selection shines: depth drops by 60% on
-    # average. Default to earliest.
+    # Dadda is where canonical selection shines: depth drops by 60% on
+    # average. Default to canonical.
     default_selection_mode: ClassVar[SelectionMode] = "canonical"
 
     def __init__(
@@ -277,7 +277,7 @@ class DaddaTreeAccumulator(PartialProductAccumulatorBase):
 class CarrySaveAccumulator(PartialProductAccumulatorBase):
     """Iterative carry-save reduction using only full adders."""
 
-    # CarrySave is the one PPA where earliest *loses* (+2 to +3 depth,
+    # CarrySave is the one PPA where canonical *loses* (+2 to +3 depth,
     # 0 to +2 gates across widths 4-16). The LIFO order already produces
     # a well-shaped tree. Default to LIFO.
     default_selection_mode: ClassVar[SelectionMode] = "lifo"
@@ -368,8 +368,8 @@ class CarrySaveAccumulator(PartialProductAccumulatorBase):
 class FourTwoCompressorAccumulator(PartialProductAccumulatorBase):
     """Reduction based on 4:2 compressors backed by chained full adders."""
 
-    # FourTwoCompressor earliest is a Pareto improvement at every
-    # tested width. Default to earliest.
+    # FourTwoCompressor canonical is a Pareto improvement at every
+    # tested width. Default to canonical.
     default_selection_mode: ClassVar[SelectionMode] = "canonical"
 
     def __init__(
@@ -474,7 +474,7 @@ class FourTwoCompressorParallelAccumulator(FourTwoCompressorAccumulator):
     with an explicit horizontal carry-in) in place of the default pair
     of cascaded full adders.
 
-    Defaults to LIFO (the historically tuned mode). The base ``_apply_c42`` hard-codes cascaded FAs, so the earliest
+    Defaults to LIFO (the historically tuned mode). The base ``_apply_c42`` hard-codes cascaded FAs, so the canonical
     path below is overridden to route the 4:2 step through ``_apply_compress`` and pick up this parallel override.
     """
 
@@ -497,7 +497,7 @@ class FourTwoCompressorParallelAccumulator(FourTwoCompressorAccumulator):
         return sum_bit, carry_bit, carry_chain_out
 
     def _accumulate_earliest(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
-        """Like the base earliest reduction but the 4:2 step goes through ``_apply_compress(self._compress_4_2)`` so the
+        """Like the base canonical reduction but the 4:2 step goes through ``_apply_compress(self._compress_4_2)`` so the
         true-4:2 parallel gates are used instead of the base cascaded-FA ``_apply_c42``."""
         cols = self._wrap_columns(columns)
         changed = True
@@ -546,7 +546,7 @@ class FiveTwoCompressorAccumulator(PartialProductAccumulatorBase):
         return self._accumulate_fifo_lifo(columns)
 
     def _accumulate_earliest(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
-        """Earliest schedule: in-place earliest-arrival reduction down the 5:2 → 4:2 → FA ladder until every column is
+        """Canonical schedule: in-place earliest-arrival reduction down the 5:2 → 4:2 → FA ladder until every column is
         ≤2 high. The 5:2 step goes through ``_apply_compress(self._compress_5_2)`` so the parallel variant is honored."""
         cols = self._wrap_columns(columns)
         changed = True

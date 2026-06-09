@@ -272,12 +272,12 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
 
     def _pop(self, bits: List[Expr], n: int = 1) -> List[Expr]:
         """Pop ``n`` raw bits from a column honoring fifo (front) / lifo (back). Used by the next_cols buffer-swap
-        schedules; the earliest schedule routes through ``_take_bits`` instead and never reaches this."""
+        schedules; the canonical schedule routes through ``_take_bits`` instead and never reaches this."""
         end = 0 if self.selection_mode == "fifo" else -1
         return [bits.pop(end) for _ in range(n)]
 
     def _apply_compress(self, col_lower: List[_LeveledBit], col_upper: List[_LeveledBit], k: int, compress_fn) -> None:
-        """Earliest-schedule k:2 / k:3 compressor. ``compress_fn(*bits) -> (sum, *carries)`` is taken off ``self`` so a
+        """Canonical-schedule k:2 / k:3 compressor. ``compress_fn(*bits) -> (sum, *carries)`` is taken off ``self`` so a
         subclass gate override (e.g. the parallel compressors) is honored; the k input bits follow the active mode."""
         taken = self._take_bits(col_lower, k)
         sum_expr, *carries = compress_fn(*[t.expr for t in taken])
@@ -302,9 +302,9 @@ class FinalStageAdderBase(StageBase, abc.ABC):
 
 class CompressorTreeAccumulator(PartialProductAccumulatorBase):
     # Default: FIFO reduction. At widths 12-16 the FIFO path is ~37%
-    # shallower than earliest, and earliest only wins gates by 5-9%.
+    # shallower than canonical, and canonical only wins gates by 5-9%.
     # CompressorTree is typically chosen when delay matters, so we keep
-    # FIFO as the default and let users opt into earliest for area-first
+    # FIFO as the default and let users opt into canonical for area-first
     # flows.
     default_selection_mode: ClassVar[SelectionMode] = "fifo"
 
