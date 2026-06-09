@@ -1,14 +1,16 @@
 from dataclasses import dataclass
-from typing import DefaultDict, List, Literal, Tuple, Type
+from typing import DefaultDict, List, Optional, Tuple, Type
 
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import FinalStageAdderBase, StageMultiplierConfig, PartialProductAccumulatorBase
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType, FinalStageAdderBase, SelectionMode, SplitMode, StageMultiplierConfig, PartialProductAccumulatorBase
 from spirehdl.spirehdl import Concat, Const, Expr
 
 
 @dataclass
 class OutputConfig:
     out_width: int
-    optim_type: Literal["area", "speed"]
+    optim_type: OptimType
+    selection_mode: Optional[SelectionMode] = None
+    split_mode: Optional[SplitMode] = None
 
 def compressor_sum(
     config: StageMultiplierConfig | OutputConfig,

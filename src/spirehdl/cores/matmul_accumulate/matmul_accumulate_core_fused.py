@@ -3,12 +3,12 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from math import log2
-from typing import Callable, DefaultDict, Iterable, List, Literal, Optional
+from typing import Callable, DefaultDict, Iterable, List, Optional
 
 from spirehdl.aggregate.aggregate_array import Array
 from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption, PPAOption, PPGOption
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import StageBasedMultiplierIO, TwoInputAritConfig
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType, SelectionMode, SplitMode, StageBasedMultiplierIO, TwoInputAritConfig
 from spirehdl.cores.matmul_accumulate.matmul_accumulate_core import MatmulAccumulateCore, MatmulAccumulateIO, MMAcDims, MMAcWidths
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, fit_type, fit_width, reinterpret, s_ext
 from spirehdl.spirehdl_module import Component, Module
@@ -21,7 +21,9 @@ class MultiplierConfig:
     ppg_opt: PPGOption
     ppa_opt: PPAOption
     fsa_opt: FSAOption
-    optim_type: Literal["area", "speed"] = "area"
+    optim_type: OptimType = "area"
+    selection_mode: Optional[SelectionMode] = None
+    split_mode: Optional[SplitMode] = None
 
 
 @dataclass(frozen=True)
@@ -69,6 +71,8 @@ def fused_inner_product(vec_a: Iterable[Expr], vec_b: Iterable[Expr], c_term: Ex
         b_width=b_width,
         output_width=result_width,
         optim_type=mult_cfg.optim_type,
+        selection_mode=mult_cfg.selection_mode,
+        split_mode=mult_cfg.split_mode,
     )
 
     if mult_cfg.ppg_opt == PPGOption.BAUGH_WOOLEY:

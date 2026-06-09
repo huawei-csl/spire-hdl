@@ -45,7 +45,11 @@ def full_adder_low_area(x: Expr, y: Expr, z: Expr) -> Tuple[Expr, Expr]:
     return s, (x & y) | (y & z) | (z & x)
 
 
-SelectionMode = Literal["fifo", "lifo", "canonical"]
+OptimType = Literal["area", "speed"]
+SelectionMode = Literal["fifo", "lifo", "earliest"]
+# Prefix-FSA carry-tree split strategy (consumed in fsa_stages.py). Defined here, next to SelectionMode, so config
+# objects can carry it without importing the FSA module (which would be an import cycle).
+SplitMode = Literal["min_depth_splits", "first_split"]
 
 
 class _LeveledBit:
@@ -57,7 +61,7 @@ class _LeveledBit:
 
     - ``fifo``: left-to-right consumption (historical CompressorTree)
     - ``lifo``: stack-style ``pop()`` consumption (historical Wallace/Dadda/CarrySave/FourTwo)
-    - ``canonical``: earliest-arrival-first by ``(level, ord_)``
+    - ``earliest``: earliest-arrival-first by ``(level, ord_)``
     """
 
     __slots__ = ("expr", "level", "ord_")
@@ -75,7 +79,9 @@ class TwoInputAritConfig:
     b_width: int
     signed_a: bool = False
     signed_b: bool = False
-    optim_type: Literal["area", "speed"] = "area"
+    optim_type: OptimType = "area"
+    selection_mode: Optional[SelectionMode] = None
+    split_mode: Optional[SplitMode] = None
 
     @property
     def out_width(self) -> int:
@@ -88,7 +94,7 @@ class StageMultiplierConfig(TwoInputAritConfig):  # might be renamed to StageMul
     b_width: int
     signed_a: bool
     signed_b: bool
-    optim_type: Literal["area", "speed"]
+    optim_type: OptimType
 
     @property
     def out_width(self) -> int:
@@ -115,7 +121,7 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
     # Three modes are available:
     #   "fifo"      — consume bits from the front of the column (FIFO)
     #   "lifo"      — consume bits from the back of the column (LIFO / pop)
-    #   "canonical" — consume the k earliest-arriving bits by (level, ord_)
+    #   "earliest" — consume the k earliest-arriving bits by (level, ord_)
     #
     # Per-PPA defaults are set on concrete subclasses. Users can
     # override per-instance via the ``selection_mode`` constructor arg.
@@ -128,10 +134,9 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
         selection_mode: Optional[SelectionMode] = None,
     ) -> None:
         super().__init__(config)
-        self.selection_mode: SelectionMode = (
-            selection_mode if selection_mode is not None
-            else self.__class__.default_selection_mode
-        )
+        # Resolution order: explicit arg -> config.selection_mode -> this class's default.
+        mode = selection_mode if selection_mode is not None else getattr(config, "selection_mode", None)
+        self.selection_mode: SelectionMode = mode if mode is not None else self.__class__.default_selection_mode
         self._ord_counter = 0
 
     @abc.abstractmethod
@@ -174,7 +179,7 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
         self, bits: List[_LeveledBit], k: int,
     ) -> List[_LeveledBit]:
         """Pop ``k`` bits from ``bits`` using ``self.selection_mode``."""
-        if self.selection_mode == "canonical":
+        if self.selection_mode == "earliest":
             return self._take_earliest(bits, k)
         if self.selection_mode == "lifo":
             return self._take_lifo(bits, k)
@@ -265,6 +270,24 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
         col_upper.append(_LeveledBit(c2, l_outer, self._ord_counter + 2))
         self._ord_counter += 3
 
+    def _pop(self, bits: List[Expr], n: int = 1) -> List[Expr]:
+        """Pop ``n`` raw bits from a column honoring fifo (front) / lifo (back). Used by the next_cols buffer-swap
+        schedules; the earliest schedule routes through ``_take_bits`` instead and never reaches this."""
+        end = 0 if self.selection_mode == "fifo" else -1
+        return [bits.pop(end) for _ in range(n)]
+
+    def _apply_compress(self, col_lower: List[_LeveledBit], col_upper: List[_LeveledBit], k: int, compress_fn) -> None:
+        """Earliest-schedule k:2 / k:3 compressor. ``compress_fn(*bits) -> (sum, *carries)`` is taken off ``self`` so a
+        subclass gate override (e.g. the parallel compressors) is honored; the k input bits follow the active mode."""
+        taken = self._take_bits(col_lower, k)
+        sum_expr, *carries = compress_fn(*[t.expr for t in taken])
+        lvl = max(t.level for t in taken) + 2
+        col_lower.append(_LeveledBit(sum_expr, lvl, self._ord_counter))
+        self._ord_counter += 1
+        for carry in carries:
+            col_upper.append(_LeveledBit(carry, lvl, self._ord_counter))
+            self._ord_counter += 1
+
     @staticmethod
     def _column_heights(cols: DefaultDict[int, List[_LeveledBit]]) -> Dict[int, int]:
         """Return a snapshot of ``{weight: height}`` for every column."""
@@ -279,9 +302,9 @@ class FinalStageAdderBase(StageBase, abc.ABC):
 
 class CompressorTreeAccumulator(PartialProductAccumulatorBase):
     # Default: FIFO reduction. At widths 12-16 the FIFO path is ~37%
-    # shallower than canonical, and canonical only wins gates by 5-9%.
+    # shallower than earliest, and earliest only wins gates by 5-9%.
     # CompressorTree is typically chosen when delay matters, so we keep
-    # FIFO as the default and let users opt into canonical for area-first
+    # FIFO as the default and let users opt into earliest for area-first
     # flows.
     default_selection_mode: ClassVar[SelectionMode] = "fifo"
 
@@ -299,8 +322,8 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
         )
 
     def accumulate(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
-        if self.selection_mode == "canonical":
-            return self._accumulate_canonical(columns)
+        if self.selection_mode == "earliest":
+            return self._accumulate_earliest(columns)
         return self._accumulate_fifo_lifo(columns)
 
     def _accumulate_fifo_lifo(
@@ -332,10 +355,10 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
 
         return cols
 
-    def _accumulate_canonical(
+    def _accumulate_earliest(
         self, columns: Dict[int, List[Expr]]
     ) -> DefaultDict[int, List[Expr]]:
-        """Canonical schedule: in-place greedy reduction. Each column is
+        """Earliest schedule: in-place greedy reduction. Each column is
         reduced until height <= 2 before moving to the next weight.
         """
         cols = self._wrap_columns(columns)
@@ -353,7 +376,8 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
     def _compress_column(self, bits: List[Expr]) -> Tuple[List[Expr], List[Expr]]:
         sum_bits: List[Expr] = []
         carry_bits: List[Expr] = []
-        work_bits = list(bits)
+        # fifo consumes from the front (default); lifo consumes from the back. earliest never routes here.
+        work_bits = list(bits) if self.selection_mode != "lifo" else list(reversed(bits))
         while len(work_bits) >= 3:
             x, y, z = work_bits[:3]
             work_bits = work_bits[3:]
@@ -427,12 +451,15 @@ class StageBasedMultiplierBasic(Component):
         *,
         signed_a: bool = False,
         signed_b: bool = False,
-        optim_type: Literal["area", "speed"] = "area",
+        optim_type: OptimType = "area",
         ppg_cls: Type[PartialProductGeneratorBase],
         ppa_cls: Type[PartialProductAccumulatorBase] = CompressorTreeAccumulator,
         fsa_cls: Type[FinalStageAdderBase] = RippleCarryFinalAdder,
+        selection_mode: Optional[SelectionMode] = None,
+        split_mode: Optional[SplitMode] = None,
     ) -> None:
-        self.config = StageMultiplierConfig(a_w, b_w, signed_a, signed_b, optim_type)
+        self.config = StageMultiplierConfig(a_w, b_w, signed_a, signed_b, optim_type,
+                                            selection_mode=selection_mode, split_mode=split_mode)
 
         supported = ppg_cls.supported_signatures
         if supported is not None and (signed_a, signed_b) not in supported:
