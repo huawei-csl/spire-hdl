@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, ClassVar, Dict, List, Optional, Set, Tuple
+from typing import Callable, ClassVar, Dict, List, Literal, Optional, Set, Tuple
 
 from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
     FinalStageAdderBase, full_adder_fast, full_adder_fast2, full_adder_low_area,
@@ -8,6 +8,13 @@ from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core impor
 from spirehdl.arithmetic.prefix_adders.prefix_adder_topologies import P_brent_kung, P_han_carlson, P_kogge_stone, P_ladner_fischer, P_ripple_carry, P_sklansky, P_sparse_kogge_stone_2, P_sparse_kogge_stone_4, Pair, analyze_prefix_matrix, legalize_P
 from spirehdl.arithmetic.prefix_adders.prefix_adder_specials import ZCG_n, multi_scan_n
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, UInt, fit_type
+
+
+# How the prefix carry-network picks the split point for each (i, j) group node. A string mode (rather than a bool) so
+# further strategies can be added later. The FSA-stage analogue of the PPA accumulator's ``SelectionMode``.
+#   "min_depth_splits" — split points from analyze_prefix_matrix that minimize the prefix tree's recursion depth
+#   "first_split"      — the first legal split found (_find_split); depth-agnostic
+SplitMode = Literal["min_depth_splits", "first_split"]
 
 
 def _exists(nodes: Set[Pair], i: int, j: int) -> bool:
@@ -113,7 +120,12 @@ class PrefixAdderFinalStage(FinalStageAdderBase):
     prefix_matrix_builder: ClassVar[Callable[[int], Set[Pair]]] = staticmethod(
         None # to be overridden by subclasses
     )
-    depth_optimize: ClassVar[bool] = True
+    # Per-subclass default split strategy; override per-instance via the ``split_mode`` constructor arg.
+    default_split_mode: ClassVar[SplitMode] = "min_depth_splits"
+
+    def __init__(self, config, *, split_mode: Optional[SplitMode] = None) -> None:
+        super().__init__(config)
+        self.split_mode: SplitMode = split_mode if split_mode is not None else self.__class__.default_split_mode
 
     def resolve(self, columns: Dict[int, List[Expr]], carry_in: Optional[Expr] = None) -> List[Expr]:
         """Collapse <=2 bits/column into a final sum using a prefix carry network.
@@ -160,7 +172,7 @@ class PrefixAdderFinalStage(FinalStageAdderBase):
         nodes = legalize_P(working_width, raw_nodes)
 
         best_k: Dict[Pair, int] = {}
-        if self.depth_optimize and nodes:
+        if self.split_mode == "min_depth_splits" and nodes:
             # Precompute split points that minimize recursion depth.
             _, best_k, _, _ = analyze_prefix_matrix(working_width, nodes)
 
@@ -179,7 +191,7 @@ class PrefixAdderFinalStage(FinalStageAdderBase):
                 raise ValueError(
                     f"Prefix matrix missing node {(i, j)} required for carry propagation"
                 )
-            if self.depth_optimize:
+            if self.split_mode == "min_depth_splits":
                 k = best_k[key]
             else:
                 k = _find_split(nodes, i, j)
@@ -218,7 +230,7 @@ class SklanskyPrefixFinalStage(PrefixAdderFinalStage):
 
 class RipplePrefixFinalStage(PrefixAdderFinalStage):
     prefix_matrix_builder: ClassVar[Callable[[int], Set[Pair]]] = staticmethod(P_ripple_carry)
-    depth_optimize: ClassVar[bool] = False
+    default_split_mode: ClassVar[SplitMode] = "first_split"
 
 class HanCarlsonPrefixFinalStage(PrefixAdderFinalStage):
     prefix_matrix_builder: ClassVar[Callable[[int], Set[Pair]]] = staticmethod(P_han_carlson)
