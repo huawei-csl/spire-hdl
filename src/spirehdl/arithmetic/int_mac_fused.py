@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Optional
 
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import SelectionMode, SplitMode
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType, SelectionMode, SplitMode
 
 from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
@@ -66,9 +66,8 @@ class MacBuildConfig:
     ppa_opt: PPAOption = PPAOption.ACCUMULATOR_TREE
     fsa_opt: FSAOption = FSAOption.RIPPLE_CARRY
     encoding: Encoding = Encoding.unsigned
-    optim_type: Literal["area", "speed"] = "area"
+    optim_type: OptimType = "area"
     use_operator: bool = False
-    # None -> the chosen PPA accumulator / prefix-FSA use their class defaults (unchanged behavior).
     selection_mode: Optional[SelectionMode] = None
     split_mode: Optional[SplitMode] = None
 

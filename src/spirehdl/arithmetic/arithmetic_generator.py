@@ -5,7 +5,7 @@ import json
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import Any, Sequence
 
 from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
@@ -46,7 +46,7 @@ from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_fused import (
     MatmulAccumulateComponent as MatmulAccumulateFusedComponent,
     MultiplierConfig as MatmulFusedMultiplierConfig,
 )
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import SelectionMode, SplitMode
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType, SelectionMode, SplitMode
 from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_float import (
     FpMMAcCfg,
     FpMMAcDims,
@@ -82,8 +82,7 @@ class MultiplierGeneratorConfig:
     fsa_opt: FSAOption = FSAOption.RIPPLE_CARRY
     input_encoding: Encoding = Encoding.unsigned
     output_encoding: Encoding | None = None
-    optim_type: Literal["area", "speed"] = "area"
-    # None -> the chosen PPA accumulator / prefix-FSA use their class defaults (unchanged behavior).
+    optim_type: OptimType = "area"
     selection_mode: SelectionMode | None = None
     split_mode: SplitMode | None = None
     module_name: str | None = None
@@ -97,7 +96,7 @@ class AdderGeneratorConfig:
     fsa_opt: FSAOption = FSAOption.RIPPLE_CARRY
     input_encoding: Encoding = Encoding.unsigned
     output_encoding: Encoding | None = None
-    optim_type: Literal["area", "speed"] = "area"
+    optim_type: OptimType = "area"
     full_output_bit: bool = True
     module_name: str | None = None
     with_clock: bool = False
@@ -114,8 +113,7 @@ class MacGeneratorConfig:
     fsa_opt: FSAOption = FSAOption.RIPPLE_CARRY
     input_encoding: Encoding = Encoding.unsigned
     output_encoding: Encoding | None = None
-    optim_type: Literal["area", "speed"] = "area"
-    # None -> the chosen PPA accumulator / prefix-FSA use their class defaults (unchanged behavior).
+    optim_type: OptimType = "area"
     selection_mode: SelectionMode | None = None
     split_mode: SplitMode | None = None
     module_name: str | None = None
@@ -137,7 +135,7 @@ class MatmulAccumulateGeneratorConfig:
     fsa_opt: FSAOption = FSAOption.RIPPLE_CARRY
     input_encoding: Encoding = Encoding.unsigned
     output_encoding: Encoding | None = None
-    optim_type: Literal["area", "speed"] = "area"
+    optim_type: OptimType = "area"
     module_name: str | None = None
     with_clock: bool = False
     with_reset: bool = False
@@ -157,7 +155,7 @@ class FpMatmulAccumulateGeneratorConfig:
     ppg_opt: PPGOption = PPGOption.AND
     ppa_opt: PPAOption = PPAOption.ACCUMULATOR_TREE
     fsa_opt: FSAOption = FSAOption.RIPPLE_CARRY
-    optim_type: Literal["area", "speed"] = "area"
+    optim_type: OptimType = "area"
     module_name: str | None = None
     with_clock: bool = False
     with_reset: bool = False
@@ -197,7 +195,7 @@ class MatmulAccumulateFusedGeneratorConfig:
     ppa_opt: PPAOption = PPAOption.ACCUMULATOR_TREE
     fsa_opt: FSAOption = FSAOption.RIPPLE_CARRY
     input_encoding: Encoding = Encoding.unsigned
-    optim_type: Literal["area", "speed"] = "area"
+    optim_type: OptimType = "area"
     module_name: str | None = None
     with_clock: bool = False
     with_reset: bool = False

@@ -19,7 +19,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from itertools import product
 from pathlib import Path
-from typing import Literal
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType
 
 from tqdm import tqdm
 
@@ -149,7 +149,7 @@ def _yosys_metrics(module) -> dict:
 # ---------------------------------------------------------------------------
 
 def eval_adder(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool,
-                optim_type: Literal["area", "speed"]) -> dict:
+                optim_type: OptimType) -> dict:
     reset_shared_cache()
     adder = StageBasedPrefixAdder(
         a_w=a_w, b_w=b_w, signed_a=signed, signed_b=signed,
@@ -168,7 +168,7 @@ def eval_adder(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool,
 
 
 def eval_subtractor(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool,
-                     optim_type: Literal["area", "speed"]) -> dict:
+                     optim_type: OptimType) -> dict:
     reset_shared_cache()
     sub = StageBasedSubtractor(
         a_w=a_w, b_w=b_w, signed_a=signed, signed_b=signed,
@@ -188,7 +188,7 @@ def eval_subtractor(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool,
 
 def eval_multiplier(
     ppg_opt: PPGOption, ppa_opt: PPAOption, fsa_opt: FSAOption,
-    a_w: int, b_w: int, encoding: Encoding, optim_type: Literal["area", "speed"],
+    a_w: int, b_w: int, encoding: Encoding, optim_type: OptimType,
 ) -> dict:
     reset_shared_cache()
     multiplier = MultiplierOption.STAGE_BASED_MULTIPLIER.value(
@@ -275,7 +275,7 @@ def sweep_multipliers(bitwidths: list[int], max_workers: int = 16) -> list[dict]
 def eval_mac(
     ppg_opt: PPGOption, ppa_opt: PPAOption, fsa_opt: FSAOption,
     n_bits: int, c_bits: int, encoding: Encoding,
-    optim_type: Literal["area", "speed"],
+    optim_type: OptimType,
 ) -> dict:
     """Evaluate a single fused MAC configuration (y = a*b + c)."""
     reset_shared_cache()
@@ -327,7 +327,7 @@ def sweep_macs(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
 def eval_mia(
     ppa_opt: PPAOption, fsa_opt: FSAOption,
     n_inputs: int, n_bits: int, encoding: Encoding,
-    optim_type: Literal["area", "speed"],
+    optim_type: OptimType,
 ) -> dict:
     """Evaluate a multi-input add (MIA): y = sum(operands), N≥3 symmetric width.
 
@@ -400,7 +400,7 @@ def sweep_mia(bitwidths: list[int], n_inputs_list: list[int],
 def eval_inner_product(
     ppg_opt: PPGOption, ppa_opt: PPAOption, fsa_opt: FSAOption,
     n_terms: int, n_bits: int, encoding: Encoding,
-    optim_type: Literal["area", "speed"],
+    optim_type: OptimType,
 ) -> dict:
     """Evaluate a fused inner product: y = a0*b0 + a1*b1 + ... (n_terms pairs, no c)."""
     reset_shared_cache()

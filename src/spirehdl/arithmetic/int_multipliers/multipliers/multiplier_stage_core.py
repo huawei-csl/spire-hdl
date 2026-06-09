@@ -45,6 +45,7 @@ def full_adder_low_area(x: Expr, y: Expr, z: Expr) -> Tuple[Expr, Expr]:
     return s, (x & y) | (y & z) | (z & x)
 
 
+OptimType = Literal["area", "speed"]
 SelectionMode = Literal["fifo", "lifo", "earliest"]
 # Prefix-FSA carry-tree split strategy (consumed in fsa_stages.py). Defined here, next to SelectionMode, so config
 # objects can carry it without importing the FSA module (which would be an import cycle).
@@ -78,8 +79,7 @@ class TwoInputAritConfig:
     b_width: int
     signed_a: bool = False
     signed_b: bool = False
-    optim_type: Literal["area", "speed"] = "area"
-    # None -> each PPA accumulator / prefix-FSA falls back to its own class default (i.e. unchanged behavior).
+    optim_type: OptimType = "area"
     selection_mode: Optional[SelectionMode] = None
     split_mode: Optional[SplitMode] = None
 
@@ -94,7 +94,7 @@ class StageMultiplierConfig(TwoInputAritConfig):  # might be renamed to StageMul
     b_width: int
     signed_a: bool
     signed_b: bool
-    optim_type: Literal["area", "speed"]
+    optim_type: OptimType
 
     @property
     def out_width(self) -> int:
@@ -451,7 +451,7 @@ class StageBasedMultiplierBasic(Component):
         *,
         signed_a: bool = False,
         signed_b: bool = False,
-        optim_type: Literal["area", "speed"] = "area",
+        optim_type: OptimType = "area",
         ppg_cls: Type[PartialProductGeneratorBase],
         ppa_cls: Type[PartialProductAccumulatorBase] = CompressorTreeAccumulator,
         fsa_cls: Type[FinalStageAdderBase] = RippleCarryFinalAdder,

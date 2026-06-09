@@ -1,11 +1,11 @@
 import abc
 from collections import defaultdict
-from typing import ClassVar, DefaultDict, Dict, List, Literal, Optional, Tuple, Type
+from typing import ClassVar, DefaultDict, Dict, List, Optional, Tuple, Type
 
 import numpy as np
 
 from spirehdl.arithmetic.encoding.sign_magnitude import SignMagnitudeToTwosComplementDecoder
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, SelectionMode, SplitMode, StageBasedMultiplierBasic, StageBasedMultiplierIO
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType, CompressorTreeAccumulator, FinalStageAdderBase, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, SelectionMode, SplitMode, StageBasedMultiplierBasic, StageBasedMultiplierIO
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, from_encoding, to_encoding
 from spirehdl.spirehdl_module import Component
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, Signal, SInt, UInt, mux, mux_if
@@ -20,7 +20,7 @@ class StageBasedMultiplierBase(Component):
         b_w: int,
         a_encoding: Encoding = Encoding.unsigned,
         b_encoding: Encoding = Encoding.unsigned,
-        optim_type: Literal["area", "speed"] = "area",
+        optim_type: OptimType = "area",
         ppg_cls: Optional[Type[PartialProductGeneratorBase]] = None,
         ppa_cls: Optional[Type[PartialProductAccumulatorBase]] = None,
         fsa_cls: Optional[Type[FinalStageAdderBase]] = None,

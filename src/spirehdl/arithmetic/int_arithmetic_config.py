@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal, Sequence
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType
 
 from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
@@ -26,7 +27,7 @@ class MultiplierConfig:
     ppg_opt: PPGOption | None = None
     ppa_opt: PPAOption | None = None
     fsa_opt: FSAOption | None = None
-    optim_type: Literal["area", "speed"] = "area"
+    optim_type: OptimType = "area"
 
 
 @dataclass
@@ -35,7 +36,7 @@ class AdderConfig:
 
     use_operator: bool = False
     encoding: Encoding = Encoding.unsigned
-    optim_type: Literal["area", "speed"] = "area"
+    optim_type: OptimType = "area"
     fsa_opt: FSAOption | None = None
     full_output_bit: bool = True
 
@@ -141,7 +142,7 @@ class SubtractorConfig:
 
     use_operator: bool = False
     encoding: Encoding = Encoding.unsigned
-    optim_type: Literal["area", "speed"] = "area"
+    optim_type: OptimType = "area"
     fsa_opt: FSAOption | None = None
     full_output_bit: bool = True
 
@@ -269,7 +270,7 @@ class ArithmeticConfig:
     """
 
     encoding: Encoding = Encoding.unsigned
-    optim_type: Literal["area", "speed"] = "area"
+    optim_type: OptimType = "area"
     fsa_opt: FSAOption = FSAOption.PREFIX_BRENT_KUNG
     # multiplier-specific
     multiplier_opt: MultiplierOption = MultiplierOption.STAGE_BASED_MULTIPLIER

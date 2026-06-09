@@ -1,11 +1,11 @@
 import abc
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import ClassVar, DefaultDict, Dict, List, Literal, Optional, Tuple, Type
+from typing import ClassVar, DefaultDict, Dict, List, Optional, Tuple, Type
 
 import numpy as np
 
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, StageMultiplierConfig, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO, TwoInputAritConfig
+from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType, CompressorTreeAccumulator, FinalStageAdderBase, StageMultiplierConfig, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO, TwoInputAritConfig
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, from_encoding, to_encoding
 from spirehdl.spirehdl_module import Component
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, Signal, SInt, UInt, mux, mux_if
@@ -18,7 +18,7 @@ class AdderConfig(TwoInputAritConfig):
     b_width: int
     signed_a: Optional[bool]
     signed_b: Optional[bool]
-    optim_type: Literal["area", "speed"]
+    optim_type: OptimType
     full_output_bit: bool = False
 
     @property
@@ -35,7 +35,7 @@ class StageBasedAdderBase(Component):
         *,
         signed_a: bool = False, # maybe we need to use encoding instead
         signed_b: bool = False,
-        optim_type: Literal["area", "speed"] = "area",
+        optim_type: OptimType = "area",
         fsa_cls: Optional[Type[FinalStageAdderBase]] = None,
         full_output_bit: bool = False,
     ) -> None:
@@ -55,7 +55,7 @@ class StageBasedPrefixAdder(StageBasedAdderBase):
         *,
         signed_a: bool = False, # maybe we need to use encoding instead
         signed_b: bool = False,
-        optim_type: Literal["area", "speed"] = "area",
+        optim_type: OptimType = "area",
         fsa_cls: Optional[Type[FinalStageAdderBase]] = None,
         full_output_bit: bool = True, # True corresponds to output type Encoding.unsigned_overflow
     ) -> None:
@@ -100,7 +100,7 @@ class StageBasedSubtractor(StageBasedAdderBase):
         *,
         signed_a: bool = False,
         signed_b: bool = False,
-        optim_type: Literal["area", "speed"] = "area",
+        optim_type: OptimType = "area",
         fsa_cls: Optional[Type[FinalStageAdderBase]] = None,
         full_output_bit: bool = True,
     ) -> None:
