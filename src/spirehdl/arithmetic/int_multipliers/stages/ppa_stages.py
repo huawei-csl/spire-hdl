@@ -65,14 +65,14 @@ class WallaceTreeAccumulator(PartialProductAccumulatorBase):
                 orig_height = len(bits)
 
                 while len(bits) >= 3:
-                    x, y, z = bits.pop(), bits.pop(), bits.pop()
+                    x, y, z = self._pop(bits, 3)
                     s, c = self._full_adder(x, y, z)
                     next_cols[weight].append(s)
                     next_cols[weight + 1].append(c)
                     progress = True
 
                 if len(bits) == 2 and orig_height > 2:
-                    s, c = half_adder(bits.pop(), bits.pop())
+                    s, c = half_adder(*self._pop(bits, 2))
                     next_cols[weight].append(s)
                     next_cols[weight + 1].append(c)
                     progress = True
@@ -315,7 +315,7 @@ class CarrySaveAccumulator(PartialProductAccumulatorBase):
             for weight in sorted(cols.keys()):
                 bits = list(cols[weight])
                 while len(bits) >= 3:
-                    x, y, z = bits.pop(), bits.pop(), bits.pop()
+                    x, y, z = self._pop(bits, 3)
                     s, c = self._full_adder(x, y, z)
                     next_cols[weight].append(s)
                     next_cols[weight + 1].append(c)
@@ -408,23 +408,20 @@ class FourTwoCompressorAccumulator(PartialProductAccumulatorBase):
                 orig_height = len(bits)
 
                 while len(bits) >= 4:
-                    a = bits.pop()
-                    b = bits.pop()
-                    c = bits.pop()
-                    d = bits.pop()
+                    a, b, c, d = self._pop(bits, 4)
                     sum_bit, carry_low, carry_high = self._compress_4_2(a, b, c, d)
                     next_cols[weight].append(sum_bit)
                     next_cols[weight + 1].extend((carry_low, carry_high))
                     progress = True
 
                 if len(bits) == 3:
-                    x, y, z = bits.pop(), bits.pop(), bits.pop()
+                    x, y, z = self._pop(bits, 3)
                     s, c = self._full_adder(x, y, z)
                     next_cols[weight].append(s)
                     next_cols[weight + 1].append(c)
                     progress = True
                 elif len(bits) == 2 and orig_height > 2:
-                    s, c = half_adder(bits.pop(), bits.pop())
+                    s, c = half_adder(*self._pop(bits, 2))
                     next_cols[weight].append(s)
                     next_cols[weight + 1].append(c)
                     progress = True
@@ -477,8 +474,8 @@ class FourTwoCompressorParallelAccumulator(FourTwoCompressorAccumulator):
     with an explicit horizontal carry-in) in place of the default pair
     of cascaded full adders.
 
-    Forces LIFO because the canonical path uses ``_apply_c42`` which
-    hard-codes cascaded FAs and would bypass this override.
+    Defaults to LIFO (the historically tuned mode). The base ``_apply_c42`` hard-codes cascaded FAs, so the canonical
+    path below is overridden to route the 4:2 step through ``_apply_compress`` and pick up this parallel override.
     """
 
     default_selection_mode: ClassVar[SelectionMode] = "lifo"
@@ -498,6 +495,25 @@ class FourTwoCompressorParallelAccumulator(FourTwoCompressorAccumulator):
         sum_bit = parity_abc ^ d ^ carry_in
         carry_bit = (parity_abc & d) | (parity_abc & carry_in) | (d & carry_in)
         return sum_bit, carry_bit, carry_chain_out
+
+    def _accumulate_canonical(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
+        """Like the base canonical reduction but the 4:2 step goes through ``_apply_compress(self._compress_4_2)`` so the
+        true-4:2 parallel gates are used instead of the base cascaded-FA ``_apply_c42``."""
+        cols = self._wrap_columns(columns)
+        changed = True
+        while changed:
+            changed = False
+            for weight in sorted(list(cols.keys())):
+                while len(cols[weight]) > 2:
+                    h = len(cols[weight])
+                    if h >= 4:
+                        self._apply_compress(cols[weight], cols[weight + 1], 4, self._compress_4_2)
+                    elif h == 3:
+                        self._apply_fa(cols[weight], cols[weight + 1], self._full_adder)
+                    else:
+                        self._apply_ha(cols[weight], cols[weight + 1])
+                    changed = True
+        return self._unwrap_columns(cols)
 
 
 class FiveTwoCompressorAccumulator(PartialProductAccumulatorBase):
@@ -525,7 +541,28 @@ class FiveTwoCompressorAccumulator(PartialProductAccumulatorBase):
         self._zero = Const(False, Bool())
 
     def accumulate(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
+        if self.selection_mode == "canonical":
+            return self._accumulate_canonical(columns)
         return self._accumulate_fifo_lifo(columns)
+
+    def _accumulate_canonical(self, columns: Dict[int, List[Expr]]) -> DefaultDict[int, List[Expr]]:
+        """Canonical schedule: in-place earliest-arrival reduction down the 5:2 → 4:2 → FA ladder until every column is
+        ≤2 high. The 5:2 step goes through ``_apply_compress(self._compress_5_2)`` so the parallel variant is honored."""
+        cols = self._wrap_columns(columns)
+        changed = True
+        while changed:
+            changed = False
+            for weight in sorted(list(cols.keys())):
+                while len(cols[weight]) > 2:
+                    h = len(cols[weight])
+                    if h >= 5:
+                        self._apply_compress(cols[weight], cols[weight + 1], 5, self._compress_5_2)
+                    elif h >= 4:
+                        self._apply_c42(cols[weight], cols[weight + 1], self._full_adder, self._zero)
+                    else:
+                        self._apply_fa(cols[weight], cols[weight + 1], self._full_adder)
+                    changed = True
+        return self._unwrap_columns(cols)
 
     def _accumulate_fifo_lifo(
         self, columns: Dict[int, List[Expr]]
@@ -544,34 +581,27 @@ class FiveTwoCompressorAccumulator(PartialProductAccumulatorBase):
                 orig_height = len(bits)
 
                 while len(bits) >= 5:
-                    a = bits.pop()
-                    b = bits.pop()
-                    c = bits.pop()
-                    d = bits.pop()
-                    e = bits.pop()
+                    a, b, c, d, e = self._pop(bits, 5)
                     sum_bit, carry_low, carry_high = self._compress_5_2(a, b, c, d, e)
                     next_cols[weight].append(sum_bit)
                     next_cols[weight + 1].extend((carry_low, carry_high))
                     progress = True
 
                 if len(bits) == 4:
-                    a = bits.pop()
-                    b = bits.pop()
-                    c = bits.pop()
-                    d = bits.pop()
+                    a, b, c, d = self._pop(bits, 4)
                     s1, c1 = self._full_adder(a, b, c)
                     s2, c2 = self._full_adder(s1, d, self._zero)
                     next_cols[weight].append(s2)
                     next_cols[weight + 1].extend((c1, c2))
                     progress = True
                 elif len(bits) == 3:
-                    x, y, z = bits.pop(), bits.pop(), bits.pop()
+                    x, y, z = self._pop(bits, 3)
                     s, c = self._full_adder(x, y, z)
                     next_cols[weight].append(s)
                     next_cols[weight + 1].append(c)
                     progress = True
                 elif len(bits) == 2 and orig_height > 2:
-                    s, c = half_adder(bits.pop(), bits.pop())
+                    s, c = half_adder(*self._pop(bits, 2))
                     next_cols[weight].append(s)
                     next_cols[weight + 1].append(c)
                     progress = True

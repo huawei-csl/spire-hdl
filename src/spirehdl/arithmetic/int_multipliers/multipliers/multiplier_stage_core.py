@@ -265,6 +265,24 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
         col_upper.append(_LeveledBit(c2, l_outer, self._ord_counter + 2))
         self._ord_counter += 3
 
+    def _pop(self, bits: List[Expr], n: int = 1) -> List[Expr]:
+        """Pop ``n`` raw bits from a column honoring fifo (front) / lifo (back). Used by the next_cols buffer-swap
+        schedules; the canonical schedule routes through ``_take_bits`` instead and never reaches this."""
+        end = 0 if self.selection_mode == "fifo" else -1
+        return [bits.pop(end) for _ in range(n)]
+
+    def _apply_compress(self, col_lower: List[_LeveledBit], col_upper: List[_LeveledBit], k: int, compress_fn) -> None:
+        """Canonical-schedule k:2 / k:3 compressor. ``compress_fn(*bits) -> (sum, *carries)`` is taken off ``self`` so a
+        subclass gate override (e.g. the parallel compressors) is honored; the k input bits follow the active mode."""
+        taken = self._take_bits(col_lower, k)
+        sum_expr, *carries = compress_fn(*[t.expr for t in taken])
+        lvl = max(t.level for t in taken) + 2
+        col_lower.append(_LeveledBit(sum_expr, lvl, self._ord_counter))
+        self._ord_counter += 1
+        for carry in carries:
+            col_upper.append(_LeveledBit(carry, lvl, self._ord_counter))
+            self._ord_counter += 1
+
     @staticmethod
     def _column_heights(cols: DefaultDict[int, List[_LeveledBit]]) -> Dict[int, int]:
         """Return a snapshot of ``{weight: height}`` for every column."""
@@ -353,7 +371,8 @@ class CompressorTreeAccumulator(PartialProductAccumulatorBase):
     def _compress_column(self, bits: List[Expr]) -> Tuple[List[Expr], List[Expr]]:
         sum_bits: List[Expr] = []
         carry_bits: List[Expr] = []
-        work_bits = list(bits)
+        # fifo consumes from the front (default); lifo consumes from the back. canonical never routes here.
+        work_bits = list(bits) if self.selection_mode != "lifo" else list(reversed(bits))
         while len(work_bits) >= 3:
             x, y, z = work_bits[:3]
             work_bits = work_bits[3:]
