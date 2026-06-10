@@ -121,7 +121,7 @@ class PartialProductAccumulatorBase(StageBase, abc.ABC):
     # Three modes are available:
     #   "fifo"      — consume bits from the front of the column (FIFO)
     #   "lifo"      — consume bits from the back of the column (LIFO / pop)
-    #   "earliest" — consume the k earliest-arriving bits by (level, ord_)
+    #   "earliest"  — consume the k earliest-arriving bits by (level, ord_)
     #
     # Per-PPA defaults are set on concrete subclasses. Users can
     # override per-instance via the ``selection_mode`` constructor arg.
