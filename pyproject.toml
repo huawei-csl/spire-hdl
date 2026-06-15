@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "spire-hdl"
 version = "0.1.0"
-description = "SpireHDL is a hardware description language for digital circuits."
+description = "Spire is a hardware description language for digital circuits."
 authors = [{ name = "Felix Arnold", email = "felix.arnold@h-partners.com" }]
 readme = "README.md"
 requires-python = ">=3.12"

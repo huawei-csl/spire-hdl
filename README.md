@@ -78,13 +78,21 @@ Other markdown documents in this repository:
 
 ## Installation
 
+Install the latest release from PyPI:
+
+```bash
+pip install spire-hdl
+```
+
+For development, install from source in editable mode:
+
 ```bash
 git clone https://github.com/huawei-csl/spire-hdl.git
 cd spire-hdl
 pip install -e .
 ```
 
-The library relies on the packages listed in `requirements.txt`.  Optional regression tests require Yosys/Pyosys and aigverse if you plan to exercise the external tooling integration flows.
+The library relies on the packages listed in `requirements.txt`.
 
 ## Quick start
 
