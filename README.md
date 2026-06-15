@@ -2,13 +2,13 @@
   <img src="imgs/spire-hdl.png" alt="SpireHDL" width="250">
 </div>
 
+<br>
+
 <p align="center">
   <a href="https://github.com/huawei-csl/spire-hdl/actions/workflows/ci.yml"><img src="https://github.com/huawei-csl/spire-hdl/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://pypi.org/project/spire-hdl/"><img src="https://img.shields.io/pypi/v/spire-hdl.svg" alt="PyPI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-BSD--3--Clause--Clear-blue.svg" alt="License: BSD-3-Clause-Clear"></a>
 </p>
-
-<br>
 
 A modern Python HDL that compiles concise, composable hardware descriptions to synthesizable Verilog and AIG/AAG netlists — with synthesis optimization and a cycle-accurate simulator built in.
 
