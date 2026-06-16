@@ -13,7 +13,7 @@
 A modern Python HDL that compiles concise, composable hardware descriptions to synthesizable Verilog and AIG netlists — with synthesis optimization and a cycle-accurate simulator built in.
 
 - **Built for humans and agents alike:** a small surface that stays readable as a design grows
-- **Reduces area and delay vs. a traditional Verilog flow:** optimization is part of the compile, not an afterthought
+- **Reduces area and delay vs. a traditional Verilog flow:** optimization is part of the compile
 - **Integrated with ABC and mockturtle:** modern synthesis optimization wired directly into the compilation pipeline
 - **Arithmetic library with automated replacement:** swap adders, multipliers, and FP cores driven by an objective
 - **Cycle-accurate Python simulator"** drive inputs, tick clocks, inspect expressions/outputs without leaving Python
