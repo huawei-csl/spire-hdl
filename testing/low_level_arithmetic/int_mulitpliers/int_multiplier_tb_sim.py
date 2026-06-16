@@ -3,7 +3,7 @@ from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib 
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, MultiplierTestVectors
 from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import MultiplierTestVectorsInt, StageBasedMultiplierBasic
 from spirehdl.arithmetic.int_multipliers.multipliers.multipliers_ext_optimized import OptimizedMultiplier, OptimizedMultiplierFrom4BitBlocksStrong
-from spirehdl.arithmetic.int_multipliers.multipliers.mutipliers_ext import StarMultiplier
+from spirehdl.arithmetic.int_multipliers.multipliers.multipliers_ext import StarMultiplier
 from spirehdl.helpers import extract_yosys_metrics_from_verilog_file, get_yosys_metrics, run_vectors, run_vectors_on_simulator
 from spirehdl.spirehdl_simulator import Simulator
 from spirehdl.spirehdl_verilog_testbench import TestbenchGenSimulator, write_vector_data_file

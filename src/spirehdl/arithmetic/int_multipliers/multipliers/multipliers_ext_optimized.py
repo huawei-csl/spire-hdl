@@ -13,7 +13,7 @@ import numpy as np
 
 from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, StageMultiplierConfig, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO
 
-from spirehdl.arithmetic.int_multipliers.multipliers.mutipliers_ext import StageBasedMultiplierBase
+from spirehdl.arithmetic.int_multipliers.multipliers.multipliers_ext import StageBasedMultiplierBase
 from spirehdl.arithmetic.int_multipliers.stages.ppa_fsa_util import OutputConfig, compressor_sum
 from spirehdl.arithmetic.int_multipliers.stages.ppa_stages import CarrySaveAccumulator
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, MultiplierTestVectors, from_encoding, to_encoding
