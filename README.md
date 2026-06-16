@@ -160,7 +160,6 @@ Modules can be exported to Verilog or AIG for downstream synthesis, equivalence 
 
 - `Component` subclasses package reusable structures. They can materialize new modules (`to_module`), import designs from Verilog or AIG formats (`from_verilog`, `from_aag_lines`), and retag ports as internals (`make_internal`). Components also expose `get_spec()` to drive `IOCollector` regrouping when you import flattened designs (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
 - `Module` is typically used at the top level or as an intermediate representation while you are still wiring a design. It offers constructors for inputs, outputs, wires, and registers; utilities for enumerating signals; Verilog emission with automatic width fitting; and a `module_analyze()` routine that reports combinational depth and node counts for timing exploration ([`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
-- `IOCollector` helps rebuild packed buses (e.g., `a[0] … a[N-1]` → `a[N-1:0]`) after reading back designs from AIG files or external synthesizers ([`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
 - Minimal end-to-end component example: [`testing/examples/simple_component.py`](testing/examples/simple_component.py).
 
 Short component + hierarchy usage example:
