@@ -73,17 +73,17 @@ In its simplest form, SpireHDL only needs these core files. This is intentional 
 
 Other markdown documents in this repository:
 
-- **State machines** — declaration with the `State` / `Encoding` API and `switch_` / `case_` bodies ([`README_state_machines.md`](docs/README_state_machines.md))
-- **Control structures** — `if_` / `elif_` / `else_` and `switch_` / `case_` / `default` context managers ([`README_control_structures.md`](docs/README_control_structures.md))
-- **Memories** — the `Memory` primitive (FIFOs, ROMs, RAMs), port wiring with `<<=`, simulation, and reading current state ([`README_memories.md`](docs/README_memories.md))
-- **Arithmetic optimization** — automatic replacement with `replace_arithmetic_ops` (adders, multipliers, subtractors) ([`README_arithmetic_optimization.md`](docs/README_arithmetic_optimization.md))
-- **Optimization decorators** — `@abc_optimized` / `@flowy_optimized` circuit optimization ([`README_optimization_decorators.md`](docs/README_optimization_decorators.md))
-- **FSM optimization** — the `optimized_fsm` and `optimized_encoding` context managers (Hopcroft minimisation + bit-assignment search) ([`README_fsm_optimization.md`](docs/README_fsm_optimization.md))
-- **Arithmetic generators** — evaluation scripts and extra tooling notes ([`README_arithmetic_generator.md`](docs/README_arithmetic_generator.md))
-- **Custom Verilog** — emit a hand-written Verilog block from a `Component` via `custom_verilog()`, with or without a Python sim model (blackbox) ([`README_custom_verilog.md`](docs/README_custom_verilog.md))
-- **AIG / AAG export & import** — lower a `Module` to an AIGER netlist and read AIG/AAG back in as a `Component` ([`README_aig_export.md`](docs/README_aig_export.md))
-- **Verilog testbench** — record stimuli and emit a synthesizable Verilog testbench that replays them against the generated RTL ([`README_verilog_testbench.md`](docs/README_verilog_testbench.md))
-- **Examples** — example designs exercising SpireHDL features ([`testing/examples/README.md`](testing/examples/README.md))
+- **[State machines](docs/README_state_machines.md)** — declaration with the `State` / `Encoding` API and `switch_` / `case_` bodies
+- **[Control structures](docs/README_control_structures.md)** — `if_` / `elif_` / `else_` and `switch_` / `case_` / `default` context managers
+- **[Memories](docs/README_memories.md)** — the `Memory` primitive (FIFOs, ROMs, RAMs), port wiring with `<<=`, simulation, and reading current state
+- **[Arithmetic optimization](docs/README_arithmetic_optimization.md)** — automatic replacement with `replace_arithmetic_ops` (adders, multipliers, subtractors)
+- **[Optimization decorators](docs/README_optimization_decorators.md)** — `@abc_optimized` / `@flowy_optimized` circuit optimization
+- **[FSM optimization](docs/README_fsm_optimization.md)** — the `optimized_fsm` and `optimized_encoding` context managers (Hopcroft minimisation + bit-assignment search)
+- **[Arithmetic generators](docs/README_arithmetic_generator.md)** — evaluation scripts and extra tooling notes
+- **[Custom Verilog](docs/README_custom_verilog.md)** — emit a hand-written Verilog block from a `Component` via `custom_verilog()`, with or without a Python sim model (blackbox)
+- **[AIG / AAG export & import](docs/README_aig_export.md)** — lower a `Module` to an AIGER netlist and read AIG/AAG back in as a `Component`
+- **[Verilog testbench](docs/README_verilog_testbench.md)** — record stimuli and emit a synthesizable Verilog testbench that replays them against the generated RTL
+- **[Examples](testing/examples/README.md)** — example designs exercising SpireHDL features
 
 ## Installation
 
