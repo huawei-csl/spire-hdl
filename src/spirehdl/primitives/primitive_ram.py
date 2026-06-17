@@ -73,24 +73,24 @@ class RamPrimitive(Component):
         AW, EW, MW = UInt(self._addr_w), UInt(self._elem_w), UInt(self._mask_chunks or 1)
         kw: dict = {}
         for k in range(self._nw):
-            kw[f"w{k}_addr"] = Signal(f"w{k}_addr", AW, "input")
-            kw[f"w{k}_data"] = Signal(f"w{k}_data", EW, "input")
-            kw[f"w{k}_en"]   = Signal(f"w{k}_en", Bool(), "input")
+            kw[f"w{k}_addr"] = Signal(typ=AW, kind="input", name=f"w{k}_addr")
+            kw[f"w{k}_data"] = Signal(typ=EW, kind="input", name=f"w{k}_data")
+            kw[f"w{k}_en"]   = Signal(typ=Bool(), kind="input", name=f"w{k}_en")
             if self._mask_chunks:
-                kw[f"w{k}_mask"] = Signal(f"w{k}_mask", MW, "input")
+                kw[f"w{k}_mask"] = Signal(typ=MW, kind="input", name=f"w{k}_mask")
         for k in range(self._nr):
-            kw[f"r{k}_addr"] = Signal(f"r{k}_addr", AW, "input")
-            kw[f"r{k}_data"] = Signal(f"r{k}_data", EW, "output")
+            kw[f"r{k}_addr"] = Signal(typ=AW, kind="input", name=f"r{k}_addr")
+            kw[f"r{k}_data"] = Signal(typ=EW, kind="output", name=f"r{k}_data")
             if self._registered_read:
-                kw[f"r{k}_en"] = Signal(f"r{k}_en", Bool(), "input")
+                kw[f"r{k}_en"] = Signal(typ=Bool(), kind="input", name=f"r{k}_en")
         for k in range(self._nrw):
-            kw[f"rw{k}_addr"]  = Signal(f"rw{k}_addr", AW, "input")
-            kw[f"rw{k}_din"]   = Signal(f"rw{k}_din", EW, "input")
-            kw[f"rw{k}_write"] = Signal(f"rw{k}_write", Bool(), "input")
-            kw[f"rw{k}_en"]    = Signal(f"rw{k}_en", Bool(), "input")
-            kw[f"rw{k}_dout"]  = Signal(f"rw{k}_dout", EW, "output")
+            kw[f"rw{k}_addr"]  = Signal(typ=AW, kind="input", name=f"rw{k}_addr")
+            kw[f"rw{k}_din"]   = Signal(typ=EW, kind="input", name=f"rw{k}_din")
+            kw[f"rw{k}_write"] = Signal(typ=Bool(), kind="input", name=f"rw{k}_write")
+            kw[f"rw{k}_en"]    = Signal(typ=Bool(), kind="input", name=f"rw{k}_en")
+            kw[f"rw{k}_dout"]  = Signal(typ=EW, kind="output", name=f"rw{k}_dout")
             if self._mask_chunks:
-                kw[f"rw{k}_mask"] = Signal(f"rw{k}_mask", MW, "input")
+                kw[f"rw{k}_mask"] = Signal(typ=MW, kind="input", name=f"rw{k}_mask")
 
         IO = make_dataclass("RamPrimitiveIO", [(n, Signal) for n in kw.keys()])
         self.io = IO(**kw)

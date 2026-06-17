@@ -76,9 +76,9 @@ class KaratsubaMultiplier(StageBasedMultiplierBase):
 
         # I/O interface
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(name="a", typ=UInt(self.aw), kind="input"),
-            b=Signal(name="b", typ=UInt(self.bw), kind="input"),
-            y=Signal(name="y", typ=UInt(self.aw + self.bw), kind="output"),
+            a=Signal(typ=UInt(self.aw), kind="input"),
+            b=Signal(typ=UInt(self.bw), kind="input"),
+            y=Signal(typ=UInt(self.aw + self.bw), kind="output"),
         )
 
         self.use_compressor = use_compressor

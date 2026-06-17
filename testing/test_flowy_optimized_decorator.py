@@ -123,8 +123,8 @@ def test_single_output_roundtrip() -> None:
     assert "a" in spec and "b" in spec and "y" in spec
 
     # Reinstantiate
-    sig_a = Signal("a", UInt(8), "input")
-    sig_b = Signal("b", UInt(8), "input")
+    sig_a = Signal(typ=UInt(8), kind="input", name="a")
+    sig_b = Signal(typ=UInt(8), kind="input", name="b")
     result = _instantiate_from_cache(aag_lines, spec, out_names, {"a": sig_a, "b": sig_b})
     assert isinstance(result, Signal)
     assert result.typ.width == 9  # 8-bit + 8-bit -> 9-bit
@@ -145,8 +145,8 @@ def test_tuple_output_roundtrip() -> None:
     aag_lines: List[str] = AigerExporter(module).get_aag()
     spec: Dict[str, HDLType] = module.get_spec()
 
-    sig_a = Signal("a", UInt(8), "input")
-    sig_b = Signal("b", UInt(8), "input")
+    sig_a = Signal(typ=UInt(8), kind="input", name="a")
+    sig_b = Signal(typ=UInt(8), kind="input", name="b")
     result = _instantiate_from_cache(aag_lines, spec, out_names, {"a": sig_a, "b": sig_b})
     assert isinstance(result, tuple) and len(result) == 2
     assert result[0].typ.width == 9  # sum

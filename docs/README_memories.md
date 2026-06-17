@@ -41,11 +41,11 @@ class Scratch(Component):
         class IO:
             we: Signal; aw: Signal; ar: Signal; din: Signal; dout: Signal
         self.io = IO(
-            we   = Signal("we",   Bool(),   "input"),
-            aw   = Signal("aw",   UInt(4),  "input"),
-            ar   = Signal("ar",   UInt(4),  "input"),
-            din  = Signal("din",  UInt(9),  "input"),
-            dout = Signal("dout", UInt(9),  "output"),
+            we   = Signal(typ=Bool(), kind="input"),
+            aw   = Signal(typ=UInt(4), kind="input"),
+            ar   = Signal(typ=UInt(4), kind="input"),
+            din  = Signal(typ=UInt(9), kind="input"),
+            dout = Signal(typ=UInt(9), kind="output"),
         )
         self.elaborate()
 

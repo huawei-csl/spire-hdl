@@ -137,7 +137,7 @@ The `Module` API checks that every output has a driver and every register has a 
 from spirehdl.spirehdl import Register, UInt
 
 m = Module("Counter", with_clock=True, with_reset=True)
-cnt = Register(UInt(8), init=0, name="cnt")       # or: cnt = m.reg(UInt(8), "cnt", init=0)
+cnt = Register(UInt(8), init=0)       # or: cnt = m.reg(UInt(8), "cnt", init=0)
 cnt <<= cnt + 1                                   # next-state = cnt + 1
 q = m.output(UInt(8), "q")                        # bind to a name first
 q <<= cnt                                          # (q <<= ... ; not m.output(...) <<= ...)
@@ -182,9 +182,9 @@ class SimpleAdder(Component):
             b: Signal
             sum: Signal
         self.io = IO(
-            a=Signal(name="a", typ=UInt(width), kind="input"),
-            b=Signal(name="b", typ=UInt(width), kind="input"),
-            sum=Signal(name="sum", typ=UInt(width + 1), kind="output"),
+            a=Signal(typ=UInt(width), kind="input"),
+            b=Signal(typ=UInt(width), kind="input"),
+            sum=Signal(typ=UInt(width + 1), kind="output"),
         )
         self.elaborate()
 
@@ -200,10 +200,10 @@ class Sum3Hierarchical(Component):
             c: Signal
             sum: Signal
         self.io = IO(
-            a=Signal(name="a", typ=UInt(8), kind="input"),
-            b=Signal(name="b", typ=UInt(8), kind="input"),
-            c=Signal(name="c", typ=UInt(8), kind="input"),
-            sum=Signal(name="sum", typ=UInt(10), kind="output"),
+            a=Signal(typ=UInt(8), kind="input"),
+            b=Signal(typ=UInt(8), kind="input"),
+            c=Signal(typ=UInt(8), kind="input"),
+            sum=Signal(typ=UInt(10), kind="output"),
         )
         self.elaborate()
 

@@ -326,9 +326,9 @@ class HiF8MulViaFP8(Component):
             y: Signal
 
         self.io = IO(
-            a=Signal(name="a", typ=UInt(8), kind="input"),
-            b=Signal(name="b", typ=UInt(8), kind="input"),
-            y=Signal(name="y", typ=UInt(8), kind="output"),
+            a=Signal(typ=UInt(8), kind="input"),
+            b=Signal(typ=UInt(8), kind="input"),
+            y=Signal(typ=UInt(8), kind="output"),
         )
         self.elaborate()
 

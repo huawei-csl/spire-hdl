@@ -25,8 +25,8 @@ def recursive_horner(x, coeffs):
 
 
 if __name__ == "__main__":
-    a = Signal("a", SInt(8), kind="input")
-    b = Signal("b", SInt(8), kind="input")
+    a = Signal(typ=SInt(8), kind="input")
+    b = Signal(typ=SInt(8), kind="input")
 
     # Example 1: smallest direct form: no wire for y, just an expression.
     y_add = a + b

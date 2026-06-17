@@ -24,11 +24,11 @@ def _build_rom(init, *, depth, width, registered=False, name="rom"):
     class Top(Component):
         def __init__(self):
             fields = {
-                "addr": Signal("addr", UInt(addr_w), "input"),
-                "dout": Signal("dout", UInt(width), "output"),
+                "addr": Signal(typ=UInt(addr_w), kind="input", name="addr"),
+                "dout": Signal(typ=UInt(width), kind="output", name="dout"),
             }
             if registered:
-                fields["re"] = Signal("re", Bool(), "input")
+                fields["re"] = Signal(typ=Bool(), kind="input", name="re")
             IO = make_dataclass("TopIO", [(k, Signal) for k in fields])
             self.io = IO(**fields)
             self.elaborate()
@@ -151,9 +151,9 @@ def test_aggregate_rom():
     class Top(Component):
         def __init__(self):
             fields = {
-                "addr": Signal("addr", UInt(2), "input"),
-                "dout_data": Signal("dout_data", UInt(8), "output"),
-                "dout_valid": Signal("dout_valid", Bool(), "output"),
+                "addr": Signal(typ=UInt(2), kind="input", name="addr"),
+                "dout_data": Signal(typ=UInt(8), kind="output", name="dout_data"),
+                "dout_valid": Signal(typ=Bool(), kind="output", name="dout_valid"),
             }
             IO = make_dataclass("TopAggIO", [(k, Signal) for k in fields])
             self.io = IO(**fields)

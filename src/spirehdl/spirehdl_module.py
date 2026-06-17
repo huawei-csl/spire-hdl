@@ -211,7 +211,7 @@ class Module:
 
     # Signal constructors
     def input(self, typ: HDLType, name: str) -> Signal:
-        s = Signal(name, typ, "input") #, self)
+        s = Signal(typ=typ, kind="input", name=name) #, self)
         self._signals.append(s)
         self._ports.append(s)
         return s
@@ -226,7 +226,7 @@ class Module:
         self._ports.append(signal)
 
     def output(self, typ: HDLType, name: str) -> Signal:
-        s = Signal(name, typ, "output") #, self)
+        s = Signal(typ=typ, kind="output", name=name) #, self)
         self._signals.append(s)
         self._ports.append(s)
         return s
@@ -241,12 +241,12 @@ class Module:
         self._ports.append(signal)
 
     def wire(self, typ: HDLType, name: str) -> Signal:
-        s = Signal(name, typ, "wire") #, self)
+        s = Signal(typ=typ, kind="wire", name=name) #, self)
         self._signals.append(s)
         return s
 
     def reg(self, typ: HDLType, name: str, init: Optional[ExprLike] = None) -> Signal:
-        s = Signal(name, typ, "reg") #, self)
+        s = Signal(typ=typ, kind="reg", name=name) #, self)
         if init is not None:
             s.set_init(init)
         self._signals.append(s)

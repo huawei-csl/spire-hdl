@@ -64,16 +64,16 @@ class MemoryPrimitive_via_reg(Component):
         self._instance_name = name or f"mem_{self._uid}"
 
         kwargs = dict(
-            write_addr   = Signal("write_addr",   UInt(self._addr_w), "input"),
-            write_data   = Signal("write_data",   UInt(self._elem_w), "input"),
-            write_enable = Signal("write_enable", Bool(),             "input"),
-            read_addr    = Signal("read_addr",    UInt(self._addr_w), "input"),
-            read_data    = Signal("read_data",    UInt(self._elem_w), "output"),
+            write_addr   = Signal(typ=UInt(self._addr_w), kind="input"),
+            write_data   = Signal(typ=UInt(self._elem_w), kind="input"),
+            write_enable = Signal(typ=Bool(), kind="input"),
+            read_addr    = Signal(typ=UInt(self._addr_w), kind="input"),
+            read_data    = Signal(typ=UInt(self._elem_w), kind="output"),
         )
         if with_reset_arm:
-            kwargs["reset_enable"] = Signal("reset_enable", Bool(), "input")
+            kwargs["reset_enable"] = Signal(typ=Bool(), kind="input", name="reset_enable")
         if registered_read:
-            kwargs["read_enable"] = Signal("read_enable", Bool(), "input")
+            kwargs["read_enable"] = Signal(typ=Bool(), kind="input", name="read_enable")
 
         IO = make_dataclass("MemoryPrimitiveViaRegIO", [(k, Signal) for k in kwargs.keys()])
         self.io = IO(**kwargs)

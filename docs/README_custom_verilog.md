@@ -38,9 +38,9 @@ class CustomAdder(Component):
             b: Signal
             sum: Signal
         self.io = IO(
-            a   = Signal("a",   UInt(8), "input"),
-            b   = Signal("b",   UInt(8), "input"),
-            sum = Signal("sum", UInt(9), "output"),
+            a   = Signal(typ=UInt(8), kind="input"),
+            b   = Signal(typ=UInt(8), kind="input"),
+            sum = Signal(typ=UInt(9), kind="output"),
         )
         self.elaborate()
 
@@ -107,11 +107,11 @@ class VendorRAM(Component):
             we: Signal
             data_out: Signal
         self.io = IO(
-            clk      = Signal("clk",      Bool(),     "input"),
-            addr     = Signal("addr",     UInt(10),   "input"),
-            data_in  = Signal("data_in",  UInt(32),   "input"),
-            we       = Signal("we",       Bool(),     "input"),
-            data_out = Signal("data_out", UInt(32),   "output"),
+            clk      = Signal(typ=Bool(), kind="input"),
+            addr     = Signal(typ=UInt(10), kind="input"),
+            data_in  = Signal(typ=UInt(32), kind="input"),
+            we       = Signal(typ=Bool(), kind="input"),
+            data_out = Signal(typ=UInt(32), kind="output"),
         )
         self.elaborate()
 
@@ -156,10 +156,10 @@ class TopWithVendorRAM(Component):
             y: Signal
             result: Signal
         self.io = IO(
-            clk    = Signal("clk",    Bool(),    "input"),
-            x      = Signal("x",      UInt(10),  "input"),
-            y      = Signal("y",      UInt(32),  "input"),
-            result = Signal("result", UInt(32),  "output"),
+            clk    = Signal(typ=Bool(), kind="input"),
+            x      = Signal(typ=UInt(10), kind="input"),
+            y      = Signal(typ=UInt(32), kind="input"),
+            result = Signal(typ=UInt(32), kind="output"),
         )
         self.elaborate()
 

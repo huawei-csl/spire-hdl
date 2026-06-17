@@ -63,9 +63,9 @@ class StageBasedPrefixAdder(StageBasedAdderBase):
         # Additional initialization for prefix adder can go here
 
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(name="a", typ=UInt(self.aw), kind="input"),
-            b=Signal(name="b", typ=UInt(self.bw), kind="input"),
-            y=Signal(name="y", typ=UInt(self.config.out_width), kind="output"),
+            a=Signal(typ=UInt(self.aw), kind="input"),
+            b=Signal(typ=UInt(self.bw), kind="input"),
+            y=Signal(typ=UInt(self.config.out_width), kind="output"),
         )
 
         self.fsa = self.fsa_cls(self.config) if self.fsa_cls is not None else RippleCarryFinalAdder(self.config)
@@ -107,9 +107,9 @@ class StageBasedSubtractor(StageBasedAdderBase):
         super().__init__(a_w, b_w, signed_a=signed_a, signed_b=signed_b, optim_type=optim_type, fsa_cls=fsa_cls, full_output_bit=full_output_bit)
 
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(name="a", typ=UInt(self.aw), kind="input"),
-            b=Signal(name="b", typ=UInt(self.bw), kind="input"),
-            y=Signal(name="y", typ=UInt(self.config.out_width), kind="output"),
+            a=Signal(typ=UInt(self.aw), kind="input"),
+            b=Signal(typ=UInt(self.bw), kind="input"),
+            y=Signal(typ=UInt(self.config.out_width), kind="output"),
         )
 
         self.fsa = self.fsa_cls(self.config) if self.fsa_cls is not None else RippleCarryFinalAdder(self.config)

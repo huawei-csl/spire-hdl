@@ -21,6 +21,7 @@ from spirehdl.optimize.optimize import (  # noqa: F401
     _write_cache_entry,
     _read_cache_entry,
     _build_component,
+    _instantiate_from_cache,
     _hdltype_to_dict,
     _hdltype_from_dict,
     _spec_to_dict,

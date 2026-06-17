@@ -81,9 +81,9 @@ class IO:
     sum: Signal
 
 self.io = IO(
-    a=Signal(name="a", typ=UInt(8), kind="input"),
-    b=Signal(name="b", typ=UInt(8), kind="input"),
-    sum=Signal(name="sum", typ=UInt(9), kind="output"),
+    a=Signal(typ=UInt(8), kind="input"),
+    b=Signal(typ=UInt(8), kind="input"),
+    sum=Signal(typ=UInt(9), kind="output"),
 )
 ```
 

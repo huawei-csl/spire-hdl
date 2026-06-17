@@ -62,9 +62,9 @@ def _make_adder_component(adder_cfg: AdderConfig, signed: bool):
     class AdderWrap(Component):
         def __init__(self):
             self.io = StageBasedMultiplierIO(
-                a=Signal(name="a", typ=a_t, kind="input"),
-                b=Signal(name="b", typ=b_t, kind="input"),
-                y=Signal(name="y", typ=y_t, kind="output"),
+                a=Signal(typ=a_t, kind="input"),
+                b=Signal(typ=b_t, kind="input"),
+                y=Signal(typ=y_t, kind="output"),
             )
             y_val = build_adder(self.io.a, self.io.b, adder_cfg)
             # build_adder always returns UInt(N_BITS+1); assign directly
@@ -81,9 +81,9 @@ def _make_multiplier_component(mult_cfg: MultiplierConfig, signed: bool):
     class MulWrap(Component):
         def __init__(self):
             self.io = StageBasedMultiplierIO(
-                a=Signal(name="a", typ=a_t, kind="input"),
-                b=Signal(name="b", typ=b_t, kind="input"),
-                y=Signal(name="y", typ=y_t, kind="output"),
+                a=Signal(typ=a_t, kind="input"),
+                b=Signal(typ=b_t, kind="input"),
+                y=Signal(typ=y_t, kind="output"),
             )
             y_val = build_multiplier(self.io.a, self.io.b, mult_cfg)
             self.io.y <<= y_val
@@ -321,9 +321,9 @@ def test_signed_sub_sext_in_aig():
     class SubWrap(Component):
         def __init__(self):
             self.io = StageBasedMultiplierIO(
-                a=Signal(name="a", typ=SInt(N_BITS), kind="input"),
-                b=Signal(name="b", typ=SInt(N_BITS), kind="input"),
-                y=Signal(name="y", typ=UInt(N_BITS + 1), kind="output"),
+                a=Signal(typ=SInt(N_BITS), kind="input"),
+                b=Signal(typ=SInt(N_BITS), kind="input"),
+                y=Signal(typ=UInt(N_BITS + 1), kind="output"),
             )
             self.io.y <<= self.io.a - self.io.b
 

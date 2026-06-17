@@ -35,9 +35,9 @@ class BlackboxAdder(Component):
             b: Signal
             sum: Signal
         self.io = IO(
-            a   = Signal("a",   UInt(8), "input"),
-            b   = Signal("b",   UInt(8), "input"),
-            sum = Signal("sum", UInt(9), "output"),
+            a   = Signal(typ=UInt(8), kind="input"),
+            b   = Signal(typ=UInt(8), kind="input"),
+            sum = Signal(typ=UInt(9), kind="output"),
         )
         self.elaborate()
 
@@ -97,9 +97,9 @@ class ParentWithBlackboxAndExtraLogic(Component):
             y: Signal
             result: Signal
         self.io = IO(
-            x      = Signal("x",      UInt(8), "input"),
-            y      = Signal("y",      UInt(8), "input"),
-            result = Signal("result", UInt(9), "output"),
+            x      = Signal(typ=UInt(8), kind="input"),
+            y      = Signal(typ=UInt(8), kind="input"),
+            result = Signal(typ=UInt(9), kind="output"),
         )
         self.elaborate()
 
@@ -164,12 +164,12 @@ def test_multiple_blackboxes_each_emit_and_stub():
                 left_sum: Signal
                 right_sum: Signal
             self.io = IO(
-                a         = Signal("a",         UInt(8), "input"),
-                b         = Signal("b",         UInt(8), "input"),
-                c         = Signal("c",         UInt(8), "input"),
-                d         = Signal("d",         UInt(8), "input"),
-                left_sum  = Signal("left_sum",  UInt(9), "output"),
-                right_sum = Signal("right_sum", UInt(9), "output"),
+                a         = Signal(typ=UInt(8), kind="input"),
+                b         = Signal(typ=UInt(8), kind="input"),
+                c         = Signal(typ=UInt(8), kind="input"),
+                d         = Signal(typ=UInt(8), kind="input"),
+                left_sum  = Signal(typ=UInt(9), kind="output"),
+                right_sum = Signal(typ=UInt(9), kind="output"),
             )
             self.elaborate()
         def elaborate(self):

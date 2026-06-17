@@ -96,9 +96,9 @@ def fingerprint_columns(columns: Dict[int, List[Expr]]) -> Dict[str, List[str]]:
 
 
 def make_ppg_columns(config: StageMultiplierConfig):
-    a = Signal(name="a", typ=UInt(config.a_width), kind="input")
-    b = Signal(name="b", typ=UInt(config.b_width), kind="input")
-    y = Signal(name="y", typ=UInt(config.out_width), kind="output")
+    a = Signal(typ=UInt(config.a_width), kind="input")
+    b = Signal(typ=UInt(config.b_width), kind="input")
+    y = Signal(typ=UInt(config.out_width), kind="output")
     io = StageBasedMultiplierIO(a=a, b=b, y=y)
     ppg = AndPartialProductGenerator(config)
     return ppg.generate_columns(io)

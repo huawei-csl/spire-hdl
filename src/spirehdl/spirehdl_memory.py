@@ -81,7 +81,7 @@ class _MemoryArray(Signal):
         if init is not None and len(init) != depth:
             raise ValueError(
                 f"_MemoryArray init must have length == depth ({depth}); got {len(init)}")
-        super().__init__(name, elem_type, kind="mem")
+        super().__init__(elem_type, kind="mem", name=name)
         self.depth = depth
         self.init = list(init) if init is not None else None
         self.elem_type = elem_type
@@ -96,7 +96,7 @@ class _MemoryArray(Signal):
     # ----------------------------- port factory -------------------------------
 
     def _port(self, suffix: str, typ: HDLType, kind: str = "wire") -> Signal:
-        s = Signal(f"{self.name}__{suffix}", typ, kind)
+        s = Signal(typ=typ, kind=kind, name=f"{self.name}__{suffix}")
         s._memory_parent = self
         s._port_suffix = suffix
         s._no_emit_decl = True

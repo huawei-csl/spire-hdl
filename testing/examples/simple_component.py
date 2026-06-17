@@ -26,9 +26,9 @@ class SimpleAdder(Component):
         
         # Step 2: Create Signal instances for each IO port
         self.io = IO(
-            a=Signal(name="a", typ=UInt(8), kind="input"),
-            b=Signal(name="b", typ=UInt(8), kind="input"),
-            sum=Signal(name="sum", typ=UInt(9), kind="output"),  # 9 bits to hold sum
+            a=Signal(typ=UInt(8), kind="input"),
+            b=Signal(typ=UInt(8), kind="input"),
+            sum=Signal(typ=UInt(9), kind="output"),  # 9 bits to hold sum
         )
         
         # Step 3: Build the component logic

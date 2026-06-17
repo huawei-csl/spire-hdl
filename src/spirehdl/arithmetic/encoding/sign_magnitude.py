@@ -20,8 +20,8 @@ class TwosComplementToSignMagnitudeEncoder(EncoderDecoderBase):
         self.clip_most_negative = clip_most_negative
 
         self.io: EncodingIO = EncodingIO(
-            i=Signal(name="i", typ=UInt(width), kind="input"),
-            o=Signal(name="o", typ=UInt(width), kind="output"),
+            i=Signal(typ=UInt(width), kind="input"),
+            o=Signal(typ=UInt(width), kind="output"),
         )
 
         self.elaborate()
@@ -52,8 +52,8 @@ class SignMagnitudeToTwosComplementDecoder(EncoderDecoderBase):
         self.clip_most_negative = clip_most_negative
 
         self.io: EncodingIO = EncodingIO(
-            i=Signal(name="i", typ=UInt(width), kind="input"),
-            o=Signal(name="o", typ=UInt(width), kind="output"),
+            i=Signal(typ=UInt(width), kind="input"),
+            o=Signal(typ=UInt(width), kind="output"),
         )
 
         self.elaborate()

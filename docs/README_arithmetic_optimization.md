@@ -55,11 +55,11 @@ class ALUIO:
 class ALU(Component):
     def __init__(self, w: int):
         self.io = ALUIO(
-            a=Signal(name="a", typ=UInt(w), kind="input"),
-            b=Signal(name="b", typ=UInt(w), kind="input"),
-            y_add=Signal(name="y_add", typ=UInt(w + 1), kind="output"),
-            y_sub=Signal(name="y_sub", typ=UInt(w + 1), kind="output"),
-            y_mul=Signal(name="y_mul", typ=UInt(2 * w), kind="output"),
+            a=Signal(typ=UInt(w), kind="input"),
+            b=Signal(typ=UInt(w), kind="input"),
+            y_add=Signal(typ=UInt(w + 1), kind="output"),
+            y_sub=Signal(typ=UInt(w + 1), kind="output"),
+            y_mul=Signal(typ=UInt(2 * w), kind="output"),
         )
         self.elaborate()
 
@@ -146,7 +146,7 @@ class FIR(Component):
         self.io = FIRIO(
             x=Array([Signal(name=f"x{i}", typ=UInt(w), kind="input") for i in range(n_taps)]),
             c=Array([Signal(name=f"c{i}", typ=UInt(w), kind="input") for i in range(n_taps)]),
-            y=Signal(name="y", typ=UInt(2 * w + 2), kind="output"),
+            y=Signal(typ=UInt(2 * w + 2), kind="output"),
         )
         self.elaborate()
 

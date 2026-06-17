@@ -42,9 +42,9 @@ class IO:
 class Imported(Component):
     def __init__(self):
         self.io = IO(
-            a=Signal(name="a", typ=UInt(4), kind="input"),
-            b=Signal(name="b", typ=UInt(4), kind="input"),
-            y=Signal(name="y", typ=UInt(8), kind="output"),
+            a=Signal(typ=UInt(4), kind="input"),
+            b=Signal(typ=UInt(4), kind="input"),
+            y=Signal(typ=UInt(8), kind="output"),
         )
 
 comp = Imported()

@@ -94,7 +94,7 @@ def test_aggregaterecord_instance_clones_wires():
 def test_aggregaterecord_override_field_in_ctor():
     reset_shared_cache()
 
-    custom_a = Wire(UInt(8), name="custom_a")
+    custom_a = Wire(UInt(8))
     b = MyRecord(a=custom_a)
 
     # 'a' is overridden

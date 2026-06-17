@@ -40,9 +40,9 @@ class MultiplierCompressorTree(Component):
         base_type_y = SInt if (signed_a or signed_b) else UInt
 
         self.io: IO = IO(
-            a=Signal(name="a", typ=base_typ_a(self.n_bits), kind="input"),
-            b=Signal(name="b", typ=base_typ_b(self.n_bits), kind="input"),
-            y=Signal(name="y", typ=base_type_y(2 * self.n_bits), kind="output"),
+            a=Signal(typ=base_typ_a(self.n_bits), kind="input"),
+            b=Signal(typ=base_typ_b(self.n_bits), kind="input"),
+            y=Signal(typ=base_type_y(2 * self.n_bits), kind="output"),
         )
 
         # build the module

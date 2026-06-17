@@ -22,9 +22,9 @@ from testing.test_aggregate_register_and_array import DummyAgg
 def test_array_scalar_wires_width_and_bits():
     reset_shared_cache()
 
-    a0 = Wire(UInt(8), name="a0")
-    a1 = Wire(UInt(8), name="a1")
-    a2 = Wire(UInt(8), name="a2")
+    a0 = Wire(UInt(8))
+    a1 = Wire(UInt(8))
+    a2 = Wire(UInt(8))
 
     arr = Array([a0, a1, a2])  # only Expr elements (Signals)
 
@@ -40,10 +40,10 @@ def test_array_scalar_wires_width_and_bits():
 def test_array_nd_indexing_and_slicing():
     reset_shared_cache()
 
-    r0c0 = Wire(UInt(4), name="r0c0")
-    r0c1 = Wire(UInt(4), name="r0c1")
-    r1c0 = Wire(UInt(4), name="r1c0")
-    r1c1 = Wire(UInt(4), name="r1c1")
+    r0c0 = Wire(UInt(4))
+    r0c1 = Wire(UInt(4))
+    r1c0 = Wire(UInt(4))
+    r1c1 = Wire(UInt(4))
 
     row0 = Array([r0c0, r0c1])
     row1 = Array([r1c0, r1c1])
@@ -72,12 +72,12 @@ def test_array_packed_assign_from_array():
     """
     reset_shared_cache()
 
-    s0 = Wire(UInt(4), name="s0")
-    s1 = Wire(UInt(4), name="s1")
+    s0 = Wire(UInt(4))
+    s1 = Wire(UInt(4))
     src = Array([s0, s1])
 
-    d0 = Wire(UInt(4), name="d0")
-    d1 = Wire(UInt(4), name="d1")
+    d0 = Wire(UInt(4))
+    d1 = Wire(UInt(4))
     dst = Array([d0, d1])
 
     # Initially no drivers
@@ -99,9 +99,9 @@ def test_array_packed_assign_from_constant():
     """
     reset_shared_cache()
 
-    d0 = Wire(UInt(4), name="d0")
-    d1 = Wire(UInt(4), name="d1")
-    d2 = Wire(UInt(4), name="d2")
+    d0 = Wire(UInt(4))
+    d1 = Wire(UInt(4))
+    d2 = Wire(UInt(4))
 
     arr = Array([d0, d1, d2])  # total width 12
 
@@ -120,8 +120,8 @@ def test_array_wire_like_clone_shape():
     """
     reset_shared_cache()
 
-    d0 = Wire(UInt(8), name="d0")
-    d1 = Wire(UInt(8), name="d1")
+    d0 = Wire(UInt(8))
+    d1 = Wire(UInt(8))
     d2_const = as_expr(5)  # Expr, not a Signal
 
     template = Array([d0, d1, d2_const])
@@ -144,12 +144,12 @@ def test_array_elementwise_assign():
     """
     reset_shared_cache()
 
-    s0 = Wire(UInt(4), name="s0")
-    s1 = Wire(UInt(4), name="s1")
+    s0 = Wire(UInt(4))
+    s1 = Wire(UInt(4))
     src = Array([s0, s1])
 
-    d0 = Wire(UInt(4), name="d0")
-    d1 = Wire(UInt(4), name="d1")
+    d0 = Wire(UInt(4))
+    d1 = Wire(UInt(4))
     dst = Array([d0, d1])
 
     # Drive source wires
@@ -169,9 +169,9 @@ def test_array_with_dummy_aggregate_and_wires():
     """
     reset_shared_cache()
 
-    w0 = Wire(UInt(8), name="w0")
+    w0 = Wire(UInt(8))
     agg = DummyAgg(width=5, name="agg")
-    w1 = Wire(UInt(4), name="w1")
+    w1 = Wire(UInt(4))
 
     arr = Array([w0, agg, w1])
 

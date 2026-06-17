@@ -35,9 +35,9 @@ class FpAdd(Component):
         self.subnormals = subnormals
 
         self.io: FpAddIO = FpAddIO(
-            a=Signal(name="a", typ=UInt(self.W), kind="input"),
-            b=Signal(name="b", typ=UInt(self.W), kind="input"),
-            y=Signal(name="y", typ=UInt(self.W), kind="output"),
+            a=Signal(typ=UInt(self.W), kind="input"),
+            b=Signal(typ=UInt(self.W), kind="input"),
+            y=Signal(typ=UInt(self.W), kind="output"),
         )
 
         self.elaborate()

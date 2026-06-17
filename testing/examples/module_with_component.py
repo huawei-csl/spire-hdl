@@ -24,9 +24,9 @@ class Adder(Component):
             sum: Signal
         
         self.io = IO(
-            a=Signal(name="a", typ=UInt(width), kind="input"),
-            b=Signal(name="b", typ=UInt(width), kind="input"),
-            sum=Signal(name="sum", typ=UInt(width + 1), kind="output"),
+            a=Signal(typ=UInt(width), kind="input"),
+            b=Signal(typ=UInt(width), kind="input"),
+            sum=Signal(typ=UInt(width + 1), kind="output"),
         )
         
         self.elaborate()

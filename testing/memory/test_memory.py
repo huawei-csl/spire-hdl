@@ -36,13 +36,13 @@ def _ram(depth=16, width=9, *, registered_read=False, with_reset_arm=True, init=
                 dout: Signal
             addr_w = max(1, (depth - 1).bit_length())
             self.io = IO(
-                we   = Signal("we",  Bool(),        "input"),
-                clr  = Signal("clr", Bool(),        "input"),
-                aw   = Signal("aw",  UInt(addr_w),  "input"),
-                ar   = Signal("ar",  UInt(addr_w),  "input"),
-                din  = Signal("din", UInt(width),   "input"),
-                re   = Signal("re",  Bool(),        "input"),
-                dout = Signal("dout", UInt(width),  "output"),
+                we   = Signal(typ=Bool(), kind="input"),
+                clr  = Signal(typ=Bool(), kind="input"),
+                aw   = Signal(typ=UInt(addr_w), kind="input"),
+                ar   = Signal(typ=UInt(addr_w), kind="input"),
+                din  = Signal(typ=UInt(width), kind="input"),
+                re   = Signal(typ=Bool(), kind="input"),
+                dout = Signal(typ=UInt(width), kind="output"),
             )
             self.elaborate()
 
@@ -116,13 +116,13 @@ def test_one_write_two_read_ports():
                 d0: Signal
                 d1: Signal
             self.io = IO(
-                we  = Signal("we",  Bool(),   "input"),
-                wa  = Signal("wa",  UInt(2),  "input"),
-                wd  = Signal("wd",  UInt(8),  "input"),
-                ra0 = Signal("ra0", UInt(2),  "input"),
-                ra1 = Signal("ra1", UInt(2),  "input"),
-                d0  = Signal("d0",  UInt(8),  "output"),
-                d1  = Signal("d1",  UInt(8),  "output"),
+                we  = Signal(typ=Bool(), kind="input"),
+                wa  = Signal(typ=UInt(2), kind="input"),
+                wd  = Signal(typ=UInt(8), kind="input"),
+                ra0 = Signal(typ=UInt(2), kind="input"),
+                ra1 = Signal(typ=UInt(2), kind="input"),
+                d0  = Signal(typ=UInt(8), kind="output"),
+                d1  = Signal(typ=UInt(8), kind="output"),
             )
             self.elaborate()
 

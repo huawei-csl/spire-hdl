@@ -69,11 +69,11 @@ class RomPrimitive(Component):
         self._instance_name = name or f"rom_{self._uid}"
 
         kwargs = dict(
-            read_addr = Signal("read_addr", UInt(self._addr_w), "input"),
-            read_data = Signal("read_data", UInt(self._elem_w), "output"),
+            read_addr = Signal(typ=UInt(self._addr_w), kind="input"),
+            read_data = Signal(typ=UInt(self._elem_w), kind="output"),
         )
         if registered_read:
-            kwargs["read_enable"] = Signal("read_enable", Bool(), "input")
+            kwargs["read_enable"] = Signal(typ=Bool(), kind="input", name="read_enable")
 
         IO = make_dataclass("RomPrimitiveIO", [(k, Signal) for k in kwargs.keys()])
         self.io = IO(**kwargs)

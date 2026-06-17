@@ -48,13 +48,13 @@ def _build_fifo(*, depth: int = 4, elem_w: int = 8, name: str = "myfifo"):
                 empty: Signal
                 count: Signal
             self.io = IO(
-                push  = Signal("push",  Bool(),         "input"),
-                pop   = Signal("pop",   Bool(),         "input"),
-                din   = Signal("din",   UInt(elem_w),   "input"),
-                dout  = Signal("dout",  UInt(elem_w),   "output"),
-                full  = Signal("full",  Bool(),         "output"),
-                empty = Signal("empty", Bool(),         "output"),
-                count = Signal("count", UInt(count_w),  "output"),
+                push  = Signal(typ=Bool(), kind="input"),
+                pop   = Signal(typ=Bool(), kind="input"),
+                din   = Signal(typ=UInt(elem_w), kind="input"),
+                dout  = Signal(typ=UInt(elem_w), kind="output"),
+                full  = Signal(typ=Bool(), kind="output"),
+                empty = Signal(typ=Bool(), kind="output"),
+                count = Signal(typ=UInt(count_w), kind="output"),
             )
             self.elaborate()
 
@@ -245,12 +245,12 @@ def test_sim_aggregate_elem_type_fifo():
                 dout_data:  Signal
                 dout_valid: Signal
             self.io = IO(
-                push       = Signal("push",       Bool(),  "input"),
-                pop        = Signal("pop",        Bool(),  "input"),
-                din_data   = Signal("din_data",   UInt(8), "input"),
-                din_valid  = Signal("din_valid",  Bool(),  "input"),
-                dout_data  = Signal("dout_data",  UInt(8), "output"),
-                dout_valid = Signal("dout_valid", Bool(),  "output"),
+                push       = Signal(typ=Bool(), kind="input"),
+                pop        = Signal(typ=Bool(), kind="input"),
+                din_data   = Signal(typ=UInt(8), kind="input"),
+                din_valid  = Signal(typ=Bool(), kind="input"),
+                dout_data  = Signal(typ=UInt(8), kind="output"),
+                dout_valid = Signal(typ=Bool(), kind="output"),
             )
             self.elaborate()
 

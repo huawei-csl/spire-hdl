@@ -92,9 +92,9 @@ class FusedMacComponent(Component):
             )
 
         io_type = SInt if is_signed(self.cfg.encoding) else UInt
-        self.a = Signal(name="a", typ=io_type(self.cfg.n_bits), kind="input")
-        self.b = Signal(name="b", typ=io_type(self.cfg.n_bits), kind="input")
-        self.c = Signal(name="c", typ=io_type(self.cfg.c_bits), kind="input")
+        self.a = Signal(typ=io_type(self.cfg.n_bits), kind="input")
+        self.b = Signal(typ=io_type(self.cfg.n_bits), kind="input")
+        self.c = Signal(typ=io_type(self.cfg.c_bits), kind="input")
 
         self.elaborate()
         self.io = MacIO(a=self.a, b=self.b, c=self.c, y=self.y)
@@ -114,7 +114,7 @@ class FusedMacComponent(Component):
             y_expr = fused_inner_product([self.a], [self.b], self.c, mult_cfg, self.cfg.encoding)
 
         io_type = SInt if is_signed(self.cfg.encoding) else UInt
-        self.y = Signal(name="y", typ=io_type(y_expr.typ.width), kind="output")
+        self.y = Signal(typ=io_type(y_expr.typ.width), kind="output")
         self.y <<= y_expr
 
 

@@ -31,9 +31,9 @@ class Adder(Component):
         
         # Create the IO structure with Signal instances
         self.io = IO(
-            a=Signal(name="a", typ=UInt(width), kind="input"),
-            b=Signal(name="b", typ=UInt(width), kind="input"),
-            sum=Signal(name="sum", typ=UInt(width + 1), kind="output"),
+            a=Signal(typ=UInt(width), kind="input"),
+            b=Signal(typ=UInt(width), kind="input"),
+            sum=Signal(typ=UInt(width + 1), kind="output"),
         )
         
         # Build the internal logic
@@ -60,9 +60,9 @@ class Comparator(Component):
             greater: Signal
         
         self.io = IO(
-            a=Signal(name="a", typ=UInt(width), kind="input"),
-            b=Signal(name="b", typ=UInt(width), kind="input"),
-            greater=Signal(name="greater", typ=Bool(), kind="output"),
+            a=Signal(typ=UInt(width), kind="input"),
+            b=Signal(typ=UInt(width), kind="input"),
+            greater=Signal(typ=Bool(), kind="output"),
         )
         
         self.elaborate()
@@ -88,10 +88,10 @@ class AdderWithCompare(Component):
             sum_greater_than_a: Signal
         
         self.io = IO(
-            a=Signal(name="a", typ=UInt(width), kind="input"),
-            b=Signal(name="b", typ=UInt(width), kind="input"),
-            sum=Signal(name="sum", typ=UInt(width + 1), kind="output"),
-            sum_greater_than_a=Signal(name="sum_greater_than_a", typ=Bool(), kind="output"),
+            a=Signal(typ=UInt(width), kind="input"),
+            b=Signal(typ=UInt(width), kind="input"),
+            sum=Signal(typ=UInt(width + 1), kind="output"),
+            sum_greater_than_a=Signal(typ=Bool(), kind="output"),
         )
         
         self.elaborate()

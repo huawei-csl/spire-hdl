@@ -145,9 +145,9 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
                 return SInt
 
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(name="a", typ=get_type(self.a_encoding)(self.aw), kind="input"),
-            b=Signal(name="b", typ=get_type(self.b_encoding)(self.bw), kind="input"),
-            y=Signal(name="y", typ=get_type(y_encoding)(self.aw + self.bw), kind="output"),
+            a=Signal(typ=get_type(self.a_encoding)(self.aw), kind="input"),
+            b=Signal(typ=get_type(self.b_encoding)(self.bw), kind="input"),
+            y=Signal(typ=get_type(y_encoding)(self.aw + self.bw), kind="output"),
         )
 
         self.f_aag_lines = f_aag_lines if f_aag_lines is not None else get_aag_lines_default
@@ -170,9 +170,9 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
                     result_o: Signal
 
                 self.io: IO = IO(
-                    operand_a_i=Signal(name="operand_a_i", typ=UInt(this_class.aw), kind="input"),
-                    operand_b_i=Signal(name="operand_b_i", typ=UInt(this_class.bw), kind="input"),
-                    result_o=Signal(name="result_o", typ=UInt(this_class.aw + this_class.bw), kind="output"),
+                    operand_a_i=Signal(typ=UInt(this_class.aw), kind="input"),
+                    operand_b_i=Signal(typ=UInt(this_class.bw), kind="input"),
+                    result_o=Signal(typ=UInt(this_class.aw + this_class.bw), kind="output"),
                 )
 
         self.mult = LoadedMultiplier()
@@ -197,9 +197,9 @@ class OptimizedSignMagnitudeMultiplier(StageBasedMultiplierBase):
         assert self.fsa_cls is None, "FSA must be None"
 
         self.io : StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(name="a", typ=UInt(self.aw), kind="input"),
-            b=Signal(name="b", typ=UInt(self.bw), kind="input"),
-            y=Signal(name="y", typ=UInt(self.aw + self.bw - 1), kind="output"),
+            a=Signal(typ=UInt(self.aw), kind="input"),
+            b=Signal(typ=UInt(self.bw), kind="input"),
+            y=Signal(typ=UInt(self.aw + self.bw - 1), kind="output"),
         )
         
         self.f_aag_lines = f_aag_lines
@@ -263,9 +263,9 @@ class OptimizedMultiplierFrom4BitBlocks(StageBasedMultiplierBase):
         assert self.aw >= 4 and self.bw >= 4 and ((self.aw & (self.aw - 1)) == 0) and ((self.bw & (self.bw - 1)) == 0), "This composite multiplier expects input widths >=8 and powers of two"
 
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(name="a", typ=UInt(self.aw), kind="input"),
-            b=Signal(name="b", typ=UInt(self.bw), kind="input"),
-            y=Signal(name="y", typ=UInt(self.aw + self.bw), kind="output"),
+            a=Signal(typ=UInt(self.aw), kind="input"),
+            b=Signal(typ=UInt(self.bw), kind="input"),
+            y=Signal(typ=UInt(self.aw + self.bw), kind="output"),
         )
 
         # check class attribut f_aag_lines exists

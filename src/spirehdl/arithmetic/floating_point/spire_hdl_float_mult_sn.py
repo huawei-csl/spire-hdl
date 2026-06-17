@@ -74,9 +74,9 @@ class FpMulSN(Component):
         self.adder_cfg = adder_cfg
 
         self.io = self.IO(
-            a=Signal(name="a", typ=UInt(self.W), kind="input"),
-            b=Signal(name="b", typ=UInt(self.W), kind="input"),
-            y=Signal(name="y", typ=UInt(self.W), kind="output"),
+            a=Signal(typ=UInt(self.W), kind="input"),
+            b=Signal(typ=UInt(self.W), kind="input"),
+            y=Signal(typ=UInt(self.W), kind="output"),
         )
 
         self.elaborate()

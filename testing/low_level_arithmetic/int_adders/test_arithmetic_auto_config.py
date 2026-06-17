@@ -35,11 +35,11 @@ class _ALU(Component):
     def __init__(self, w: int):
         self.w = w
         self.io = _ALUIO(
-            a=Signal(name="a", typ=UInt(w), kind="input"),
-            b=Signal(name="b", typ=UInt(w), kind="input"),
-            y_add=Signal(name="y_add", typ=UInt(w + 1), kind="output"),
-            y_sub=Signal(name="y_sub", typ=UInt(w + 1), kind="output"),
-            y_mul=Signal(name="y_mul", typ=UInt(2 * w), kind="output"),
+            a=Signal(typ=UInt(w), kind="input"),
+            b=Signal(typ=UInt(w), kind="input"),
+            y_add=Signal(typ=UInt(w + 1), kind="output"),
+            y_sub=Signal(typ=UInt(w + 1), kind="output"),
+            y_mul=Signal(typ=UInt(2 * w), kind="output"),
         )
         self.elaborate()
 
@@ -283,11 +283,11 @@ class _AsymALU(Component):
         self.b_w = b_w
         max_w = max(a_w, b_w)
         self.io = _AsymALUIO(
-            a=Signal(name="a", typ=UInt(a_w), kind="input"),
-            b=Signal(name="b", typ=UInt(b_w), kind="input"),
-            y_add=Signal(name="y_add", typ=UInt(max_w + 1), kind="output"),
-            y_sub=Signal(name="y_sub", typ=UInt(max_w + 1), kind="output"),
-            y_mul=Signal(name="y_mul", typ=UInt(a_w + b_w), kind="output"),
+            a=Signal(typ=UInt(a_w), kind="input"),
+            b=Signal(typ=UInt(b_w), kind="input"),
+            y_add=Signal(typ=UInt(max_w + 1), kind="output"),
+            y_sub=Signal(typ=UInt(max_w + 1), kind="output"),
+            y_mul=Signal(typ=UInt(a_w + b_w), kind="output"),
         )
         self.elaborate()
 
@@ -413,10 +413,10 @@ class _Mac(Component):
     def __init__(self, w: int):
         self.w = w
         self.io = _MacIO(
-            a=Signal(name="a", typ=UInt(w), kind="input"),
-            b=Signal(name="b", typ=UInt(w), kind="input"),
-            c=Signal(name="c", typ=UInt(2 * w), kind="input"),
-            y=Signal(name="y", typ=UInt(2 * w + 1), kind="output"),
+            a=Signal(typ=UInt(w), kind="input"),
+            b=Signal(typ=UInt(w), kind="input"),
+            c=Signal(typ=UInt(2 * w), kind="input"),
+            y=Signal(typ=UInt(2 * w + 1), kind="output"),
         )
         self.elaborate()
 
@@ -502,15 +502,15 @@ class _Dot4(Component):
     def __init__(self, w: int):
         self.w = w
         self.io = _DotIO(
-            x0=Signal(name="x0", typ=UInt(w), kind="input"),
-            x1=Signal(name="x1", typ=UInt(w), kind="input"),
-            x2=Signal(name="x2", typ=UInt(w), kind="input"),
-            x3=Signal(name="x3", typ=UInt(w), kind="input"),
-            c0=Signal(name="c0", typ=UInt(w), kind="input"),
-            c1=Signal(name="c1", typ=UInt(w), kind="input"),
-            c2=Signal(name="c2", typ=UInt(w), kind="input"),
-            c3=Signal(name="c3", typ=UInt(w), kind="input"),
-            y=Signal(name="y", typ=UInt(2 * w + 2), kind="output"),
+            x0=Signal(typ=UInt(w), kind="input"),
+            x1=Signal(typ=UInt(w), kind="input"),
+            x2=Signal(typ=UInt(w), kind="input"),
+            x3=Signal(typ=UInt(w), kind="input"),
+            c0=Signal(typ=UInt(w), kind="input"),
+            c1=Signal(typ=UInt(w), kind="input"),
+            c2=Signal(typ=UInt(w), kind="input"),
+            c3=Signal(typ=UInt(w), kind="input"),
+            y=Signal(typ=UInt(2 * w + 2), kind="output"),
         )
         self.elaborate()
 

@@ -47,12 +47,12 @@ def _build_fifo16(*, registered_read: bool = False, with_reset_arm: bool = True,
                 din: Signal
                 dout: Signal
             self.io = IO(
-                we     = Signal("we",     Bool(),   "input"),
-                clr    = Signal("clr",    Bool(),   "input"),
-                addr_w = Signal("addr_w", UInt(4), "input"),
-                addr_r = Signal("addr_r", UInt(4), "input"),
-                din    = Signal("din",    UInt(9), "input"),
-                dout   = Signal("dout",   UInt(9), "output"),
+                we     = Signal(typ=Bool(), kind="input"),
+                clr    = Signal(typ=Bool(), kind="input"),
+                addr_w = Signal(typ=UInt(4), kind="input"),
+                addr_r = Signal(typ=UInt(4), kind="input"),
+                din    = Signal(typ=UInt(9), kind="input"),
+                dout   = Signal(typ=UInt(9), kind="output"),
             )
             self.elaborate()
 
@@ -87,9 +87,9 @@ def _build_rom8(init):
                 re: Signal
                 dout: Signal
             self.io = IO(
-                addr = Signal("addr", UInt(3), "input"),
-                re   = Signal("re",   Bool(),  "input"),
-                dout = Signal("dout", UInt(8), "output"),
+                addr = Signal(typ=UInt(3), kind="input"),
+                re   = Signal(typ=Bool(), kind="input"),
+                dout = Signal(typ=UInt(8), kind="output"),
             )
             self.elaborate()
 
@@ -245,13 +245,13 @@ def test_sim_aggregate_elem_type():
                 dout_data: Signal
                 dout_valid: Signal
             self.io = IO(
-                we         = Signal("we",         Bool(),   "input"),
-                addr_w     = Signal("addr_w",     UInt(2), "input"),
-                addr_r     = Signal("addr_r",     UInt(2), "input"),
-                din_data   = Signal("din_data",   UInt(8), "input"),
-                din_valid  = Signal("din_valid",  Bool(),  "input"),
-                dout_data  = Signal("dout_data",  UInt(8), "output"),
-                dout_valid = Signal("dout_valid", Bool(),  "output"),
+                we         = Signal(typ=Bool(), kind="input"),
+                addr_w     = Signal(typ=UInt(2), kind="input"),
+                addr_r     = Signal(typ=UInt(2), kind="input"),
+                din_data   = Signal(typ=UInt(8), kind="input"),
+                din_valid  = Signal(typ=Bool(), kind="input"),
+                dout_data  = Signal(typ=UInt(8), kind="output"),
+                dout_valid = Signal(typ=Bool(), kind="output"),
             )
             self.elaborate()
 

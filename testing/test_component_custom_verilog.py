@@ -47,9 +47,9 @@ class CustomAdder(Component):
             b: Signal
             sum: Signal
         self.io = IO(
-            a   = Signal("a",   UInt(8), "input"),
-            b   = Signal("b",   UInt(8), "input"),
-            sum = Signal("sum", UInt(9), "output"),
+            a   = Signal(typ=UInt(8), kind="input"),
+            b   = Signal(typ=UInt(8), kind="input"),
+            sum = Signal(typ=UInt(9), kind="output"),
         )
         self.elaborate()
 
@@ -118,9 +118,9 @@ class PlainAdder(Component):
             b: Signal
             sum: Signal
         self.io = IO(
-            a   = Signal("a",   UInt(8), "input"),
-            b   = Signal("b",   UInt(8), "input"),
-            sum = Signal("sum", UInt(9), "output"),
+            a   = Signal(typ=UInt(8), kind="input"),
+            b   = Signal(typ=UInt(8), kind="input"),
+            sum = Signal(typ=UInt(9), kind="output"),
         )
         self.elaborate()
 
@@ -162,10 +162,10 @@ class TopWithCustomInner(Component):
             c: Signal
             result: Signal
         self.io = IO(
-            a      = Signal("a",      UInt(8),  "input"),
-            b      = Signal("b",      UInt(8),  "input"),
-            c      = Signal("c",      UInt(8),  "input"),
-            result = Signal("result", UInt(10), "output"),
+            a      = Signal(typ=UInt(8), kind="input"),
+            b      = Signal(typ=UInt(8), kind="input"),
+            c      = Signal(typ=UInt(8), kind="input"),
+            result = Signal(typ=UInt(10), kind="output"),
         )
         self.elaborate()
 
@@ -222,12 +222,12 @@ def test_embedded_multiple_instances():
                 a: Signal; b: Signal; c: Signal; d: Signal
                 ab_sum: Signal; cd_sum: Signal
             self.io = IO(
-                a      = Signal("a",      UInt(8), "input"),
-                b      = Signal("b",      UInt(8), "input"),
-                c      = Signal("c",      UInt(8), "input"),
-                d      = Signal("d",      UInt(8), "input"),
-                ab_sum = Signal("ab_sum", UInt(9), "output"),
-                cd_sum = Signal("cd_sum", UInt(9), "output"),
+                a      = Signal(typ=UInt(8), kind="input"),
+                b      = Signal(typ=UInt(8), kind="input"),
+                c      = Signal(typ=UInt(8), kind="input"),
+                d      = Signal(typ=UInt(8), kind="input"),
+                ab_sum = Signal(typ=UInt(9), kind="output"),
+                cd_sum = Signal(typ=UInt(9), kind="output"),
             )
             self.elaborate()
         def elaborate(self):
@@ -266,8 +266,8 @@ class CustomCounter(Component):
             inc: Signal
             value: Signal
         self.io = IO(
-            inc   = Signal("inc",   UInt(8), "input"),
-            value = Signal("value", UInt(8), "output"),
+            inc   = Signal(typ=UInt(8), kind="input"),
+            value = Signal(typ=UInt(8), kind="output"),
         )
         self.elaborate()
 

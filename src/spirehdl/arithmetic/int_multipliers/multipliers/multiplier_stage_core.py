@@ -472,9 +472,9 @@ class StageBasedMultiplierBasic(Component):
         base_type_y = SInt if (signed_a or signed_b) else UInt
 
         self.io : StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(name="a", typ=base_typ_a(a_w), kind="input"),
-            b=Signal(name="b", typ=base_typ_b(b_w), kind="input"),
-            y=Signal(name="y", typ=base_type_y(self.config.out_width), kind="output"),
+            a=Signal(typ=base_typ_a(a_w), kind="input"),
+            b=Signal(typ=base_typ_b(b_w), kind="input"),
+            y=Signal(typ=base_type_y(self.config.out_width), kind="output"),
         )
 
         self.ppg = ppg_cls(self.config)

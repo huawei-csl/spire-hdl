@@ -25,9 +25,9 @@ class Multiplier(Component):
 
         # Create the IO structure with Signal instances
         self.io = IO(
-            a=Signal(name="a", typ=UInt(width), kind="input"),
-            b=Signal(name="b", typ=UInt(width), kind="input"),
-            y=Signal(name="y", typ=UInt(width * 2), kind="output"),
+            a=Signal(typ=UInt(width), kind="input"),
+            b=Signal(typ=UInt(width), kind="input"),
+            y=Signal(typ=UInt(width * 2), kind="output"),
         )
 
         # Build the internal logic

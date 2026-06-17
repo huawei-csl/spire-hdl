@@ -91,13 +91,13 @@ class FIFOPrimitive(Component):
             count: Signal
 
         self.io = IO(
-            push  = Signal("push",  Bool(),               "input"),
-            pop   = Signal("pop",   Bool(),               "input"),
-            din   = Signal("din",   UInt(self._elem_w),   "input"),
-            dout  = Signal("dout",  UInt(self._elem_w),   "output"),
-            full  = Signal("full",  Bool(),               "output"),
-            empty = Signal("empty", Bool(),               "output"),
-            count = Signal("count", UInt(self._count_w),  "output"),
+            push  = Signal(typ=Bool(), kind="input"),
+            pop   = Signal(typ=Bool(), kind="input"),
+            din   = Signal(typ=UInt(self._elem_w), kind="input"),
+            dout  = Signal(typ=UInt(self._elem_w), kind="output"),
+            full  = Signal(typ=Bool(), kind="output"),
+            empty = Signal(typ=Bool(), kind="output"),
+            count = Signal(typ=UInt(self._count_w), kind="output"),
         )
         self.elaborate()
 

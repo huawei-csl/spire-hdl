@@ -42,7 +42,7 @@ class AggregateRegister(HDLAggregate, Generic[T_Agg]):
         bits_typ = proto.to_bits().typ
 
         reg_name = name or f"reg_{agg_cls.__name__}_{id(self)}"
-        self._reg = Signal(reg_name, bits_typ, kind="reg")
+        self._reg = Signal(typ=bits_typ, kind="reg", name=reg_name)
 
         # Optional init value (packed)
         if init is not None:

@@ -23,9 +23,9 @@ class _AdderOp(Component):
     def __init__(self, w: int):
         self.w = w
         self.io = StageBasedMultiplierIO(
-            a=Signal(name="a", typ=UInt(w), kind="input"),
-            b=Signal(name="b", typ=UInt(w), kind="input"),
-            y=Signal(name="y", typ=UInt(w + 1), kind="output"),
+            a=Signal(typ=UInt(w), kind="input"),
+            b=Signal(typ=UInt(w), kind="input"),
+            y=Signal(typ=UInt(w + 1), kind="output"),
         )
         self.elaborate()
 
@@ -37,9 +37,9 @@ class _SubtractorOp(Component):
     def __init__(self, w: int):
         self.w = w
         self.io = StageBasedMultiplierIO(
-            a=Signal(name="a", typ=UInt(w), kind="input"),
-            b=Signal(name="b", typ=UInt(w), kind="input"),
-            y=Signal(name="y", typ=UInt(w + 1), kind="output"),
+            a=Signal(typ=UInt(w), kind="input"),
+            b=Signal(typ=UInt(w), kind="input"),
+            y=Signal(typ=UInt(w + 1), kind="output"),
         )
         self.elaborate()
 
@@ -51,9 +51,9 @@ class _MultiplierOp(Component):
     def __init__(self, w: int):
         self.w = w
         self.io = StageBasedMultiplierIO(
-            a=Signal(name="a", typ=UInt(w), kind="input"),
-            b=Signal(name="b", typ=UInt(w), kind="input"),
-            y=Signal(name="y", typ=UInt(2 * w), kind="output"),
+            a=Signal(typ=UInt(w), kind="input"),
+            b=Signal(typ=UInt(w), kind="input"),
+            y=Signal(typ=UInt(2 * w), kind="output"),
         )
         self.elaborate()
 
@@ -161,9 +161,9 @@ def test_replace_different_width():
     class _DiffWidthAdder(Component):
         def __init__(self):
             self.io = StageBasedMultiplierIO(
-                a=Signal(name="a", typ=UInt(8), kind="input"),
-                b=Signal(name="b", typ=UInt(4), kind="input"),
-                y=Signal(name="y", typ=UInt(9), kind="output"),
+                a=Signal(typ=UInt(8), kind="input"),
+                b=Signal(typ=UInt(4), kind="input"),
+                y=Signal(typ=UInt(9), kind="output"),
             )
             self.elaborate()
 

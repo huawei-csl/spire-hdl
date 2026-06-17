@@ -77,7 +77,7 @@ def _create_new_shared_wire(typ: HDLType, suggested_name: Optional[str] = None) 
     )
 
     _SharedCache.used_names.add(name)
-    sig = Signal(name, typ, "wire")
+    sig = Signal(typ=typ, kind="wire", name=name)
     sig._auto_generated = True
     _SharedCache.wires.append(sig)
     return sig
@@ -327,7 +327,15 @@ class Const(Expr):
 
 
 class Signal(Expr):
-    def __init__(self, name: str, typ: HDLType, kind: str): #, module: "Module"):
+    def __init__(self, typ: Optional[HDLType] = None, kind: Optional[str] = None, name: Optional[str] = None): #, module: "Module"):
+        if isinstance(typ, str):
+            # Guard against the old argument order Signal(name, typ, kind) — `name` is now last.
+            raise TypeError("Signal(typ, kind, name=None): argument order changed — 'name' is now last (pass name= or reorder).")
+        if typ is None or kind is None:
+            raise TypeError("Signal requires a type and a kind, e.g. Signal(UInt(8), 'input')")
+        if name is None:
+            # Infer from the assignment target, e.g. ``clk = Signal(UInt(8), "input")`` → ``"clk"``.
+            name = infer_signal_name_from_assignment(kind, "signal", __file__)
         self.name = name
         self.typ = typ
         self.kind = kind  # 'input' | 'output' | 'wire' | 'reg'
@@ -376,18 +384,14 @@ def reinterpret(expr: ExprLike, to_type: HDLType) -> Signal:
 # explicit register
 class Register(Signal):
     def __init__(self, typ: HDLType, init: Optional[ExprLike] = None, name: Optional[str]=None):
-        if name is None:
-            name = infer_signal_name_from_assignment("reg", "reg", __file__)
-        super().__init__(name, typ, kind="reg")
+        super().__init__(typ, kind="reg", name=name)   # name inferred by Signal when None
         if init is not None:
             self.set_init(init)
 
 # explicit wire
 class Wire(Signal):
     def __init__(self, typ: HDLType, name: Optional[str]=None):
-        if name is None:
-            name = infer_signal_name_from_assignment("wire", "wire", __file__)
-        super().__init__(name, typ, kind="wire")
+        super().__init__(typ, kind="wire", name=name)   # name inferred by Signal when None
 
 
 # -----------------------------

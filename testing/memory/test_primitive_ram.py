@@ -27,7 +27,7 @@ def _top_from(ram_factory, io_fields, wiring):
     class Top(Component):
         def __init__(self):
             IO = make_dataclass("TopIO", [(n, Signal) for n, _ in io_fields])
-            self.io = IO(**{n: Signal(n, t, d) for n, (t, d) in
+            self.io = IO(**{n: Signal(typ=t, kind=d, name=n) for n, (t, d) in
                             ((n, (t, d)) for n, (t, d) in io_fields)})
             self.elaborate()
 
