@@ -11,6 +11,7 @@ from spirehdl.arithmetic.int_multipliers.stages.ppg_and_stages import AndPartial
 from spirehdl.arithmetic.int_multipliers.stages.ppg_booth_optim_stages import BoothOptimizedPartialProductGenerator
 from spirehdl.arithmetic.int_multipliers.stages.ppg_booth_precomputed_b_stages import BoothPrecomputedBPartialProductGenerator
 from spirehdl.arithmetic.int_multipliers.stages.ppg_booth_unoptim_stages import BoothUnoptimizedPartialProductGenerator
+from spirehdl.arithmetic.int_multipliers.stages.ppg_nr4sd_stages import NR4SDPartialProductGenerator
 from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, RippleCarryFinalAdder, StageBasedMultiplierBasic
 from spirehdl.arithmetic.int_multipliers.stages.fsa_stages import BrentKungPrefixFinalStage, HanCarlsonPrefixFinalStage, KoggeStonePrefixFinalStage, LadnerFischerPrefixFinalStage, MultiScanPrefixFinalStage, NaiveRippleCarryFinalStage, PlusOperatorAdderFinalStage, PrefixAdderFinalStage, RipplePrefixFinalStage, SklanskyPrefixFinalStage, SparseKoggeStone2PrefixFinalStage, SparseKoggeStone4PrefixFinalStage, ZCGPrefixFinalStage
 
@@ -24,6 +25,7 @@ class PPGOption(Enum):
     BOOTH_UNOPTIMISED = BoothUnoptimizedPartialProductGenerator
     BOOTH_OPTIMISED = BoothOptimizedPartialProductGenerator
     #BOOTH_OPTIMISED_PRECOMPUTED_B = BoothPrecomputedBPartialProductGenerator # doesnt really help compared to BOOTH_OPTIMISED, but included for completeness
+    NR4SD = NR4SDPartialProductGenerator  # non-redundant radix-4 signed-digit (signed multiplier only)
     NONE = None
 
 
