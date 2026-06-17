@@ -5,17 +5,17 @@ more HDL `Expr` leaves and behave as a single, bit-packable value.  All aggregat
 `HDLAggregate` and share a common API for flattening to bits, packed assignment (`<<=`), and
 element-wise assignment (`@=`).
 
-Source: [`src/spirehdl/aggregate/`](src/spirehdl/aggregate).
+Source: [`src/spirehdl/aggregate/`](../src/spirehdl/aggregate).
 
 | Type | Purpose | Source |
 |---|---|---|
-| `HDLAggregate` | Abstract base — `to_bits`, `assign`, `<<=`, `@=` (see [Common API](#common-api)) | [`hdl_aggregate.py`](src/spirehdl/aggregate/hdl_aggregate.py) |
-| [`Array`](#array) | N-dimensional vector of `Expr` or nested aggregates | [`aggregate_array.py`](src/spirehdl/aggregate/aggregate_array.py) |
-| [`AggregateRecord`](#aggregaterecord) | Declarative bundle with named fields (class attributes) | [`aggregate_record.py`](src/spirehdl/aggregate/aggregate_record.py) |
-| [`AggregateRecordDynamic`](#aggregaterecorddynamic) | Bundle defined from instance attributes / `@dataclass` | [`aggregate_record_dynamic.py`](src/spirehdl/aggregate/aggregate_record_dynamic.py) |
-| [`FixedPoint`](#fixedpoint) | Fixed-point view of a bitvector with arithmetic + quantization | [`aggregate_fixed_point.py`](src/spirehdl/aggregate/aggregate_fixed_point.py) |
-| [`FloatingPoint`](#floatingpoint) | Floating-point view with `add` / `mul` helpers | [`aggregate_floating_point.py`](src/spirehdl/aggregate/aggregate_floating_point.py) |
-| [`AggregateRegister`](#aggregateregister) | Single register holding any packed aggregate | [`aggregate_register.py`](src/spirehdl/aggregate/aggregate_register.py) |
+| `HDLAggregate` | Abstract base — `to_bits`, `assign`, `<<=`, `@=` (see [Common API](#common-api)) | [`hdl_aggregate.py`](../src/spirehdl/aggregate/hdl_aggregate.py) |
+| [`Array`](#array) | N-dimensional vector of `Expr` or nested aggregates | [`aggregate_array.py`](../src/spirehdl/aggregate/aggregate_array.py) |
+| [`AggregateRecord`](#aggregaterecord) | Declarative bundle with named fields (class attributes) | [`aggregate_record.py`](../src/spirehdl/aggregate/aggregate_record.py) |
+| [`AggregateRecordDynamic`](#aggregaterecorddynamic) | Bundle defined from instance attributes / `@dataclass` | [`aggregate_record_dynamic.py`](../src/spirehdl/aggregate/aggregate_record_dynamic.py) |
+| [`FixedPoint`](#fixedpoint) | Fixed-point view of a bitvector with arithmetic + quantization | [`aggregate_fixed_point.py`](../src/spirehdl/aggregate/aggregate_fixed_point.py) |
+| [`FloatingPoint`](#floatingpoint) | Floating-point view with `add` / `mul` helpers | [`aggregate_floating_point.py`](../src/spirehdl/aggregate/aggregate_floating_point.py) |
+| [`AggregateRegister`](#aggregateregister) | Single register holding any packed aggregate | [`aggregate_register.py`](../src/spirehdl/aggregate/aggregate_register.py) |
 
 ## Common API
 
@@ -210,7 +210,7 @@ y <<= acc.bits
 ```
 
 Working tests demonstrate the full simulation flow:
-[`testing/test_fixed_point.py`](testing/test_fixed_point.py),
-[`testing/test_floating_point.py`](testing/test_floating_point.py),
-[`testing/test_aggregate_record.py`](testing/test_aggregate_record.py),
-[`testing/test_array2.py`](testing/test_array2.py).
+[`testing/test_fixed_point.py`](../testing/test_fixed_point.py),
+[`testing/test_floating_point.py`](../testing/test_floating_point.py),
+[`testing/test_aggregate_record.py`](../testing/test_aggregate_record.py),
+[`testing/test_array2.py`](../testing/test_array2.py).

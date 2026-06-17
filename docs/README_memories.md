@@ -6,10 +6,10 @@ the common cases:
 
 | Primitive | Use for | Shape |
 |---|---|---|
-| [`MemoryPrimitive`](src/spirehdl/primitives/primitive_memory.py) | scratchpad RAM, single-port BRAM | 1 write + 1 read (async or registered), optional reset arm / write mask |
-| [`RamPrimitive`](src/spirehdl/primitives/primitive_ram.py) | multi-port RAM, true dual-port, register files | N write + N read + N read/write (`rw`) ports over one array |
-| [`RomPrimitive`](src/spirehdl/primitives/primitive_rom.py) | read-only memory, lookup tables | init-backed, 1 read (async or registered), no write port |
-| [`FIFOPrimitive`](src/spirehdl/primitives/primitive_fifo.py) | ready-made synchronous FIFO | push / pop / full / empty / count |
+| [`MemoryPrimitive`](../src/spirehdl/primitives/primitive_memory.py) | scratchpad RAM, single-port BRAM | 1 write + 1 read (async or registered), optional reset arm / write mask |
+| [`RamPrimitive`](../src/spirehdl/primitives/primitive_ram.py) | multi-port RAM, true dual-port, register files | N write + N read + N read/write (`rw`) ports over one array |
+| [`RomPrimitive`](../src/spirehdl/primitives/primitive_rom.py) | read-only memory, lookup tables | init-backed, 1 read (async or registered), no write port |
+| [`FIFOPrimitive`](../src/spirehdl/primitives/primitive_fifo.py) | ready-made synchronous FIFO | push / pop / full / empty / count |
 
 ```python
 from spirehdl.primitives import MemoryPrimitive, RamPrimitive, RomPrimitive, FIFOPrimitive
@@ -159,10 +159,10 @@ ram.io.r1_addr <<= ra1; d1 <<= ram.io.r1_data
 dp = RamPrimitive(UInt(8), depth=4, rw_ports=2,
                   num_read_ports=0, num_write_ports=0).make_internal()
 for p, (addr, din, wr, en, dout) in (("rw0", a_sigs), ("rw1", b_sigs)):
-    getattr(dp.io, f"{p}_addr")  <<= addr
-    getattr(dp.io, f"{p}_din")   <<= din
-    getattr(dp.io, f"{p}_write") <<= wr
-    getattr(dp.io, f"{p}_en")    <<= en
+    addr_p = getattr(dp.io, f"{p}_addr");  addr_p <<= addr   # bind first; `getattr(...) <<= x` is a syntax error
+    din_p  = getattr(dp.io, f"{p}_din");   din_p  <<= din
+    wr_p   = getattr(dp.io, f"{p}_write"); wr_p   <<= wr
+    en_p   = getattr(dp.io, f"{p}_en");    en_p   <<= en
     dout <<= getattr(dp.io, f"{p}_dout")
 ```
 
@@ -264,8 +264,8 @@ sim.get_mem("ram")     # → [0, 0, 0, 0xAB, …]   (length == depth, unsigned b
 
 ## See also
 
-- Tests (in [`testing/memory/`](testing/memory/)):
-  [`test_memory.py`](testing/memory/test_memory.py) (behaviour via primitives),
-  [`test_primitive_memory.py`](testing/memory/test_primitive_memory.py),
-  [`test_primitive_ram.py`](testing/memory/test_primitive_ram.py),
-  [`test_primitive_fifo.py`](testing/memory/test_primitive_fifo.py).
+- Tests (in [`testing/memory/`](../testing/memory/)):
+  [`test_memory.py`](../testing/memory/test_memory.py) (behaviour via primitives),
+  [`test_primitive_memory.py`](../testing/memory/test_primitive_memory.py),
+  [`test_primitive_ram.py`](../testing/memory/test_primitive_ram.py),
+  [`test_primitive_fifo.py`](../testing/memory/test_primitive_fifo.py).

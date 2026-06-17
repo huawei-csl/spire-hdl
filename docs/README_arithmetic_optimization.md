@@ -77,7 +77,7 @@ module = alu.to_module("OptimizedALU")
 print(module.to_verilog())
 ```
 
-See [`testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py`](testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py) for full test and benchmark code.
+See [`testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py`](../testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py) for full test and benchmark code.
 
 ## Explicit builder functions
 
@@ -174,4 +174,4 @@ The optimizer automatically detects the `c*x + ...` inner product pattern and fu
 
 The area objective achieves a **54% transistor reduction**, and the delay objective cuts critical-path depth from 142 to 45 AND-gate levels (**68%**).
 
-See [`testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py`](testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py) for the full test and benchmark code.
+See [`testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py`](../testing/low_level_arithmetic/int_adders/test_arithmetic_auto_config.py) for the full test and benchmark code.

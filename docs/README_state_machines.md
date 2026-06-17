@@ -5,7 +5,7 @@ SpireHDL ships with a small `State` base class plus an `Encoding` enum
 in a way that's IDE-friendly, type-checked, and composes with the existing
 `switch_`/`case_`/`if_` control-flow context managers.
 
-The pieces live in [`spirehdl/spirehdl_state.py`](src/spirehdl/spirehdl_state.py).
+The pieces live in [`spirehdl/spirehdl_state.py`](../src/spirehdl/spirehdl_state.py).
 
 ## Quick start
 
@@ -143,11 +143,11 @@ MyFSM._width # 1
 ## See also
 
 - The full simulation-verified examples are in
-  [`testing/basic/test_fsm_examples.py`](testing/basic/test_fsm_examples.py)
+  [`testing/basic/test_fsm_examples.py`](../testing/basic/test_fsm_examples.py)
   (traffic-light, sequence detector, Mealy edge-detector, encoding-equivalence
   parity).
 - The original minimal test —
-  [`testing/basic/test_state_machine.py`](testing/basic/test_state_machine.py)
+  [`testing/basic/test_state_machine.py`](../testing/basic/test_state_machine.py)
   — covers the encoding-width contract and a 3-state demo.
 - For control-flow context managers, see
-  [`spirehdl_control_structures.py`](src/spirehdl/spirehdl_control_structures.py).
+  [`spirehdl_control_structures.py`](../src/spirehdl/spirehdl_control_structures.py).

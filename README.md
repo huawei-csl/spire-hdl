@@ -17,7 +17,7 @@ A modern Python HDL that compiles concise, composable hardware descriptions to s
 - **Integrated with ABC and mockturtle:** modern synthesis optimization wired directly into the compilation pipeline
 - **Arithmetic library with automated replacement:** swap adders, multipliers, and FP cores driven by an objective
 - **Cycle-accurate Python simulator"** drive inputs, tick clocks, inspect expressions/outputs without leaving Python
-- **Content-addressed optimization cache:** instant re-runs via `@flowy_optimized` / `@abc_optimized` decorators
+- **Content-addressed optimization cache:** instant re-runs via `@abc_optimized` /`@flowy_optimized` decorators
 
 ## Optimizations built in 💡
 
@@ -33,7 +33,7 @@ Drops in topology-tuned adders, multipliers, and MAC fusions against an `area` /
 - **4.2× shorter critical path** with the `delay` objective
 - balanced `adp` gets near-minimal area *and* near-minimal depth at once
 
-MAC patterns (`a*b + c`) are fused into single column-reduction units, eliminating a full adder stage. See [`README_arithmetic_optimization.md`](README_arithmetic_optimization.md).
+MAC patterns (`a*b + c`) are fused into single column-reduction units, eliminating a full adder stage. See [`README_arithmetic_optimization.md`](docs/README_arithmetic_optimization.md).
 
 ### 🧩 ABC + mockturtle decorators: `@abc_optimized` / `@flowy_optimized`
 
@@ -43,7 +43,7 @@ One decorator stacks modern AIG synthesis (`resyn2`, `&deepsyn`, mockturtle) ont
 - **−83%** on a 16-bit multiplier
 - stack with `@arithmetic_optimized` for compounding wins — ABC cleans up after the arithmetic rewriter
 
-See [`README_optimization_decorators.md`](README_optimization_decorators.md).
+See [`README_optimization_decorators.md`](docs/README_optimization_decorators.md).
 
 ### 🎯 FSM + encoding search: `optimized_fsm` / `optimized_encoding`
 
@@ -53,11 +53,11 @@ Hopcroft state minimisation and bit-assignment search as two composable context 
 - **−44% cells** with `optimized_fsm` alone
 - **−69.5% cells** when both are nested — a ~3× reduction with two `with` blocks, no hand-tuned encoding tables
 
-An 8-opcode CPU decoder sees **−66.7% cells** from a single `optimized_encoding`, because the search discovers an opcode layout where each wide OR collapses to one bit-test. See [`README_fsm_optimization.md`](README_fsm_optimization.md).
+An 8-opcode CPU decoder sees **−66.7% cells** from a single `optimized_encoding`, because the search discovers an opcode layout where each wide OR collapses to one bit-test. See [`README_fsm_optimization.md`](docs/README_fsm_optimization.md).
 
 ### 🛠️ Fine-grained architecture selection: `arithmetic_generator`
 
-Beyond the automatic passes above, the unified arithmetic generator lets you hand-pick the exact micro-architecture of an adder, multiplier, MAC, or matmul (partial-product generation, compression-tree topology, and final-stage adder), then emit Verilog/AIG, simulate, and collect Yosys metrics for direct comparison. See [`README_arithmetic_generator.md`](README_arithmetic_generator.md).
+Beyond the automatic passes above, the unified arithmetic generator lets you hand-pick the exact micro-architecture of an adder, multiplier, MAC, or matmul (partial-product generation, compression-tree topology, and final-stage adder), then emit Verilog/AIG, simulate, and collect Yosys metrics for direct comparison. See [`README_arithmetic_generator.md`](docs/README_arithmetic_generator.md).
 
 ## Overview
 
@@ -73,14 +73,17 @@ In its simplest form, SpireHDL only needs these core files. This is intentional 
 
 Other markdown documents in this repository:
 
-- [`README_arithmetic_generator.md`](README_arithmetic_generator.md) — arithmetic generators, evaluation scripts, and extra tooling notes
-- [`README_arithmetic_optimization.md`](README_arithmetic_optimization.md) — automatic arithmetic replacement with `replace_arithmetic_ops` (adders, multipliers, subtractors)
-- [`README_optimization_decorators.md`](README_optimization_decorators.md) — the `@abc_optimized` / `@flowy_optimized` circuit optimization decorators
-- [`README_state_machines.md`](README_state_machines.md) — finite-state-machine declaration with the `State` / `Encoding` API and `switch_`/`case_` bodies
-- [`README_fsm_optimization.md`](README_fsm_optimization.md) — the `optimized_fsm` and `optimized_encoding` context managers (Hopcroft state minimisation + bit-assignment search)
-- [`README_memories.md`](README_memories.md) — the `Memory` primitive (FIFOs, ROMs, RAMs), port wiring with `<<=`, simulation, and reading current memory state
-- [`README_custom_verilog.md`](README_custom_verilog.md) — emit a hand-written Verilog block from a `Component` via `custom_verilog()`, with or without a Python sim model (blackbox)
-- [`testing/examples/README.md`](testing/examples/README.md) — example designs exercising SpireHDL features
+- **State machines** — declaration with the `State` / `Encoding` API and `switch_` / `case_` bodies ([`README_state_machines.md`](docs/README_state_machines.md))
+- **Control structures** — `if_` / `elif_` / `else_` and `switch_` / `case_` / `default` context managers ([`README_control_structures.md`](docs/README_control_structures.md))
+- **Memories** — the `Memory` primitive (FIFOs, ROMs, RAMs), port wiring with `<<=`, simulation, and reading current state ([`README_memories.md`](docs/README_memories.md))
+- **Arithmetic optimization** — automatic replacement with `replace_arithmetic_ops` (adders, multipliers, subtractors) ([`README_arithmetic_optimization.md`](docs/README_arithmetic_optimization.md))
+- **Optimization decorators** — `@abc_optimized` / `@flowy_optimized` circuit optimization ([`README_optimization_decorators.md`](docs/README_optimization_decorators.md))
+- **FSM optimization** — the `optimized_fsm` and `optimized_encoding` context managers (Hopcroft minimisation + bit-assignment search) ([`README_fsm_optimization.md`](docs/README_fsm_optimization.md))
+- **Arithmetic generators** — evaluation scripts and extra tooling notes ([`README_arithmetic_generator.md`](docs/README_arithmetic_generator.md))
+- **Custom Verilog** — emit a hand-written Verilog block from a `Component` via `custom_verilog()`, with or without a Python sim model (blackbox) ([`README_custom_verilog.md`](docs/README_custom_verilog.md))
+- **AIG / AAG export & import** — lower a `Module` to an AIGER netlist and read AIG/AAG back in as a `Component` ([`README_aig_export.md`](docs/README_aig_export.md))
+- **Verilog testbench** — record stimuli and emit a synthesizable Verilog testbench that replays them against the generated RTL ([`README_verilog_testbench.md`](docs/README_verilog_testbench.md))
+- **Examples** — example designs exercising SpireHDL features ([`testing/examples/README.md`](testing/examples/README.md))
 
 ## Installation
 
@@ -136,7 +139,8 @@ from spirehdl.spirehdl import Register, UInt
 m = Module("Counter", with_clock=True, with_reset=True)
 cnt = Register(UInt(8), init=0, name="cnt")       # or: cnt = m.reg(UInt(8), "cnt", init=0)
 cnt <<= cnt + 1                                   # next-state = cnt + 1
-m.output(UInt(8), "q") <<= cnt
+q = m.output(UInt(8), "q")                        # bind to a name first
+q <<= cnt                                          # (q <<= ... ; not m.output(...) <<= ...)
 ```
 
 ### 2. Simulate the design
@@ -222,7 +226,7 @@ Components are how to build hierarchy: instantiate one inside another, adapt its
 
 ## Aggregate data types
 
-SpireHDL includes structured, bit-packable aggregates for cleaner interfaces and bulk assignments ([`aggregate/`](src/spirehdl/aggregate)). See [`README_aggregate_types.md`](README_aggregate_types.md) for the full reference with an example for every type:
+SpireHDL includes structured, bit-packable aggregates for cleaner interfaces and bulk assignments ([`aggregate/`](src/spirehdl/aggregate)). See [`README_aggregate_types.md`](docs/README_aggregate_types.md) for the full reference with an example for every type:
 
 - `HDLAggregate` defines the base "pack to bits" API that powers all aggregates ([`hdl_aggregate.py`](src/spirehdl/aggregate/hdl_aggregate.py)).
 - `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or aggregates ([`aggregate_array.py`](src/spirehdl/aggregate/aggregate_array.py)).
@@ -261,6 +265,18 @@ The simulator supports both combinational and sequential designs:
 - `set()` and `get()` let you drive or inspect signals by name.
 - `step()` advances the clock, committing register next-state expressions while honoring asynchronous resets.
 - `watch()` and `peek_next()` provide scope-style visibility for debugging complex pipelines.
+
+For waveforms, set `sim.trace_enabled = True` before driving the design, then dump the captured trace to a VCD file:
+
+```python
+from spirehdl.various.vcd_writer import write_vcd
+
+sim.trace_enabled = True
+sim.eval()
+for _ in range(5):
+    sim.step()
+write_vcd(trace_by_names=sim.get_trace_by_names(), filename="run.vcd", top_module=m.name, timescale="1ns")
+```
 
 ## Slices
 SpireHDL signals follow Python's indexing convention. For example, `sig[4:7]` creates a new expression made up of bits 4, 5, and 6 (counted from the LSB) of the original expression `sig`.

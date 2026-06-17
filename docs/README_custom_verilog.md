@@ -14,8 +14,8 @@ supported:
   outputs to 0. Useful for vendor IP, opaque macros (PLLs, SerDes, RAM
   macros), or any block where a Python model isn't practical.
 
-The mechanism lives in [`spirehdl/spirehdl_module.py`](src/spirehdl/spirehdl_module.py)
-(Component-side tagging) and [`spirehdl/spirehdl_simulator.py`](src/spirehdl/spirehdl_simulator.py)
+The mechanism lives in [`spirehdl/spirehdl_module.py`](../src/spirehdl/spirehdl_module.py)
+(Component-side tagging) and [`spirehdl/spirehdl_simulator.py`](../src/spirehdl/spirehdl_simulator.py)
 (sim stub for blackboxes).
 
 ## Quick start — Component with both sim model and custom Verilog
@@ -251,12 +251,12 @@ The `src/spirehdl/primitives/` package contains production-style uses of
 the custom-with-sim pattern — both with non-trivial `elaborate()` reference
 models and Yosys-friendly `custom_verilog()` outputs:
 
-- [`MemoryPrimitive`](src/spirehdl/primitives/primitive_memory.py) —
+- [`MemoryPrimitive`](../src/spirehdl/primitives/primitive_memory.py) —
   array-of-registers RAM with optional registered read, reset arm, and
   init values. Supports aggregate element types via user-side
   `to_bits`/`from_bits` at the port boundary. Emits the standard Yosys-
   inferable `reg [W-1:0] mem[0:D-1];` idiom in `custom_verilog()`.
-- [`FIFOPrimitive`](src/spirehdl/primitives/primitive_fifo.py) — standard
+- [`FIFOPrimitive`](../src/spirehdl/primitives/primitive_fifo.py) — standard
   synchronous FIFO (push/pop/full/empty/count, registered head). Inlines
   its storage and pointer/count logic in a single `custom_verilog()`
   block.
@@ -269,14 +269,14 @@ instances inside the same parent don't collide on inlined names.
 ## See also
 
 - Tests covering both flavours:
-  [`testing/test_component_custom_verilog.py`](testing/test_component_custom_verilog.py)
+  [`testing/test_component_custom_verilog.py`](../testing/test_component_custom_verilog.py)
   (non-blackbox cases including embedded use, multiple instances, and
   sequential logic) and
-  [`testing/test_blackbox_component.py`](testing/test_blackbox_component.py)
+  [`testing/test_blackbox_component.py`](../testing/test_blackbox_component.py)
   (top-level, embedded, multi-instance blackboxes; the walker-reachability
   fix is exercised in `test_embedded_blackbox_parent_helper_is_reachable`).
 - Primitives tests:
-  [`testing/memory/test_primitive_memory.py`](testing/memory/test_primitive_memory.py)
+  [`testing/memory/test_primitive_memory.py`](../testing/memory/test_primitive_memory.py)
   (10 cases including an `AggregateRecord` element-type round-trip) and
-  [`testing/memory/test_primitive_fifo.py`](testing/memory/test_primitive_fifo.py)
+  [`testing/memory/test_primitive_fifo.py`](../testing/memory/test_primitive_fifo.py)
   (8 cases including underflow/overflow safety and aggregate element types).

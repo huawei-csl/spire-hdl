@@ -1,6 +1,6 @@
 """Benchmark: measure AIG gates / depth for the two optimization wrappers.
 
-Two cases, mirroring ``README_fsm_optimization.md``:
+Two cases, mirroring ``docs/README_fsm_optimization.md``:
 
 1.  **Sequence-detector FSM (7 states with redundancy).** The canonical
     ``case10`` body — four pairs of states are behaviourally equivalent,

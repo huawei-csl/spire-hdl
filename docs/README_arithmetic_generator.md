@@ -3,16 +3,16 @@
 
 The `spirehdl/arithmetic` package collects reusable datapath blocks:
 
-- Integer multipliers include configurable stage-based designs and optimized AIG-backed implementations ([`int_multipliers/multipliers`](src/spirehdl/arithmetic/int_multipliers/multipliers)).
-- Prefix adders cover several topologies for depth/area exploration ([`prefix_adders`](src/spirehdl/arithmetic/prefix_adders)).
-- Floating-point implementations related utilities ([`floating_point`](src/spirehdl/arithmetic/floating_point)). *Note: floating point arithmetic might have some rounding errors for some settings of exponent and mantissa*
+- Integer multipliers include configurable stage-based designs and optimized AIG-backed implementations ([`int_multipliers/multipliers`](../src/spirehdl/arithmetic/int_multipliers/multipliers)).
+- Prefix adders cover several topologies for depth/area exploration ([`prefix_adders`](../src/spirehdl/arithmetic/prefix_adders)).
+- Floating-point implementations related utilities ([`floating_point`](../src/spirehdl/arithmetic/floating_point)). *Note: floating point arithmetic might have some rounding errors for some settings of exponent and mantissa*
 
 Each module ships with small vector generators or evaluators so you can integrate them into regression tests quickly.
 
 ### Unified adder/multiplier/mac/matmul generator
 
 For integer adders, multipliers, and MACs (`y = a*b + c`), as well as matmul-accumulate there is a unified generator with both Python API and CLI frontend:
-[`arithmetic_generator.py`](src/spirehdl/arithmetic/arithmetic_generator.py).
+[`arithmetic_generator.py`](../src/spirehdl/arithmetic/arithmetic_generator.py).
 
 It can optionally:
 - write Verilog
@@ -24,7 +24,7 @@ It can optionally:
 - save the result summary JSON to a file (`--json-out`)
 
 Multiplier/Adder Python API usage reference:
-[`testing/low_level_arithmetic/test_arithmetic_generator.py`](testing/low_level_arithmetic/test_arithmetic_generator.py).
+[`testing/low_level_arithmetic/test_arithmetic_generator.py`](../testing/low_level_arithmetic/test_arithmetic_generator.py).
 
 Python API example (integer multiplier):
 
@@ -61,7 +61,7 @@ print(result.transistor_count)     # estimated transistor count from Yosys
 ```
 
 MAC Python API usage reference:
-[`testing/low_level_arithmetic/test_arithmetic_generator_mac.py`](testing/low_level_arithmetic/test_arithmetic_generator_mac.py).
+[`testing/low_level_arithmetic/test_arithmetic_generator_mac.py`](../testing/low_level_arithmetic/test_arithmetic_generator_mac.py).
 
 CLI examples:
 
