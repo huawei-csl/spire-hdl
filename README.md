@@ -75,14 +75,14 @@ Other markdown documents in this repository:
 
 - **[State machines](docs/README_state_machines.md)** — declaration with the `State` / `Encoding` API and `switch_` / `case_` bodies
 - **[Control structures](docs/README_control_structures.md)** — `if_` / `elif_` / `else_` and `switch_` / `case_` / `default` context managers
-- **[Memories](docs/README_memories.md)** — the `Memory` primitive (FIFOs, ROMs, RAMs), port wiring with `<<=`, simulation, and reading current state
-- **[Arithmetic optimization](docs/README_arithmetic_optimization.md)** — automatic replacement with `replace_arithmetic_ops` (adders, multipliers, subtractors)
+- **[Memories](docs/README_memories.md)** — the `Memory` primitive (FIFOs, ROMs, RAMs), port wiring with `<<=`, simulation, and reading state
+- **[Arithmetic optimization](docs/README_arithmetic_optimization.md)** — automatic replacement with optimized versions (adders, multipliers, MAC, etc)
 - **[Optimization decorators](docs/README_optimization_decorators.md)** — `@abc_optimized` / `@flowy_optimized` circuit optimization
-- **[FSM optimization](docs/README_fsm_optimization.md)** — the `optimized_fsm` and `optimized_encoding` context managers (Hopcroft minimisation + bit-assignment search)
+- **[FSM optimization](docs/README_fsm_optimization.md)** — `optimized_fsm` and `optimized_encoding` context managers (state minimisation + encoding search)
 - **[Arithmetic generators](docs/README_arithmetic_generator.md)** — evaluation scripts and extra tooling notes
-- **[Custom Verilog](docs/README_custom_verilog.md)** — emit a hand-written Verilog block from a `Component` via `custom_verilog()`, with or without a Python sim model (blackbox)
+- **[Custom Verilog](docs/README_custom_verilog.md)** — emit a hand-written Verilog block from a `Component`, with or without a Python sim model (blackbox)
 - **[AIG / AAG export & import](docs/README_aig_export.md)** — lower a `Module` to an AIGER netlist and read AIG/AAG back in as a `Component`
-- **[Verilog testbench](docs/README_verilog_testbench.md)** — record stimuli and emit a synthesizable Verilog testbench that replays them against the generated RTL
+- **[Verilog testbench](docs/README_verilog_testbench.md)** — turn a `Simulator` run into a self-checking, synthesizable Verilog testbench
 - **[Examples](testing/examples/README.md)** — example designs exercising SpireHDL features
 
 ## Installation
