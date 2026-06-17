@@ -1,0 +1,102 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      PIP_CACHE_DIR: .pip-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PIP_CACHE_DIR }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install --cache-dir="$PIP_CACHE_DIR" pytest
+          pip install --cache-dir="$PIP_CACHE_DIR" -e .
+
+      - name: Run tests
+        run: PYTHONPATH=$(pwd) pytest
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Build sdist and wheel
+        run: |
+          pip install build
+          python -m build
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  # Only relevant on pushes to main: decide whether this version is new to PyPI.
+  version-check:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.check.outputs.new_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Check whether this version is already on PyPI
+        id: check
+        run: |
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/spire-hdl/$VERSION/json")
+          if [ "$STATUS" = "200" ]; then
+            echo "spire-hdl $VERSION is already on PyPI — will skip publish."
+            echo "new_version=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "spire-hdl $VERSION is not on PyPI yet — will publish."
+            echo "new_version=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    needs: [build, version-check]
+    if: needs.version-check.outputs.new_version == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # required for PyPI trusted publishing (OIDC)
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true

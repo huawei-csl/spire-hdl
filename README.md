@@ -4,22 +4,28 @@
 
 <br>
 
-A modern Python HDL that compiles concise, composable hardware descriptions to synthesizable Verilog and AIG/AAG netlists — with synthesis optimization and a cycle-accurate simulator built in.
+<p align="center">
+  <a href="https://github.com/huawei-csl/spire-hdl/actions/workflows/ci.yml"><img src="https://github.com/huawei-csl/spire-hdl/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://pypi.org/project/spire-hdl/"><img src="https://img.shields.io/pypi/v/spire-hdl.svg" alt="PyPI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-BSD--3--Clause--Clear-blue.svg" alt="License: BSD-3-Clause-Clear"></a>
+</p>
 
-- **Designed for humans and agents to be effective:** a small surface that reads well to engineers and LLMs alike
-- **Reduces area and delay vs. a traditional Verilog flow:** optimization is part of the compile, not an afterthought
+A modern Python HDL that compiles concise, composable hardware descriptions to synthesizable Verilog and AIG netlists — with synthesis optimization and a cycle-accurate simulator built in.
+
+- **Built for humans and agents alike:** a small surface that stays readable as a design grows
+- **Reduces area and delay vs. a traditional Verilog flow:** optimization is part of the compile
 - **Integrated with ABC and mockturtle:** modern synthesis optimization wired directly into the compilation pipeline
 - **Arithmetic library with automated replacement:** swap adders, multipliers, and FP cores driven by an objective
 - **Cycle-accurate Python simulator"** drive inputs, tick clocks, inspect expressions/outputs without leaving Python
 - **Content-addressed optimization cache:** instant re-runs via `@flowy_optimized` / `@abc_optimized` decorators
 
-# Optimizations built in ⚡ 
+## Optimizations built in 💡
 
-SpireHDL supports **source-embedded optimization intent**: the designer marks *what* to optimize (e.g. a module, FSM, or arithmetic block) directly in the HDL source, and the compiler realizes it through synthesis-aware passes.
+SpireHDL supports **source-level optimization intent**: the designer marks *what* to optimize (e.g. a module, FSM, or arithmetic block) directly in the HDL source, and the compiler realizes it through synthesis-aware passes.
 
-These optimization layers run *inside* the compile pipeline, so emitted Verilog is already small and fast before external tools see it. The numbers below are measured against a plain Yosys flow on the same RTL.
+Because these passes run as part of the compile, the emitted Verilog is already small and fast before external tools see it. The numbers below are measured against a plain Yosys flow on the same RTL.
 
-### 🔢 Arithmetic auto-replacement: `replace_arithmetic_ops`
+### 🔢 Arithmetic auto-replacement: `@arithmetic_optimized`
 
 Drops in topology-tuned adders, multipliers, and MAC fusions against an `area` / `delay` / `adp` objective. On an 8-bit ALU (add + sub + mul):
 
@@ -29,7 +35,7 @@ Drops in topology-tuned adders, multipliers, and MAC fusions against an `area` /
 
 MAC patterns (`a*b + c`) are fused into single column-reduction units, eliminating a full adder stage. See [`README_arithmetic_optimization.md`](README_arithmetic_optimization.md).
 
-### 🧠 ABC + mockturtle decorators: `@abc_optimized` / `@flowy_optimized`
+### 🧩 ABC + mockturtle decorators: `@abc_optimized` / `@flowy_optimized`
 
 One decorator stacks modern AIG synthesis (`resyn2`, `&deepsyn`, mockturtle) onto any `Module` or `Component`, with a content-addressed cache for instant re-runs:
 
@@ -41,7 +47,7 @@ See [`README_optimization_decorators.md`](README_optimization_decorators.md).
 
 ### 🎯 FSM + encoding search: `optimized_fsm` / `optimized_encoding`
 
-Hopcroft state minimisation and bit-assignment search as two composable context managers. On the canonical 7-state `case10` Moore FSM:
+Hopcroft state minimisation and bit-assignment search as two composable context managers. On a 7-state `case10` Moore FSM:
 
 - **−19% cells** with `optimized_encoding` alone
 - **−44% cells** with `optimized_fsm` alone
@@ -49,18 +55,18 @@ Hopcroft state minimisation and bit-assignment search as two composable context 
 
 An 8-opcode CPU decoder sees **−66.7% cells** from a single `optimized_encoding`, because the search discovers an opcode layout where each wide OR collapses to one bit-test. See [`README_fsm_optimization.md`](README_fsm_optimization.md).
 
-### 🛠️ Fine-grained architecture selection:  `arithmetic_generator`
+### 🛠️ Fine-grained architecture selection: `arithmetic_generator`
 
-Beyond the automatic passes above, the unified arithmetic generator lets you hand-pick the exact micro-architecture of an adder, multiplier, MAC, or matmul (partial-product generation, compression-tree topology, and final-stage adder), then emit Verilog/AAG, simulate, and collect Yosys metrics for direct comparison. Use it to explore the design space at full granularity when you want to drive the architecture choice yourself rather than leaving it to the objective-driven replacer. See [`README_arithmetic_generator.md`](README_arithmetic_generator.md).
+Beyond the automatic passes above, the unified arithmetic generator lets you hand-pick the exact micro-architecture of an adder, multiplier, MAC, or matmul (partial-product generation, compression-tree topology, and final-stage adder), then emit Verilog/AIG, simulate, and collect Yosys metrics for direct comparison. See [`README_arithmetic_generator.md`](README_arithmetic_generator.md).
 
-# Overview
+## Overview
 
 ### 🪶 Minimal core
 
 In its simplest form, SpireHDL only needs these core files. This is intentional — the HDL is kept to a minimal, self-contained core, and higher-level features are layered on top:
 
-- **[`spirehdl/spirehdl.py`](src/spirehdl/spirehdl.py)** – the expression DSL.  It provides bit-precise types such as `Bool`, `UInt`, and `SInt`, shared-expression caching, and the overloaded arithmetic / bitwise operators that make the Python syntax feel like an HDL.
-- **[`spirehdl/spirehdl_module.py`](src/spirehdl/spirehdl_module.py)** – structural modeling helpers.  The `Module` class constructs ports, wires, and registers, produces Verilog, and exposes analysis utilities.  The `Component` base class lets you package reusable sub-designs and convert them to or from SpireHDL modules.  `IOCollector` can rebuild packed ports from bit-level signals when importing external netlists.
+- **[`spirehdl/spirehdl.py`](src/spirehdl/spirehdl.py)** – the expression DSL. It provides bit-precise types such as `Bool`, `UInt`, and `SInt`, shared-expression caching, and the overloaded arithmetic / bitwise operators that make the Python syntax feel like an HDL.
+- **[`spirehdl/spirehdl_module.py`](src/spirehdl/spirehdl_module.py)** – structural modeling helpers. The `Module` class constructs ports, wires, and registers, produces Verilog, and exposes analysis utilities. The `Component` base class lets you package reusable sub-designs and convert them to or from SpireHDL modules.
 - **[`spirehdl/spirehdl_simulator.py`](src/spirehdl/spirehdl_simulator.py)** – a lightweight simulator that can drive inputs, tick clocks, inspect outputs or internal expressions, and capture probes for debugging—all without leaving Python.
 
 ### 📚 Further reading
@@ -78,13 +84,21 @@ Other markdown documents in this repository:
 
 ## Installation
 
+Install the latest release from PyPI:
+
+```bash
+pip install spire-hdl
+```
+
+For development, install from source in editable mode:
+
 ```bash
 git clone https://github.com/huawei-csl/spire-hdl.git
 cd spire-hdl
 pip install -e .
 ```
 
-The library relies on the packages listed in `requirements.txt`.  Optional regression tests require Yosys/Pyosys and aigverse if you plan to exercise the external tooling integration flows.
+The library relies on the packages listed in `requirements.txt`.
 
 ## Quick start
 
@@ -131,22 +145,21 @@ m.output(UInt(8), "q") <<= cnt
 from spirehdl.spirehdl_simulator import Simulator
 
 sim = Simulator(m)
-sim.set("a", 0x55).set("b", 0x0F).set("sel", 1)
+sim.set("a", 0xC3).set("b", 0x99).set("sel", 1)
 sim.eval()                 # recompute combinational logic
-print(sim.peek_outputs())   # {'sum': 0x64, 'mask': 0x9, 'out': 0x05}
+print(sim.peek_outputs())   # {'sum': 0x15c, 'mask': 0x3, 'out': 0x81}
 ```
 
 The simulator keeps track of inputs, wires, outputs, and registers, supports `eval()` for combinational updates, `step()` for clocked designs, and exposes helpers such as `peek`, `peek_next`, and signal watching for deeper inspection ([`spirehdl_simulator.py`](src/spirehdl/spirehdl_simulator.py)).
 
 ### 3. Integrate with external tooling
 
-Modules can be exported to Verilog, AIG, or AAG for downstream synthesis, equivalence checking, or integration into larger verification environments.  Import helpers then let you bring optimized or third-party netlists back into SpireHDL for continued composition and simulation (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py) and [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
+Modules can be exported to Verilog or AIG for downstream synthesis, equivalence checking, or integration into larger verification environments. Import helpers then let you bring optimized or third-party netlists back into SpireHDL for continued composition and simulation (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py) and [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
 
 ## Modules and components in detail
 
-- `Component` subclasses package reusable structures.  They can materialize new modules (`to_module`), import designs from Verilog or AIG formats (`from_verilog`, `from_aag_lines`), and retag ports as internals (`make_internal`).  Components also expose `get_spec()` to drive `IOCollector` regrouping when you import flattened designs (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
-- `Module` is typically used at the top level or as an intermediate representation while you are still wiring a design.  It offers constructors for inputs, outputs, wires, and registers; utilities for enumerating signals; Verilog emission with automatic width fitting; and a `module_analyze()` routine that reports combinational depth and node counts for timing exploration ([`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
-- `IOCollector` helps rebuild packed buses (e.g., `a[0] … a[N-1]` → `a[N-1:0]`) after reading back designs from AIG/AAG files or external synthesizers ([`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
+- `Component` subclasses package reusable structures. They can materialize new modules (`to_module`), import designs from Verilog or AIG formats (`from_verilog`, `from_aag_lines`), and retag ports as internals (`make_internal`). Components also expose `get_spec()` to drive `IOCollector` regrouping when you import flattened designs (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
+- `Module` is typically used at the top level or as an intermediate representation while you are still wiring a design. It offers constructors for inputs, outputs, wires, and registers; utilities for enumerating signals; Verilog emission with automatic width fitting; and a `module_analyze()` routine that reports combinational depth and node counts for timing exploration ([`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
 - Minimal end-to-end component example: [`testing/examples/simple_component.py`](testing/examples/simple_component.py).
 
 Short component + hierarchy usage example:
@@ -205,13 +218,13 @@ print(module.to_verilog())  # one top module, built from internal components
 
 ### Hierarchical design with components
 
-Components are ideal for assembling hierarchical designs: they let you instantiate another component, adapt its IO, and even swap in a pre-synthesized netlist without leaving Python.  One common pattern wraps a reusable building block with `make_internal()` so that auxiliary logic can surround the core implementation while exposing a compact public interface (see [`mutipliers_ext.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/mutipliers_ext.py)).  A related flow imports an external AIG module, converts it into a `Component`, and calls `from_module(..., make_internal=True)` so the imported logic behaves like a native SpireHDL block inside a larger generator ([`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).  These techniques extend to Verilog importers and make it straightforward to mix SpireHDL-authored code with IP produced by external flows.
+Components are how to build hierarchy: instantiate one inside another, adapt its IO, or drop in a pre-synthesized netlist — all without leaving Python. A common pattern wraps a reusable SpireHDL block (see [`multipliers_ext.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext.py)). It is also possible to import an external AIG module, turn it into a `Component`, and call `from_module(..., make_internal=True)` so it behaves like a native SpireHDL block inside a larger generator (see [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)). The same approach covers Verilog imports, so SpireHDL code and external IP mix freely.
 
 ## Aggregate data types
 
-SpireHDL includes structured, bit-packable aggregates for cleaner interfaces and bulk assignments ([`aggregate/`](src/spirehdl/aggregate)).  See [`README_aggregate_types.md`](README_aggregate_types.md) for the full reference with an example for every type:
+SpireHDL includes structured, bit-packable aggregates for cleaner interfaces and bulk assignments ([`aggregate/`](src/spirehdl/aggregate)). See [`README_aggregate_types.md`](README_aggregate_types.md) for the full reference with an example for every type:
 
-- `HDLAggregate` defines the base “pack to bits” API that powers all aggregates ([`hdl_aggregate.py`](src/spirehdl/aggregate/hdl_aggregate.py)).
+- `HDLAggregate` defines the base "pack to bits" API that powers all aggregates ([`hdl_aggregate.py`](src/spirehdl/aggregate/hdl_aggregate.py)).
 - `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or aggregates ([`aggregate_array.py`](src/spirehdl/aggregate/aggregate_array.py)).
 - `AggregateRecord` lets you declare bundle-like classes with named fields that remain packable to a flat bitvector ([`aggregate_record.py`](src/spirehdl/aggregate/aggregate_record.py)).
 - `AggregateRecordDynamic` is the dataclass-friendly variant whose fields are defined per-instance, ideal for parameterized IO records ([`aggregate_record_dynamic.py`](src/spirehdl/aggregate/aggregate_record_dynamic.py)).
@@ -249,27 +262,17 @@ The simulator supports both combinational and sequential designs:
 - `step()` advances the clock, committing register next-state expressions while honoring asynchronous resets.
 - `watch()` and `peek_next()` provide scope-style visibility for debugging complex pipelines.
 
-These capabilities align with the standard SpireHDL development flow: express a design, validate it in Python, then export it to your synthesis or verification stack.
-
 ## Slices
-We follow the indexing of python also in SpireHDL signals. For example `sig[4:7]` creates a new expression containing of bits 4 and 5 (counted from lsb) of the original expression `sig`.
-
-
-## Main development flow
-
-1. **Model logic in Python.** Use `Module` in the the top-level file and DSL expressions to capture datapaths, state machines, and control logic.
-2. **Factor reusable pieces.** Wrap recurring structures in `Component` subclasses so they can be instantiated, parameterized, or replaced with imported implementations.
-3. **Simulate early and often.** Drive stimuli with the simulator, observe register evolution, and iterate on the Python source before handing designs to downstream tools.
-4. **Export netlists.** Emit Verilog or AIG/AAG when you are ready for synthesis, formal checking, or integration with external flows.
+SpireHDL signals follow Python's indexing convention. For example, `sig[4:7]` creates a new expression made up of bits 4, 5, and 6 (counted from the LSB) of the original expression `sig`.
 
 ## Examples
 
 Check out the `testing/examples/` directory for practical examples:
 
-- **`simple_component.py`** – A minimal example showing how to define a Component with IO ports and generate Verilog
-- **`component_example.py`** – Comprehensive examples including hierarchical design and simulation
-- **`module_with_component.py`** – Shows how to integrate Components within Module-based designs
-- **`direct_expression_basics.py`** – Minimal direct expression examples (`y = a + b`) plus `+`, `-`, unary `-`, `Const(..., Int(...))`, typed/plain `False`, and a recursive Horner polynomial builder
-- **`testing/riscv/rv32i.py`** – Minimal RV32I core example; see `testing/riscv/test_rv32i.py` for simulation-based checks.
+- **[`simple_component.py`](testing/examples/simple_component.py)** – A minimal example showing how to define a Component with IO ports and generate Verilog
+- **[`component_example.py`](testing/examples/component_example.py)** – Comprehensive examples including hierarchical design and simulation
+- **[`module_with_component.py`](testing/examples/module_with_component.py)** – Shows how to integrate Components within Module-based designs
+- **[`direct_expression_basics.py`](testing/examples/direct_expression_basics.py)** – Minimal direct expression examples (`y = a + b`) plus `+`, `-`, unary `-`, `Const(..., Int(...))`, typed/plain `False`, and a recursive Horner polynomial builder
+- **[`testing/riscv/rv32i.py`](testing/riscv/rv32i.py)** – Minimal RV32I core example; see [`testing/riscv/test_rv32i.py`](testing/riscv/test_rv32i.py) for simulation-based checks.
 
 See the [examples README](testing/examples/README.md) for detailed documentation and key concepts.

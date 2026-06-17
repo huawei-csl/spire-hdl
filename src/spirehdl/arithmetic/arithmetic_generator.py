@@ -61,7 +61,7 @@ from spirehdl.cores.matmul_accumulate.matmul_test_vectors import (
     generate_fp_matmul_vectors,
     generate_matmul_vectors,
 )
-from spirehdl.arithmetic.int_multipliers.multipliers.mutipliers_ext import StageBasedMultiplierBase
+from spirehdl.arithmetic.int_multipliers.multipliers.multipliers_ext import StageBasedMultiplierBase
 from spirehdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
 from spirehdl.helpers import get_aig_stats, get_yosys_metrics, run_vectors_on_simulator
 from spirehdl.spirehdl_verilog_testbench import TestbenchGenSimulator
