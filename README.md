@@ -71,16 +71,16 @@ In its simplest form, SpireHDL only needs these core files. This is intentional 
 
 ### 📚 Further reading
 
-Other markdown documents in this repository:
+Deeper guides for specific features:
 
 - **[State machines](docs/README_state_machines.md)** — declaration with the `State` / `Encoding` API and `switch_` / `case_` bodies
 - **[Control structures](docs/README_control_structures.md)** — `if_` / `elif_` / `else_` and `switch_` / `case_` / `default` context managers
-- **[Memories](docs/README_memories.md)** — the `Memory` primitive (FIFOs, ROMs, RAMs), port wiring with `<<=`, simulation, and reading state
+- **[Memories](docs/README_memories.md)** — RAM / ROM / FIFO primitives, port wiring with `<<=`, simulation, and reading state
 - **[Arithmetic optimization](docs/README_arithmetic_optimization.md)** — automatic replacement with optimized versions (adders, multipliers, MAC, etc)
 - **[Optimization decorators](docs/README_optimization_decorators.md)** — `@abc_optimized` / `@flowy_optimized` circuit optimization
-- **[FSM optimization](docs/README_fsm_optimization.md)** — `optimized_fsm` and `optimized_encoding` context managers (state minimisation + encoding search)
+- **[FSM optimization](docs/README_fsm_optimization.md)** — `optimized_fsm` and `optimized_encoding` (state minimisation + encoding search)
 - **[Arithmetic generators](docs/README_arithmetic_generator.md)** — evaluation scripts and extra tooling notes
-- **[Custom Verilog](docs/README_custom_verilog.md)** — emit a hand-written Verilog block from a `Component`, with or without a Python sim model (blackbox)
+- **[Custom Verilog](docs/README_custom_verilog.md)** — emit a raw Verilog block from a `Component`, with or without a Python sim model (blackbox)
 - **[AIG / AAG export & import](docs/README_aig_export.md)** — lower a `Module` to an AIGER netlist and read AIG/AAG back in as a `Component`
 - **[Verilog testbench](docs/README_verilog_testbench.md)** — turn a `Simulator` run into a self-checking, synthesizable Verilog testbench
 - **[Examples](testing/examples/README.md)** — example designs exercising SpireHDL features
