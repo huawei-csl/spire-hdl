@@ -1,7 +1,7 @@
 """HiFloat8 multiplier built from a conventional FP8 core.
 
 This wrapper reuses the parameterisable floating-point multiplier from
-``spire_hdl_float.py``.  Each HiFloat8 operand is translated to an FP8 (E5M2)
+``float_mult.py``.  Each HiFloat8 operand is translated to an FP8 (E5M2)
 value using compact arithmetic, the operands are multiplied by the FP8 core,
 and the product is decoded back to HiFloat8 with the same bucketed rounding
 logic used by the dedicated HiFloat8 multiplier.  The translation logic avoids
@@ -26,8 +26,8 @@ from spire.expr import (
 from spire.component import Component, Module
 from spire.io_record import IORecord, Input, Output
 
-from spire.arithmetic.floating_point.spire_hdl_float_mult import build_fp_mul
-from spire.arithmetic.floating_point.spire_hdl_hif8 import _abs_sint, _const_sint, _const_uint, _decode_operand_expr, _round_bucket
+from spire.arithmetic.floating_point.float_mult import build_fp_mul
+from spire.arithmetic.floating_point.hif8 import _abs_sint, _const_sint, _const_uint, _decode_operand_expr, _round_bucket
 
 
 _FP_EW = 5

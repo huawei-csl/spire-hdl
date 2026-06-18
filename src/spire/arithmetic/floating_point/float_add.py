@@ -1,4 +1,4 @@
-"""Floating-point adder (IEEE-like) for spire_hdl.
+"""Floating-point adder (IEEE-like) for Spire.
 
 A lightweight behavioural adder mirroring the interface of the multiplier
 helpers. It supports configurable exponent/fraction widths and basic handling

@@ -29,8 +29,8 @@ from spire.arithmetic.floating_point.fp_encoding import (
     fp_decode,
     fp_encode,
 )
-from spire.arithmetic.floating_point.spire_hdl_float_add import FpAdd, build_fp_add
-from spire.arithmetic.floating_point.spire_hdl_float_mult import run_vectors_aby
+from spire.arithmetic.floating_point.float_add import FpAdd, build_fp_add
+from spire.arithmetic.floating_point.float_mult import run_vectors_aby
 from spire.helpers import run_vectors_on_simulator
 from spire.simulator import Simulator
 

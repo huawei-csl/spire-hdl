@@ -1,7 +1,7 @@
 from aigverse import Aig, DepthAig
 from spire.expr import UInt
-from spire.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul, build_fp_mul, run_vectors_aby
-from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spire.arithmetic.floating_point.float_mult import build_f16_mul, build_fp_mul, run_vectors_aby
+from spire.arithmetic.floating_point.float_mult_sn import build_fp_mul_sn
 from spire.aiger import AigerExporter, AigerImporter, export_module_to_aiger
 from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag, read_aag_into_aig
 

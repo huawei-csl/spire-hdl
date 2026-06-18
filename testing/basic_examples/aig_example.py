@@ -1,6 +1,6 @@
 from aigverse import Aig
 from spire.aig.aig_aigerverse import conv_aag_into_aig
-from spire.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul
+from spire.arithmetic.floating_point.float_mult import build_f16_mul
 from spire.aiger import export_module_to_aiger
 
 

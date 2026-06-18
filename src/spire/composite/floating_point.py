@@ -2,9 +2,9 @@ from dataclasses import dataclass
 from typing import List, Optional, Union
 
 from spire.composite.base import HDLComposite
-from spire.arithmetic.floating_point.spire_hdl_float_mult import FpMul
-from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import FpMulSN
-from spire.arithmetic.floating_point.spire_hdl_float_add import FpAdd
+from spire.arithmetic.floating_point.float_mult import FpMul
+from spire.arithmetic.floating_point.float_mult_sn import FpMulSN
+from spire.arithmetic.floating_point.float_add import FpAdd
 from spire.expr import Expr, ExprLike, HDLType, UInt, Wire, as_expr, fit_width
 from spire.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
 

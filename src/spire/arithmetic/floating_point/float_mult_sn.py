@@ -11,7 +11,7 @@
 #   EW, FW: widths
 #   subnormals: enable subnormal in/out (gradual underflow). Default False = flush-to-zero.
 #
-# Requires: Module, UInt, Bool, mux, cat from your spire_hdl.
+# Requires: Module, UInt, Bool, mux, cat from your Spire.
 
 from typing import Dict, List, Optional, Tuple
 
@@ -27,7 +27,7 @@ from spire.arithmetic.int_arithmetic_config import (
 )
 
 
-# Uses: Module, UInt, Bool, mux, cat (from your spire_hdl)
+# Uses: Module, UInt, Bool, mux, cat (from your Spire)
 
 
 # ---- helpers used inside FpMulSN ----

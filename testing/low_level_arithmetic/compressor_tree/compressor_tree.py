@@ -30,7 +30,7 @@ def build_multiplier_from_compressor_graph(name: str, A, nodes):
         or implicitly as signals with no outgoing edge to adders.
 
     Returns:
-      - spire_hdl_module.Module with ports:
+      - spire.component.Module with ports:
           a: UInt(n), b: UInt(n), y: UInt(2*n)
     """
     import re
@@ -226,7 +226,7 @@ def gen_compressor_tree_graph_and_spire_module(n_bits: int, policy: str = "dadda
       policy: "dadda" or "wallace"
 
     Returns:
-      spire_hdl_module.Module
+      spire.component.Module
     """
 
     N = n_bits  # change to try other bitwidths; for plotting, keep <= 6

@@ -1,5 +1,5 @@
 # Export a Spire Module to an AIG in AIGER ASCII (.aag) format
-# Works with your 'spire_hdl.py' DSL (duck-typing; no hard import required).
+# Works with your 'spire.expr' DSL (duck-typing; no hard import required).
 # Tested conceptually with arithmetic & logic-heavy designs (incl. float16/bfloat16 MACs).
 from __future__ import annotations
 from typing import Dict, List, Tuple, Optional, Any, Iterable

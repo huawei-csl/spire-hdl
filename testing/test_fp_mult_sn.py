@@ -21,8 +21,8 @@ from spire.arithmetic.floating_point.fp_mul_testvectors import (
     FpMulTestVectorsExhaustive,
     _should_skip,
 )
-from spire.arithmetic.floating_point.spire_hdl_float_mult import run_vectors_aby
-from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import FpMulSN, build_fp_mul_sn
+from spire.arithmetic.floating_point.float_mult import run_vectors_aby
+from spire.arithmetic.floating_point.float_mult_sn import FpMulSN, build_fp_mul_sn
 from spire.helpers import run_vectors_on_simulator
 from spire.simulator import Simulator
 from spire.arithmetic.floating_point.fp_mul_testvectors import (

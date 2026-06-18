@@ -4,8 +4,8 @@ from aigverse import equivalence_checking, read_verilog_into_aig
 from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag, file_to_lines, read_aag_into_aig
 from spire.expr import UInt
 from spire.aiger import AigerExporter, AigerImporter
-from spire.arithmetic.floating_point.spire_hdl_float_mult import run_vectors_aby
-from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spire.arithmetic.floating_point.float_mult import run_vectors_aby
+from spire.arithmetic.floating_point.float_mult_sn import build_fp_mul_sn
 from spire.component import IOCollector
 
 # import pyosys as ys, tempfile, os

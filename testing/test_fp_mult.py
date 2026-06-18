@@ -14,7 +14,7 @@ sys.path.append(os.path.join(ROOT, "src"))
 sys.path.append(ROOT)
 
 from spire.arithmetic.floating_point.fp_encoding import fp_decode, fp_encode, fp_unpack
-from spire.arithmetic.floating_point.spire_hdl_float_mult import FpMul, build_fp_mul, run_vectors_aby
+from spire.arithmetic.floating_point.float_mult import FpMul, build_fp_mul, run_vectors_aby
 from spire.simulator import Simulator
 from spire.arithmetic.floating_point.fp_mul_testvectors import (
     build_bf16_vectors,

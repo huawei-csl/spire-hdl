@@ -4,10 +4,10 @@
 from dataclasses import dataclass
 from typing import Dict, Set, Tuple, Iterable
 
-# from spire_hdl_module import Module
+# from spire.component import Module
 from spire.expr import Concat, Const, Expr, Op1, Op2, Resize, Signal, Slice, Ternary
 from spire.visitor import expr_children
-# from spire_hdl_module import Module
+# from spire.component import Module
 
 @dataclass
 class GraphReport:

@@ -1,4 +1,4 @@
-# spire_hdl.py
+# expr.py
 # A tiny, SpinalHDL-inspired EDSL for Python → Verilog
 from __future__ import annotations
 from dataclasses import dataclass, field

@@ -16,7 +16,7 @@ from spire.arithmetic.int_arithmetic_config import (
     build_multiplier,
 )
 
-# Uses: Module, UInt, Bool, mux, cat (from your spire_hdl)
+# Uses: Module, UInt, Bool, mux, cat (from your Spire)
 
 
 def _or_reduce_bits(vec_expr: Expr, hi: int, lo: int) -> Expr:
@@ -264,9 +264,9 @@ def build_bf16_mul(name: str = "BF16Mul") -> Module:
 
 # sanity_fp_mul_tests.py
 # Assumes:
-#   from spire_hdl import Simulator
-#   from spire_hdl import build_f16_mul, build_bf16_mul
-# Or adapt the imports to your paths (e.g., from spire_hdl import ...)
+#   from spire import Simulator
+#   from spire import build_f16_mul, build_bf16_mul
+# Or adapt the imports to your paths (e.g., from spire import ...)
 
 
 def half_to_float(h: int) -> float:

@@ -15,7 +15,7 @@ from spire.arithmetic.floating_point.fp_encoding import fp_decode  # tie handlin
 
 
 # use for ieee float:  fp_encode(x: float, EW: int, FW: int, *, subnormals: bool = True) -> int
-# use for hifloat:     float_to_hif8(value: float) -> int from spire/floating_point/spire_hdl_hif8.py
+# use for hifloat:     float_to_hif8(value: float) -> int from spire/floating_point/hif8.py
 # type (ieee, hifloat) shall be configurable; for IEEE also EW, FW and subnormals
 # clamp values to the finite representable range before encoding
 # sampling types supported:
@@ -64,7 +64,7 @@ class HiF8Format:
 
     def _import(self):
         # Local import to avoid optional dependencies during module import
-        from spire.arithmetic.floating_point.spire_hdl_hif8 import float_to_hif8, hif8_to_float
+        from spire.arithmetic.floating_point.hif8 import float_to_hif8, hif8_to_float
         return float_to_hif8, hif8_to_float
 
     def encode(self, x: float) -> int:

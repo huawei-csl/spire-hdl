@@ -6,8 +6,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 import pytest
 
-from spire.arithmetic.floating_point.spire_hdl_hif8 import build_hif8_mul_logic, build_hif8_mul_lut, catalogue_summary, float_to_hif8, hif8_to_float, multiply_hif8
-from spire.arithmetic.floating_point.spire_hdl_hif8_via_fp8 import build_hif8_mul_via_fp8_module
+from spire.arithmetic.floating_point.hif8 import build_hif8_mul_logic, build_hif8_mul_lut, catalogue_summary, float_to_hif8, hif8_to_float, multiply_hif8
+from spire.arithmetic.floating_point.hif8_via_fp8 import build_hif8_mul_via_fp8_module
 from spire.simulator import Simulator
 
 

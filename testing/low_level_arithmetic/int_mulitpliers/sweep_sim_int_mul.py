@@ -4,7 +4,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from aigverse import aig_cut_rewriting, aig_resubstitution, sop_refactoring
 import numpy as np
-from testing.low_level_arithmetic.compressor_tree.compressor_tree_spire_hdl import gen_compressor_tree_graph_and_spire_module
+from testing.low_level_arithmetic.compressor_tree.compressor_tree import gen_compressor_tree_graph_and_spire_module
 from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag
 from spire.helpers import optimize_aag, run_vectors
 from spire.expr import Bool, Concat, Const, Expr, Op2, SInt, UInt

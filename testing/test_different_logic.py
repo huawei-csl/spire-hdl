@@ -16,7 +16,7 @@ from spire.component import IOCollector
 from spire.aig.aig_yosys import verilog_to_aag_via_yosys
 from spire.arithmetic.floating_point.fp_encoding import fp_decode
 from spire.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors  # generic EW,FW vectors/decoder
-from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spire.arithmetic.floating_point.float_mult_sn import build_fp_mul_sn
 
 # Pyosys
 

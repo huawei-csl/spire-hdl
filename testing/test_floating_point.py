@@ -17,7 +17,7 @@ from spire.arithmetic.floating_point.fp_mul_testvectors import (
 
 from spire.composite.floating_point import FloatingPoint, FloatingPointType
 from spire.composite.register import CompositeRegister
-from spire.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul
+from spire.arithmetic.floating_point.float_mult import build_f16_mul
 from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,

@@ -23,7 +23,7 @@ import os
 import math
 import uuid
 
-from spire.arithmetic.floating_point.spire_hdl_hif8 import hif8_to_float
+from spire.arithmetic.floating_point.hif8 import hif8_to_float
 from spire.arithmetic.floating_point.fp_encoding import fp_decode
 
 
@@ -46,7 +46,7 @@ matplotlib.use("Agg")  # headless plotting
 import matplotlib.pyplot as plt
 
 # FP module builders
-from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spire.arithmetic.floating_point.float_mult_sn import build_fp_mul_sn
 
 # FP testvector generator
 from testing.low_level_arithmetic.fp_multiplier_eval.testvector_generation_fp import FPMultiplierTestVectors, IEEEFormat, HiF8Format, FPDist
@@ -139,7 +139,7 @@ def get_module(cfg: FPConfig):
         assert cfg.EW is not None and cfg.FW is not None, "EW/FW must be set for IEEE format"
         module = build_fp_mul_sn(f"F{1+cfg.EW+cfg.FW}Mul", EW=int(cfg.EW), FW=int(cfg.FW), subnormals=bool(cfg.subnormals))
     elif cfg.kind == FPFormatKind.HIF8:
-        from spire.arithmetic.floating_point.spire_hdl_hif8 import build_hif8_mul_logic
+        from spire.arithmetic.floating_point.hif8 import build_hif8_mul_logic
         module = build_hif8_mul_logic("HiFP8Mul_Logic_Ref")
     else:
         raise ValueError(f"Unsupported format kind: {cfg.kind}")
@@ -337,7 +337,7 @@ def plot_input_output_histograms(cfg: FPConfig, vecs: list[tuple], sigma: float 
             assert cfg.EW is not None and cfg.FW is not None
             decode_val = functools.partial(fp_decode, EW=int(cfg.EW), FW=int(cfg.FW))
         else:
-            from spire.arithmetic.floating_point.spire_hdl_hif8 import hif8_to_float
+            from spire.arithmetic.floating_point.hif8 import hif8_to_float
             decode_val = hif8_to_float
     else:
         decode_val = decoder

@@ -1,9 +1,9 @@
 from spire.expr import reset_shared_cache
 from testing.floating_point.synthesise_fp2 import flowy_optimize
 from aigverse import Aig, DepthAig
-from spire.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul, build_fp_mul
-from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
-from spire.arithmetic.floating_point.spire_hdl_hif8 import build_hif8_mul_logic
+from spire.arithmetic.floating_point.float_mult import build_f16_mul, build_fp_mul
+from spire.arithmetic.floating_point.float_mult_sn import build_fp_mul_sn
+from spire.arithmetic.floating_point.hif8 import build_hif8_mul_logic
 from spire.helpers import get_yosys_transistor_count
 from spire.aiger import AigerExporter, export_module_to_aiger
 from spire.aig.aig_aigerverse import conv_aag_into_aig, read_aag_into_aig

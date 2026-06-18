@@ -53,8 +53,8 @@ from spire.cores.matmul_accumulate.matmul_accumulate_core_float import (
     FpMatmulAccumulateComponent,
 )
 from spire.composite.floating_point import FloatingPointType
-from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import FpMulSN
-from spire.arithmetic.floating_point.spire_hdl_float_add import FpAdd
+from spire.arithmetic.floating_point.float_mult_sn import FpMulSN
+from spire.arithmetic.floating_point.float_add import FpAdd
 from spire.arithmetic.floating_point.fp_mul_testvectors import FpMulTestVectors, build_targeted_mul_vectors
 from spire.arithmetic.floating_point.fp_add_testvectors import FpAddTestVectors, build_targeted_add_vectors
 from spire.cores.matmul_accumulate.matmul_test_vectors import (
