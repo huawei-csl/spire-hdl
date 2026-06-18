@@ -1,27 +1,27 @@
-# Aggregate data types
+# Composite data types
 
-Spire-HDL ships a small family of *aggregates*: structured Python objects that wrap one or
-more HDL `Expr` leaves and behave as a single, bit-packable value.  All aggregates derive from
-`HDLAggregate` and share a common API for flattening to bits, packed assignment (`<<=`), and
+Spire-HDL ships a small family of *composites*: structured Python objects that wrap one or
+more HDL `Expr` leaves and behave as a single, bit-packable value.  All composites derive from
+`HDLComposite` and share a common API for flattening to bits, packed assignment (`<<=`), and
 element-wise assignment (`@=`).
 
-Source: [`src/spirehdl/aggregate/`](../src/spirehdl/aggregate).
+Source: [`src/spirehdl/composite/`](../src/spirehdl/composite).
 
 | Type | Purpose | Source |
 |---|---|---|
-| `HDLAggregate` | Abstract base — `to_bits`, `assign`, `<<=`, `@=` (see [Common API](#common-api)) | [`hdl_aggregate.py`](../src/spirehdl/aggregate/hdl_aggregate.py) |
-| [`Array`](#array) | N-dimensional vector of `Expr` or nested aggregates | [`aggregate_array.py`](../src/spirehdl/aggregate/aggregate_array.py) |
-| [`AggregateRecord`](#aggregaterecord) | Declarative bundle with named fields (class attributes) | [`aggregate_record.py`](../src/spirehdl/aggregate/aggregate_record.py) |
-| [`AggregateRecordDynamic`](#aggregaterecorddynamic) | Bundle defined from instance attributes / `@dataclass` | [`aggregate_record_dynamic.py`](../src/spirehdl/aggregate/aggregate_record_dynamic.py) |
-| [`FixedPoint`](#fixedpoint) | Fixed-point view of a bitvector with arithmetic + quantization | [`aggregate_fixed_point.py`](../src/spirehdl/aggregate/aggregate_fixed_point.py) |
-| [`FloatingPoint`](#floatingpoint) | Floating-point view with `add` / `mul` helpers | [`aggregate_floating_point.py`](../src/spirehdl/aggregate/aggregate_floating_point.py) |
-| [`AggregateRegister`](#aggregateregister) | Single register holding any packed aggregate | [`aggregate_register.py`](../src/spirehdl/aggregate/aggregate_register.py) |
+| `HDLComposite` | Abstract base — `to_bits`, `assign`, `<<=`, `@=` (see [Common API](#common-api)) | [`base.py`](../src/spirehdl/composite/base.py) |
+| [`Array`](#array) | N-dimensional vector of `Expr` or nested composites | [`array.py`](../src/spirehdl/composite/array.py) |
+| [`CompositeRecord`](#compositerecord) | Declarative bundle with named fields (class attributes) | [`record.py`](../src/spirehdl/composite/record.py) |
+| [`CompositeRecordDynamic`](#compositerecorddynamic) | Bundle defined from instance attributes / `@dataclass` | [`record_dynamic.py`](../src/spirehdl/composite/record_dynamic.py) |
+| [`FixedPoint`](#fixedpoint) | Fixed-point view of a bitvector with arithmetic + quantization | [`fixed_point.py`](../src/spirehdl/composite/fixed_point.py) |
+| [`FloatingPoint`](#floatingpoint) | Floating-point view with `add` / `mul` helpers | [`floating_point.py`](../src/spirehdl/composite/floating_point.py) |
+| [`CompositeRegister`](#compositeregister) | Single register holding any packed composite | [`register.py`](../src/spirehdl/composite/register.py) |
 
 ## Common API
 
-Every aggregate exposes:
+Every composite exposes:
 
-- `to_list_first_level()` — first-level children (`Expr` or nested aggregate).
+- `to_list_first_level()` — first-level children (`Expr` or nested composite).
 - `to_list()` — fully flattened list of `Expr` leaves.
 - `to_bits()` — single `Expr` bitvector (concat of all leaves).
 - `width` — total bit width.
@@ -33,11 +33,11 @@ Every aggregate exposes:
 
 ## `Array`
 
-`Array` is an ordered, possibly nested, sequence of `Expr` or other aggregates.  It supports
+`Array` is an ordered, possibly nested, sequence of `Expr` or other composites.  It supports
 N-dimensional indexing with `tuple`/`slice` keys.
 
 ```python
-from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.composite.array import Array
 from spirehdl.spirehdl import UInt, Const, Wire
 
 # 1D vector of constants
@@ -62,20 +62,20 @@ dst @= src
 
 ---
 
-## `AggregateRecord`
+## `CompositeRecord`
 
 Declarative, class-based bundle.  Fields are declared as class attributes; each instance gets
 its own freshly cloned wires (no sharing between instances).
 
 ```python
-from spirehdl.aggregate.aggregate_record import AggregateRecord
-from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.composite.record import CompositeRecord
+from spirehdl.composite.array import Array
 from spirehdl.spirehdl import UInt, SInt, Wire, Signal
 
-class Packet(AggregateRecord):
+class Packet(CompositeRecord):
     addr:    Signal = Wire(UInt(8))
     payload: Signal = Wire(SInt(16))
-    lanes:   Array  = Array([Wire(UInt(4)) for _ in range(4)])   # nested aggregate
+    lanes:   Array  = Array([Wire(UInt(4)) for _ in range(4)])   # nested composite
 
 p0 = Packet()
 p1 = Packet()
@@ -89,7 +89,7 @@ p0 <<= p1.to_bits()     # packed: slice the 40-bit vector across all leaves
 
 ---
 
-## `AggregateRecordDynamic`
+## `CompositeRecordDynamic`
 
 Bundle defined from *instance* attributes (typically via `@dataclass`).  Use this when the
 field set is built at construction time rather than declared statically on the class — for
@@ -97,12 +97,12 @@ example, when generating IO records for parameterized cores.
 
 ```python
 from dataclasses import dataclass
-from spirehdl.aggregate.aggregate_array import Array
-from spirehdl.aggregate.aggregate_record_dynamic import AggregateRecordDynamic
+from spirehdl.composite.array import Array
+from spirehdl.composite.record_dynamic import CompositeRecordDynamic
 from spirehdl.spirehdl import UInt, Wire
 
 @dataclass
-class MMAcIO(AggregateRecordDynamic):
+class MMAcIO(CompositeRecordDynamic):
     A: Array
     B: Array
     Y: Array
@@ -116,7 +116,7 @@ io = MMAcIO(
 assert io.width == 4*8 + 4*8 + 1*20
 ```
 
-Unlike `AggregateRecord`, fields are read directly from the instance via `vars(self)` (or
+Unlike `CompositeRecord`, fields are read directly from the instance via `vars(self)` (or
 dataclass `fields()`), so the same class can hold arbitrarily different shapes per instance.
 
 ---
@@ -127,7 +127,7 @@ Bitvector view with an explicit total width, fractional width, and sign.  Provid
 `add` / `sub` / `mul` with optional output type and quantization mode (`ARITHQuant`).
 
 ```python
-from spirehdl.aggregate.aggregate_fixed_point import (
+from spirehdl.composite.fixed_point import (
     ARITHQuant, FixedPoint, FixedPointType,
 )
 from spirehdl.spirehdl import Const
@@ -155,7 +155,7 @@ IEEE-style floating-point view (1 sign bit + exponent + fraction), parameterized
 selects a subnormal-aware multiplier.
 
 ```python
-from spirehdl.aggregate.aggregate_floating_point import (
+from spirehdl.composite.floating_point import (
     FloatingPoint, FloatingPointType,
 )
 from spirehdl.spirehdl import Const
@@ -180,15 +180,15 @@ y_add = a + b
 
 ---
 
-## `AggregateRegister`
+## `CompositeRegister`
 
-Wraps any aggregate type in a single register: one packed `Signal(kind="reg")` underneath, a
+Wraps any composite type in a single register: one packed `Signal(kind="reg")` underneath, a
 structured `.value` view on top.  Use it when you want a register whose contents you read and
-write as a structured aggregate, not raw bits.
+write as a structured composite, not raw bits.
 
 ```python
-from spirehdl.aggregate.aggregate_register import AggregateRegister
-from spirehdl.aggregate.aggregate_fixed_point import FixedPoint, FixedPointType
+from spirehdl.composite.register import CompositeRegister
+from spirehdl.composite.fixed_point import FixedPoint, FixedPointType
 from spirehdl.spirehdl_module import Module
 from spirehdl.spirehdl import UInt, as_expr
 
@@ -197,7 +197,7 @@ x = m.input(UInt(8), "x")
 
 q8_8 = FixedPointType(width_total=16, width_frac=8, signed=False)
 
-acc = AggregateRegister(FixedPoint, q8_8, name="acc_reg", init=0)
+acc = CompositeRegister(FixedPoint, q8_8, name="acc_reg", init=0)
 m._signals.append(acc.bits)   # expose the underlying reg signal
 
 acc_val = acc.value           # FixedPoint view on the register
@@ -212,5 +212,5 @@ y <<= acc.bits
 Working tests demonstrate the full simulation flow:
 [`testing/test_fixed_point.py`](../testing/test_fixed_point.py),
 [`testing/test_floating_point.py`](../testing/test_floating_point.py),
-[`testing/test_aggregate_record.py`](../testing/test_aggregate_record.py),
+[`testing/test_record.py`](../testing/test_record.py),
 [`testing/test_array2.py`](../testing/test_array2.py).

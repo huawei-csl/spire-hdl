@@ -253,7 +253,7 @@ models and Yosys-friendly `custom_verilog()` outputs:
 
 - [`MemoryPrimitive`](../src/spirehdl/primitives/primitive_memory.py) —
   array-of-registers RAM with optional registered read, reset arm, and
-  init values. Supports aggregate element types via user-side
+  init values. Supports composite element types via user-side
   `to_bits`/`from_bits` at the port boundary. Emits the standard Yosys-
   inferable `reg [W-1:0] mem[0:D-1];` idiom in `custom_verilog()`.
 - [`FIFOPrimitive`](../src/spirehdl/primitives/primitive_fifo.py) — standard
@@ -262,7 +262,7 @@ models and Yosys-friendly `custom_verilog()` outputs:
   block.
 
 Both are good templates for new custom-Verilog Components: they exercise
-sequential state in `elaborate()` (Registers + mux trees), aggregate-type
+sequential state in `elaborate()` (Registers + mux trees), composite-type
 support, and per-instance internal-name uniquification so multiple
 instances inside the same parent don't collide on inlined names.
 
@@ -277,6 +277,6 @@ instances inside the same parent don't collide on inlined names.
   fix is exercised in `test_embedded_blackbox_parent_helper_is_reachable`).
 - Primitives tests:
   [`testing/memory/test_primitive_memory.py`](../testing/memory/test_primitive_memory.py)
-  (10 cases including an `AggregateRecord` element-type round-trip) and
+  (10 cases including an `CompositeRecord` element-type round-trip) and
   [`testing/memory/test_primitive_fifo.py`](../testing/memory/test_primitive_fifo.py)
-  (8 cases including underflow/overflow safety and aggregate element types).
+  (8 cases including underflow/overflow safety and composite element types).

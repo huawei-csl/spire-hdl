@@ -9,7 +9,7 @@ holds the init values, and ``custom_verilog`` emits a ``reg [W-1:0] rom[0:D-1];`
 This is ergonomic sugar over ``MemoryPrimitive(..., init=…)`` with its write port tied off:
 ``RomPrimitive`` simply drops the write/mask/reset ports from the interface.
 
-Aggregate element types are supported via the same pack/unpack-at-the-boundary convention
+Composite element types are supported via the same pack/unpack-at-the-boundary convention
 as the other primitives (``init`` entries are packed bit-patterns).
 """
 
@@ -28,7 +28,7 @@ class RomPrimitive(Component):
     """Read-only memory.
 
     Parameters:
-      ``elem_type``        HDLType (e.g. ``UInt(8)``) or HDLAggregate (class / instance).
+      ``elem_type``        HDLType (e.g. ``UInt(8)``) or HDLComposite (class / instance).
       ``depth``            Number of entries.
       ``init``             Per-cell contents (length must equal ``depth``). Required.
       ``registered_read``  ``True`` → 1-cycle registered read + a ``read_enable`` port

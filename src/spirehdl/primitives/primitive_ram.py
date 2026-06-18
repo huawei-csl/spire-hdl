@@ -5,7 +5,7 @@ multiple write ports, multiple read ports, true dual-port (``rw_ports`` = read/w
 write masks, and read-under-write forwarding — all over **one shared array** via the core's
 ``_MemoryArray`` port factory (O(1) sim) with synthesis from ``_ram_template.ram_block``.
 
-Ports (indexed; all ``UInt`` at the boundary, aggregates pack via ``to_bits``/``from_bits``):
+Ports (indexed; all ``UInt`` at the boundary, composites pack via ``to_bits``/``from_bits``):
   write k:  ``w{k}_addr`` ``w{k}_data`` ``w{k}_en`` (+ ``w{k}_mask`` if masked)
   read  k:  ``r{k}_addr`` ``r{k}_data`` (+ ``r{k}_en`` if ``registered_read``)
   rw    k:  ``rw{k}_addr`` ``rw{k}_din`` ``rw{k}_write`` ``rw{k}_en`` ``rw{k}_dout``

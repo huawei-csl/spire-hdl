@@ -1,4 +1,4 @@
-from spirehdl.aggregate.hdl_aggregate import HDLAggregate
+from spirehdl.composite.base import HDLComposite
 from spirehdl.spirehdl import (
     UInt,
     Wire,
@@ -7,11 +7,11 @@ from spirehdl.spirehdl import (
     as_expr,
     reset_shared_cache,
 )
-from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.composite.array import Array
 from spirehdl.spirehdl import UInt
 from spirehdl.spirehdl_module import Module
 from spirehdl.spirehdl_simulator import Simulator
-from testing.test_aggregate_register_and_array import DummyAgg
+from testing.test_composite_register_and_array import DummyAgg
 
 
 # -------------------------------------------------------------------
@@ -68,7 +68,7 @@ def test_array_nd_indexing_and_slicing():
 
 def test_array_packed_assign_from_array():
     """
-    dst <<= src  (packed HDLAggregate assignment)
+    dst <<= src  (packed HDLComposite assignment)
     """
     reset_shared_cache()
 
@@ -95,7 +95,7 @@ def test_array_packed_assign_from_array():
 
 def test_array_packed_assign_from_constant():
     """
-    dst <<= 0  (packed HDLAggregate assignment from constant)
+    dst <<= 0  (packed HDLComposite assignment from constant)
     """
     reset_shared_cache()
 
@@ -116,7 +116,7 @@ def test_array_packed_assign_from_constant():
 
 def test_array_wire_like_clone_shape():
     """
-    wire_like(template) creates a new Array with same shape, new wires / aggregates.
+    wire_like(template) creates a new Array with same shape, new wires / composites.
     """
     reset_shared_cache()
 
@@ -163,7 +163,7 @@ def test_array_elementwise_assign():
     assert d1._driver is s1
 
 
-def test_array_with_dummy_aggregate_and_wires():
+def test_array_with_dummy_composite_and_wires():
     """
     Mixed Array: [Wire, DummyAgg, Wire] + packed assign + wire_like.
     """
@@ -208,7 +208,7 @@ def test_array_with_dummy_aggregate_and_wires():
     assert c_w1._driver is not None
 
 
-def sim_test_aggregate_array():
+def sim_test_composite_array():
     # ---------------------------------------------
     # Build module
     # ---------------------------------------------
@@ -266,5 +266,5 @@ if __name__ == "__main__":
     test_array_packed_assign_from_constant()
     test_array_wire_like_clone_shape()
     test_array_elementwise_assign()
-    test_array_with_dummy_aggregate_and_wires()
-    sim_test_aggregate_array()
+    test_array_with_dummy_composite_and_wires()
+    sim_test_composite_array()

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from typing import List
-from spirehdl.aggregate.aggregate_register import AggregateRegister
-from spirehdl.aggregate.hdl_aggregate import HDLAggregate
+from spirehdl.composite.register import CompositeRegister
+from spirehdl.composite.base import HDLComposite
 from spirehdl.spirehdl import (
     UInt,
     Wire,
@@ -11,20 +11,20 @@ from spirehdl.spirehdl import (
     as_expr,
     reset_shared_cache,
 )
-from spirehdl.aggregate.aggregate_fixed_point import FixedPoint, FixedPointType
+from spirehdl.composite.fixed_point import FixedPoint, FixedPointType
 from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator  # your HDLAggregate fixed-point type
+from spirehdl.spirehdl_simulator import Simulator  # your HDLComposite fixed-point type
 
 
 # -------------------------------------------------------------------
-# Simple HDLAggregate implementation for testing
+# Simple HDLComposite implementation for testing
 # -------------------------------------------------------------------
-class DummyAgg(HDLAggregate):
+class DummyAgg(HDLComposite):
     """
-    Tiny aggregate for tests: wraps a single Expr (usually a Wire).
+    Tiny composite for tests: wraps a single Expr (usually a Wire).
     Supports:
       - wire_like(width)
-    so it works with AggregateRegister.
+    so it works with CompositeRegister.
     """
 
     def __init__(self, width: int, bits: Expr | None = None, name: str = "dummy"):
@@ -37,7 +37,7 @@ class DummyAgg(HDLAggregate):
             # View case: reinterpret existing bits
             self.sig = as_expr(bits)
 
-    # ---- HDLAggregate API ----
+    # ---- HDLComposite API ----
 
     @classmethod
     def wire_like(cls, template: "DummyAgg") -> "DummyAgg":
@@ -58,11 +58,11 @@ class DummyAgg(HDLAggregate):
 # -------------------------------------------------------------------
 
 
-def test_aggregate_register_with_dummyagg_basic():
+def test_composite_register_with_dummyagg_basic():
     reset_shared_cache()
 
     # Register that stores a DummyAgg(width=5)
-    reg = AggregateRegister(DummyAgg, 5, name="dummy_reg")
+    reg = CompositeRegister(DummyAgg, 5, name="dummy_reg")
 
     # Under-the-hood: one reg Signal with width 5
     bits = reg.bits
@@ -70,7 +70,7 @@ def test_aggregate_register_with_dummyagg_basic():
     assert bits.kind == "reg"
     assert bits.typ.width == 5
 
-    # HDLAggregate.width property
+    # HDLComposite.width property
     assert reg.width == 5
 
     # Structured view
@@ -82,15 +82,15 @@ def test_aggregate_register_with_dummyagg_basic():
     assert val.to_bits()._driver._driver.a is bits
 
 
-def test_aggregate_register_dummyagg_assign_from_int():
+def test_composite_register_dummyagg_assign_from_int():
     reset_shared_cache()
 
-    reg = AggregateRegister(DummyAgg, 5, name="dummy_reg")
+    reg = CompositeRegister(DummyAgg, 5, name="dummy_reg")
 
     # No next-state yet
     assert reg.bits._driver is None
 
-    # Packed assignment via HDLAggregate:
+    # Packed assignment via HDLComposite:
     reg <<= 3  # int -> Const -> resized to width 5
 
     assert reg.bits._driver is not None
@@ -98,17 +98,17 @@ def test_aggregate_register_dummyagg_assign_from_int():
     assert reg.bits._driver.typ.width == 5
 
 
-def test_aggregate_register_dummyagg_assign_from_agg():
+def test_composite_register_dummyagg_assign_from_agg():
     reset_shared_cache()
 
-    # src aggregate: DummyAgg with its own wire
+    # src composite: DummyAgg with its own wire
     src = DummyAgg(width=5, name="src_dummy")
     src.sig <<= 7  # combinational driver, just to make it non-constant
 
     # reg that holds a DummyAgg(5)
-    reg = AggregateRegister(DummyAgg, 5, name="dummy_reg")
+    reg = CompositeRegister(DummyAgg, 5, name="dummy_reg")
 
-    # Assign packed from aggregate
+    # Assign packed from composite
     reg <<= src
 
     assert reg.bits._driver is not None
@@ -117,10 +117,10 @@ def test_aggregate_register_dummyagg_assign_from_agg():
     assert reg.bits._driver._driver.a is src.to_bits()
 
 
-def test_aggregate_register_dummyagg_init_from_int():
+def test_composite_register_dummyagg_init_from_int():
     reset_shared_cache()
 
-    reg = AggregateRegister(DummyAgg, 5, name="dummy_reg_init", init=6)
+    reg = CompositeRegister(DummyAgg, 5, name="dummy_reg_init", init=6)
 
     bits = reg.bits
     assert isinstance(bits, Signal)
@@ -134,13 +134,13 @@ def test_aggregate_register_dummyagg_init_from_int():
         assert bits._init.value == 6
 
 
-def test_aggregate_register_dummyagg_init_from_agg():
+def test_composite_register_dummyagg_init_from_agg():
     reset_shared_cache()
 
     src = DummyAgg(width=5, name="src_init")
     src.sig <<= 9
 
-    reg = AggregateRegister(DummyAgg, 5, name="dummy_reg_init", init=src)
+    reg = CompositeRegister(DummyAgg, 5, name="dummy_reg_init", init=src)
 
     bits = reg.bits
     assert bits._init is not None
@@ -149,13 +149,13 @@ def test_aggregate_register_dummyagg_init_from_agg():
     assert bits._init is src.to_bits()
 
 
-def test_aggregate_register_with_fixedpoint_basic():
+def test_composite_register_with_fixedpoint_basic():
     reset_shared_cache()
     
     ftype = FixedPointType(width_total=16, width_frac=8, signed=True)
 
     # Register that holds a FixedPoint(16, frac=8, signed)
-    acc = AggregateRegister(
+    acc = CompositeRegister(
         FixedPoint,
         ftype,
         name="acc_reg",
@@ -178,13 +178,13 @@ def test_aggregate_register_with_fixedpoint_basic():
     assert val.bits._driver._driver.a is bits
 
 
-def test_aggregate_register_fixedpoint_assign():
+def test_composite_register_fixedpoint_assign():
     reset_shared_cache()
 
     ftype = FixedPointType(width_total=16, width_frac=8, signed=True)
 
     # Register that holds a FixedPoint(16, frac=8, signed)
-    acc = AggregateRegister(
+    acc = CompositeRegister(
         FixedPoint,
         ftype,
         name="acc_reg",
@@ -203,13 +203,13 @@ def test_aggregate_register_fixedpoint_assign():
     assert acc.bits._driver._driver.a is src.bits
 
 
-def test_aggregate_register_fixedpoint_init():
+def test_composite_register_fixedpoint_init():
     reset_shared_cache()
 
     ftype = FixedPointType(width_total=16, width_frac=8, signed=True)
     
     # Init from int
-    acc1 = AggregateRegister(
+    acc1 = CompositeRegister(
         FixedPoint,
         ftype,
         name="acc_reg_init1",
@@ -218,9 +218,9 @@ def test_aggregate_register_fixedpoint_init():
     assert acc1.bits._init is not None
     assert acc1.bits._init.typ.width == 16
 
-    # Init from FixedPoint aggregate
+    # Init from FixedPoint composite
     src = FixedPoint(ftype, name="src_fp")
-    acc2 = AggregateRegister(
+    acc2 = CompositeRegister(
         FixedPoint,
         ftype,
         name="acc_reg_init2",
@@ -231,7 +231,7 @@ def test_aggregate_register_fixedpoint_init():
     assert acc2.bits._init is src.bits
 
 
-def sim_test_aggregate_register():
+def sim_test_composite_register():
     # ---------------------------------------------
     # Build module
     # ---------------------------------------------
@@ -241,8 +241,8 @@ def sim_test_aggregate_register():
 
     ftype = FixedPointType(width_total=16, width_frac=8, signed=True)
 
-    # Aggregate register: 16-bit FixedPoint with 8 fractional bits (Q8.8)
-    acc = AggregateRegister(
+    # Composite register: 16-bit FixedPoint with 8 fractional bits (Q8.8)
+    acc = CompositeRegister(
         FixedPoint,
         ftype,
         name="acc_reg",
@@ -299,12 +299,12 @@ def sim_test_aggregate_register():
 
 
 if __name__ == "__main__":
-    test_aggregate_register_with_dummyagg_basic()
-    test_aggregate_register_dummyagg_assign_from_int()
-    test_aggregate_register_dummyagg_assign_from_agg()
-    test_aggregate_register_dummyagg_init_from_int()
-    test_aggregate_register_dummyagg_init_from_agg()
-    test_aggregate_register_with_fixedpoint_basic()
-    test_aggregate_register_fixedpoint_assign()
-    test_aggregate_register_fixedpoint_init()
-    sim_test_aggregate_register()
+    test_composite_register_with_dummyagg_basic()
+    test_composite_register_dummyagg_assign_from_int()
+    test_composite_register_dummyagg_assign_from_agg()
+    test_composite_register_dummyagg_init_from_int()
+    test_composite_register_dummyagg_init_from_agg()
+    test_composite_register_with_fixedpoint_basic()
+    test_composite_register_fixedpoint_assign()
+    test_composite_register_fixedpoint_init()
+    sim_test_composite_register()

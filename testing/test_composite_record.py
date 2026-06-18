@@ -1,6 +1,6 @@
 
-from spirehdl.aggregate.aggregate_record import AggregateRecord
-from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.composite.record import CompositeRecord
+from spirehdl.composite.array import Array
 from spirehdl.spirehdl import SInt, UInt, Wire, Signal
 
 
@@ -18,8 +18,8 @@ from spirehdl.spirehdl_module import Module
 from spirehdl.spirehdl_simulator import Simulator
 
 
-def test_aggregate_record_basic():
-    class MyRecord(AggregateRecord):
+def test_composite_record_basic():
+    class MyRecord(CompositeRecord):
         a: Signal = Wire(UInt(8))
         b: Signal = Wire(SInt(4))
         c: Array = Array([Wire(UInt(8)) for _ in range(4)])
@@ -32,7 +32,7 @@ def test_aggregate_record_basic():
     assert b0.a.typ.width == 8
 
     # Type inference:
-    b0 <<= b1  # inferred return type: MyRecord (via HDLAggregate.__ilshift__)
+    b0 <<= b1  # inferred return type: MyRecord (via HDLComposite.__ilshift__)
 
 
 # -------------------------------------------------------------------
@@ -40,12 +40,12 @@ def test_aggregate_record_basic():
 # -------------------------------------------------------------------
 
 
-class MyRecord(AggregateRecord):
+class MyRecord(CompositeRecord):
     a: Signal = Wire(UInt(8))
     b: Signal = Wire(UInt(4))
 
 
-class RecordWithArray(AggregateRecord):
+class RecordWithArray(CompositeRecord):
     a: Signal = Wire(UInt(8))
     vec: Array = Array([Wire(UInt(2)) for _ in range(3)])  # 3×2 bits
 
@@ -55,7 +55,7 @@ class RecordWithArray(AggregateRecord):
 # -------------------------------------------------------------------
 
 
-def test_aggregaterecord_templates_collected():
+def test_compositerecord_templates_collected():
     reset_shared_cache()
 
     # Templates should be captured on the class
@@ -69,7 +69,7 @@ def test_aggregaterecord_templates_collected():
     assert tmpl["b"].typ.width == 4
 
 
-def test_aggregaterecord_instance_clones_wires():
+def test_compositerecord_instance_clones_wires():
     reset_shared_cache()
 
     b0 = MyRecord()
@@ -91,7 +91,7 @@ def test_aggregaterecord_instance_clones_wires():
     assert b0.b.kind == "wire"
 
 
-def test_aggregaterecord_override_field_in_ctor():
+def test_compositerecord_override_field_in_ctor():
     reset_shared_cache()
 
     custom_a = Wire(UInt(8))
@@ -104,7 +104,7 @@ def test_aggregaterecord_override_field_in_ctor():
     assert b.b is not MyRecord._record_field_templates["b"]
 
 
-def test_aggregaterecord_unknown_override_raises():
+def test_compositerecord_unknown_override_raises():
     reset_shared_cache()
 
     try:
@@ -114,7 +114,7 @@ def test_aggregaterecord_unknown_override_raises():
         pass
 
 
-def test_aggregaterecord_to_bits_and_width():
+def test_compositerecord_to_bits_and_width():
     reset_shared_cache()
 
     b = MyRecord()
@@ -128,7 +128,7 @@ def test_aggregaterecord_to_bits_and_width():
     assert isinstance(bits, Expr)
 
 
-def test_aggregaterecord_assign_from_bits_slices_correctly():
+def test_compositerecord_assign_from_bits_slices_correctly():
     reset_shared_cache()
 
     b = MyRecord()
@@ -137,7 +137,7 @@ def test_aggregaterecord_assign_from_bits_slices_correctly():
     val = 0xABC  # 0b1010_1011_1100 (just something nontrivial)
     bits = Const(val, HDLType(12, signed=False, is_bool=False))
 
-    # Structural assignment via HDLAggregate API
+    # Structural assignment via HDLComposite API
     b.assign(bits)
 
     # a: first 8 bits (LSB side)
@@ -158,7 +158,7 @@ def test_aggregaterecord_assign_from_bits_slices_correctly():
     assert b.b._driver._driver.msb == 11
 
 
-def test_aggregaterecord_elementwise_assign_from_other_record():
+def test_compositerecord_elementwise_assign_from_other_record():
     reset_shared_cache()
 
     src = MyRecord()
@@ -179,7 +179,7 @@ def test_aggregaterecord_elementwise_assign_from_other_record():
     assert dst.b._driver is src.b
 
 
-def test_aggregaterecord_with_nested_array_clone_and_width():
+def test_compositerecord_with_nested_array_clone_and_width():
     reset_shared_cache()
 
     b0 = RecordWithArray()
@@ -209,7 +209,7 @@ def test_aggregaterecord_with_nested_array_clone_and_width():
     assert bits1.typ.width == 14
 
 
-def test_aggregaterecord_with_nested_array_assign_from_bits():
+def test_compositerecord_with_nested_array_assign_from_bits():
     reset_shared_cache()
 
     b = RecordWithArray()
@@ -239,13 +239,13 @@ def _eval_expr(e: Expr) -> int:
 
 
 if __name__ == "__main__":
-    test_aggregate_record_basic()
-    test_aggregaterecord_templates_collected()
-    test_aggregaterecord_instance_clones_wires()
-    test_aggregaterecord_override_field_in_ctor()
-    test_aggregaterecord_unknown_override_raises()
-    test_aggregaterecord_to_bits_and_width()
-    test_aggregaterecord_assign_from_bits_slices_correctly()
-    test_aggregaterecord_elementwise_assign_from_other_record()
-    test_aggregaterecord_with_nested_array_clone_and_width()
-    test_aggregaterecord_with_nested_array_assign_from_bits()
+    test_composite_record_basic()
+    test_compositerecord_templates_collected()
+    test_compositerecord_instance_clones_wires()
+    test_compositerecord_override_field_in_ctor()
+    test_compositerecord_unknown_override_raises()
+    test_compositerecord_to_bits_and_width()
+    test_compositerecord_assign_from_bits_slices_correctly()
+    test_compositerecord_elementwise_assign_from_other_record()
+    test_compositerecord_with_nested_array_clone_and_width()
+    test_compositerecord_with_nested_array_assign_from_bits()

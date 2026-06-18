@@ -1,6 +1,6 @@
 from typing import Iterable, List, Sequence, Union, Tuple
 
-from spirehdl.aggregate.hdl_aggregate import HDLAggregate
+from spirehdl.composite.base import HDLComposite
 from spirehdl.spirehdl import (
     Expr,
     ExprLike,
@@ -11,12 +11,12 @@ from spirehdl.spirehdl import (
 
 
 # Each element is either a plain Expr (Signal/Const/etc.)
-# or any higher-level aggregate (Bundle, FixedPoint, nested Array, ...)
-ArrayElem = Union[Expr, HDLAggregate]
-InputElem = Union[ExprLike, HDLAggregate]
+# or any higher-level composite (Bundle, FixedPoint, nested Array, ...)
+ArrayElem = Union[Expr, HDLComposite]
+InputElem = Union[ExprLike, HDLComposite]
 
 
-class Array(HDLAggregate):
+class Array(HDLComposite):
     def __init__(
         self,
         values: Sequence[InputElem],
@@ -24,15 +24,15 @@ class Array(HDLAggregate):
         """
         Construct an Array from:
           - ExprLike (int, bool, Expr) → Expr (via as_expr)
-          - HDLAggregate                 → nested aggregate (Bundle, Array, FixedPoint, ...)
+          - HDLComposite                 → nested composite (Bundle, Array, FixedPoint, ...)
         """
         if not values:
             raise ValueError("Array requires at least one element")
 
         elems: List[ArrayElem] = []
         for v in values:
-            if isinstance(v, HDLAggregate):
-                # Any aggregate (Bundle, Array, FixedPoint, ...)
+            if isinstance(v, HDLComposite):
+                # Any composite (Bundle, Array, FixedPoint, ...)
                 elems.append(v)
             else:
                 # ExprLike (int, bool, Expr) → Expr
@@ -89,7 +89,7 @@ class Array(HDLAggregate):
         if isinstance(idx, int):
             elem = self._elems[idx]
             if not rest:
-                # Last axis: return scalar element / sub-array / aggregate
+                # Last axis: return scalar element / sub-array / composite
                 return elem
             # More axes: we must recurse into a nested Array
             if not isinstance(elem, Array):
@@ -126,7 +126,7 @@ class Array(HDLAggregate):
         if isinstance(idx, tuple):
             # ND assignment could be added similarly to _get_nd; for now we keep 1D.
             raise NotImplementedError("N-dimensional __setitem__ not implemented")
-        elif isinstance(value, HDLAggregate):
+        elif isinstance(value, HDLComposite):
             coerced = value
         else:
             coerced = as_expr(value)
@@ -141,14 +141,14 @@ class Array(HDLAggregate):
         """
         Total bit width of this array (recursively).
 
-        NOTE: This overrides HDLAggregate.width for Arrays but is equivalent
+        NOTE: This overrides HDLComposite.width for Arrays but is equivalent
         to `self.to_bits().typ.width`.
         """
         total = 0
         for elem in self._elems:
             if isinstance(elem, Expr):
                 total += elem.typ.width
-            elif isinstance(elem, HDLAggregate):
+            elif isinstance(elem, HDLComposite):
                 total += elem.width
             else:
                 raise TypeError(f"Unsupported element type in width(): {type(elem)}")
@@ -161,9 +161,9 @@ class Array(HDLAggregate):
 
         Convention:
           - Expr leaves        → new Wire(typ)
-          - HDLAggregate leaves → type(elem).wire_like(elem)
+          - HDLComposite leaves → type(elem).wire_like(elem)
 
-        So any aggregate type you put inside Array (Bundle, FixedPoint, nested Array, ...)
+        So any composite type you put inside Array (Bundle, FixedPoint, nested Array, ...)
         should implement `@classmethod wire_like(template_instance)`.
         """
         new_elems: List[ArrayElem] = []
@@ -174,15 +174,15 @@ class Array(HDLAggregate):
                     new_elems.append(Wire(elem.typ, name=elem.name))
                 else:
                     new_elems.append(Wire(elem.typ))
-            elif isinstance(elem, HDLAggregate):
+            elif isinstance(elem, HDLComposite):
                 new_elems.append(type(elem).wire_like(elem))
             else:
                 raise TypeError(f"Unsupported element type in Array.wire_like: {type(elem)}")
 
         return cls(new_elems)
 
-    def to_list_first_level(self) -> List[Expr | HDLAggregate]:
-        list_first_level: List[Expr | HDLAggregate] = []
+    def to_list_first_level(self) -> List[Expr | HDLComposite]:
+        list_first_level: List[Expr | HDLComposite] = []
         for elem in self._elems:
             list_first_level.append(elem)
         return list_first_level

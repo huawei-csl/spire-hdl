@@ -1,9 +1,9 @@
-"""Aggregate-backed IO container for :class:`~spirehdl.spirehdl_module.Component`.
+"""Composite-backed IO container for :class:`~spirehdl.spirehdl_module.Component`.
 
 ``IORecord`` is the canonical way to declare a Component's IO. Field names become signal names
 (no name triplication), and direction is given by the :class:`~spirehdl.spirehdl.Input` /
 :class:`~spirehdl.spirehdl.Output` signal classes rather than a ``kind=`` string. Because
-``IORecord`` *is* an ``HDLAggregate``, IO fields may themselves be nested aggregates (``Array``,
+``IORecord`` *is* an ``HDLComposite``, IO fields may themselves be nested composites (``Array``,
 records, fixed/float types) and ``to_list()`` flattening, ``width``, ``<<=`` / ``@=`` all come for free.
 
 Usage::
@@ -23,18 +23,18 @@ explicit name carries the ``_io_autoname`` flag, and ``IORecord`` fills its name
 """
 from __future__ import annotations
 
-from spirehdl.aggregate.aggregate_record_dynamic import AggregateRecordDynamic
+from spirehdl.composite.record_dynamic import CompositeRecordDynamic
 from spirehdl.spirehdl import Input, Output, Signal  # re-exported for `from spirehdl.io_record import ...`
 
 __all__ = ["IORecord", "Input", "Output"]
 
 
-class IORecord(AggregateRecordDynamic):
-    """Aggregate IO container; field names become signal names, direction is explicit.
+class IORecord(CompositeRecordDynamic):
+    """Composite IO container; field names become signal names, direction is explicit.
 
-    Extends :class:`AggregateRecordDynamic` (not ``AggregateRecord``, which rejects non-``wire``
+    Extends :class:`CompositeRecordDynamic` (not ``CompositeRecord``, which rejects non-``wire``
     kinds). Fields may be ``Signal`` ports (typically :class:`Input` / :class:`Output`) or nested
-    ``HDLAggregate`` values (e.g. ``Array``).
+    ``HDLComposite`` values (e.g. ``Array``).
     """
 
     def __init__(self, **fields: object) -> None:

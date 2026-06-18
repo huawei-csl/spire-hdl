@@ -4,9 +4,9 @@ from collections import namedtuple
 from dataclasses import dataclass
 from typing import Callable, Iterable, List, Literal, NamedTuple, Sequence
 
-from spirehdl.aggregate.aggregate_array import Array
-from spirehdl.aggregate.aggregate_record import AggregateRecord
-from spirehdl.aggregate.aggregate_record_dynamic import AggregateRecordDynamic
+from spirehdl.composite.array import Array
+from spirehdl.composite.record import CompositeRecord
+from spirehdl.composite.record_dynamic import CompositeRecordDynamic
 from spirehdl.arithmetic.int_arithmetic_config import (
     AdderConfig,
     MultiplierConfig,
@@ -53,7 +53,7 @@ def inner_product(
 
 
 @dataclass
-class MatmulAccumulateIO(AggregateRecordDynamic):
+class MatmulAccumulateIO(CompositeRecordDynamic):
     A: Array  # input
     B: Array  # input
     C: Array  # input

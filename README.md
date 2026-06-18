@@ -227,34 +227,34 @@ print(Sum3Hierarchical().to_verilog(name="Sum3Hier"))  # one flat module, built 
 
 Components are how to build hierarchy: instantiate one inside another, adapt its IO, or drop in a pre-synthesized netlist — all without leaving Python. A common pattern wraps a reusable SpireHDL block (see [`multipliers_ext.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext.py)). It is also possible to import an external AIG module, turn it into a `Component`, and call `from_module(..., make_internal=True)` so it behaves like a native SpireHDL block inside a larger generator (see [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)). The same approach covers Verilog imports, so SpireHDL code and external IP mix freely.
 
-## Aggregate data types
+## Composite data types
 
-SpireHDL includes structured, bit-packable aggregates for cleaner interfaces and bulk assignments ([`aggregate/`](src/spirehdl/aggregate)). See [`README_aggregate_types.md`](docs/README_aggregate_types.md) for the full reference with an example for every type:
+SpireHDL includes structured, bit-packable composites for cleaner interfaces and bulk assignments ([`composite/`](src/spirehdl/composite)). See [`README_composite_types.md`](docs/README_composite_types.md) for the full reference with an example for every type:
 
-- `HDLAggregate` defines the base "pack to bits" API that powers all aggregates ([`hdl_aggregate.py`](src/spirehdl/aggregate/hdl_aggregate.py)).
-- `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or aggregates ([`aggregate_array.py`](src/spirehdl/aggregate/aggregate_array.py)).
-- `AggregateRecord` lets you declare bundle-like classes with named fields that remain packable to a flat bitvector ([`aggregate_record.py`](src/spirehdl/aggregate/aggregate_record.py)).
-- `AggregateRecordDynamic` is the dataclass-friendly variant whose fields are defined per-instance, ideal for parameterized IO records ([`aggregate_record_dynamic.py`](src/spirehdl/aggregate/aggregate_record_dynamic.py)).
-- `FixedPoint` wraps a `Wire` or view with explicit total/frac widths and quantization helpers, keeping arithmetic readable while staying hardware-friendly ([`aggregate_fixed_point.py`](src/spirehdl/aggregate/aggregate_fixed_point.py)).
-- `FloatingPoint` provides an IEEE-style view with `add`/`mul` helpers parameterized by exponent / fraction widths ([`aggregate_floating_point.py`](src/spirehdl/aggregate/aggregate_floating_point.py)).
-- `AggregateRegister` stores any aggregate in a single register while preserving a structured view via `.value`/`.Q` ([`aggregate_register.py`](src/spirehdl/aggregate/aggregate_register.py)).
+- `HDLComposite` defines the base "pack to bits" API that powers all composites ([`base.py`](src/spirehdl/composite/base.py)).
+- `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or composites ([`array.py`](src/spirehdl/composite/array.py)).
+- `CompositeRecord` lets you declare bundle-like classes with named fields that remain packable to a flat bitvector ([`record.py`](src/spirehdl/composite/record.py)).
+- `CompositeRecordDynamic` is the dataclass-friendly variant whose fields are defined per-instance, ideal for parameterized IO records ([`record_dynamic.py`](src/spirehdl/composite/record_dynamic.py)).
+- `FixedPoint` wraps a `Wire` or view with explicit total/frac widths and quantization helpers, keeping arithmetic readable while staying hardware-friendly ([`fixed_point.py`](src/spirehdl/composite/fixed_point.py)).
+- `FloatingPoint` provides an IEEE-style view with `add`/`mul` helpers parameterized by exponent / fraction widths ([`floating_point.py`](src/spirehdl/composite/floating_point.py)).
+- `CompositeRegister` stores any composite in a single register while preserving a structured view via `.value`/`.Q` ([`register.py`](src/spirehdl/composite/register.py)).
 
 Example:
 
 ```python
-from spirehdl.aggregate.aggregate_array import Array
-from spirehdl.aggregate.aggregate_record import AggregateRecord
-from spirehdl.aggregate.aggregate_fixed_point import FixedPoint, FixedPointType
-from spirehdl.aggregate.aggregate_register import AggregateRegister
+from spirehdl.composite.array import Array
+from spirehdl.composite.record import CompositeRecord
+from spirehdl.composite.fixed_point import FixedPoint, FixedPointType
+from spirehdl.composite.register import CompositeRegister
 from spirehdl.spirehdl import UInt, Wire
 
-class Bus(AggregateRecord):
+class Bus(CompositeRecord):
     data = Wire(UInt(8))
     valid = Wire(UInt(1))
 
 payload = Array([Bus(), Bus()])
 acc = FixedPoint(FixedPointType(width_total=16, width_frac=8))
-acc_reg = AggregateRegister(FixedPoint, acc.ftype, name="acc_reg")
+acc_reg = CompositeRegister(FixedPoint, acc.ftype, name="acc_reg")
 
 acc_reg <<= acc            # packed register write
 payload[1] @= payload[0]   # element-wise copy between bundles

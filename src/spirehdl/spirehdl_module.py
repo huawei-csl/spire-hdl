@@ -28,9 +28,9 @@ from spirehdl.spirehdl_visitor import ExprVisitor, expr_children
 # The flat netlist IR now lives in spirehdl.ir (one-way layering: component -> ir -> spirehdl).
 # Re-exported here so existing `from spirehdl.spirehdl_module import Module/IOCollector/...` keep working.
 from spirehdl.ir import (Netlist, Module, _PortGrouper, IOCollector, _SignalCollector, get_rand_hash)
-# IO normalization helpers live in the aggregate layer; re-exported here for back-compat
+# IO normalization helpers live in the composite layer; re-exported here for back-compat
 # (e.g. `from spirehdl.spirehdl_module import iter_values`).
-from spirehdl.aggregate.aggregate_record_dynamic import _to_aggregate, iter_values
+from spirehdl.composite.record_dynamic import _to_composite, iter_values
 
 
 class Component(abc.ABC):
@@ -51,14 +51,14 @@ class Component(abc.ABC):
         """
         ...
 
-    def get_ios(self) -> "AggregateRecordDynamic":
-        """Return this component's IO as an aggregate record — the single IO normalization point.
+    def get_ios(self) -> "CompositeRecordDynamic":
+        """Return this component's IO as an composite record — the single IO normalization point.
 
         Default: normalize ``self.io`` (dataclass / dict / namedtuple / ``IORecord``) via
-        ``_to_aggregate``. Override for components whose IO is not a simple stored ``self.io``
+        ``_to_composite``. Override for components whose IO is not a simple stored ``self.io``
         (e.g. generated or imported wrappers that build their ports dynamically).
         """
-        return _to_aggregate(self.io)
+        return _to_composite(self.io)
 
     # convenience helpers -------------------------------------------------------
 

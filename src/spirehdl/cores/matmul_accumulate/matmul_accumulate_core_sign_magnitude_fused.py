@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from math import log2
 from typing import Callable, DefaultDict, Iterable, List, Literal, Optional
 
-from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.composite.array import Array
 from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption, PPAOption, PPGOption
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
 from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import StageBasedMultiplierIO, TwoInputAritConfig

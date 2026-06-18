@@ -52,7 +52,7 @@ from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_float import (
     FpMMAcDims,
     FpMatmulAccumulateComponent,
 )
-from spirehdl.aggregate.aggregate_floating_point import FloatingPointType
+from spirehdl.composite.floating_point import FloatingPointType
 from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import FpMulSN
 from spirehdl.arithmetic.floating_point.spire_hdl_float_add import FpAdd
 from spirehdl.arithmetic.floating_point.fp_mul_testvectors import FpMulTestVectors, build_targeted_mul_vectors

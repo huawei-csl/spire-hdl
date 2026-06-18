@@ -130,7 +130,7 @@ A common DSP pattern where MAC fusion shines — each tap is `coeff[i] * x[i]` a
 from dataclasses import dataclass
 from spirehdl.spirehdl import UInt, Signal
 from spirehdl.spirehdl_module import Component
-from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.composite.array import Array
 from spirehdl.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
 
 @dataclass

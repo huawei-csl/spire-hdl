@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Union, Sequence, Type, TypeVar, Generic
 
-from spirehdl.aggregate.hdl_aggregate import HDLAggregate
+from spirehdl.composite.base import HDLComposite
 from spirehdl.spirehdl import Const, Expr, ExprLike, HDLType, Resize, Wire, as_expr, fit_width
 
 # -----------------------------
@@ -56,9 +56,9 @@ class ARITHQuant(Enum):
     SatRnd = "SatRnd"
 
 
-class FixedPoint(HDLAggregate):
+class FixedPoint(HDLComposite):
     """
-    Fixed-point aggregate backed by a single Expr/Signal, with an explicit
+    Fixed-point composite backed by a single Expr/Signal, with an explicit
     FixedPointType describing width/frac/sign.
 
     The raw bits are always in two's complement or unsigned form; the
@@ -108,7 +108,7 @@ class FixedPoint(HDLAggregate):
 
     @property
     def width(self) -> int:
-        """Total bit-width (HDLAggregate-style)."""
+        """Total bit-width (HDLComposite-style)."""
         return self.ftype.width_total
 
     @property
@@ -123,9 +123,9 @@ class FixedPoint(HDLAggregate):
     def signed(self) -> bool:
         return self.ftype.signed
 
-    # ---- HDLAggregate API ----
+    # ---- HDLComposite API ----
 
-    def to_list_first_level(self) -> List[Expr | HDLAggregate]:
+    def to_list_first_level(self) -> List[Expr | HDLComposite]:
         return [self._bits]
 
     @classmethod

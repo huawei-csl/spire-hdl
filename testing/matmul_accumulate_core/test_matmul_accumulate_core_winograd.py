@@ -5,7 +5,7 @@ from typing import Callable, Iterable, List, Literal, Sequence
 
 import numpy as np
 
-from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.composite.array import Array
 from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,

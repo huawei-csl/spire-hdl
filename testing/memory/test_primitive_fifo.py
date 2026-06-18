@@ -25,7 +25,7 @@ from spirehdl.spirehdl import (
 from spirehdl.spirehdl_module import Component
 from spirehdl.spirehdl_simulator import Simulator
 from spirehdl.primitives import FIFOPrimitive
-from spirehdl.aggregate.aggregate_record import AggregateRecord
+from spirehdl.composite.record import CompositeRecord
 
 
 # ---------------------------------------------------------------------------
@@ -223,16 +223,16 @@ def test_sim_underflow_and_overflow_safety():
 
 
 # ---------------------------------------------------------------------------
-# Aggregate element type
+# Composite element type
 # ---------------------------------------------------------------------------
 
-class _Bus(AggregateRecord):
+class _Bus(CompositeRecord):
     data  = Wire(UInt(8))
     valid = Wire(UInt(1))
 
 
-def test_sim_aggregate_elem_type_fifo():
-    """Element type is an HDLAggregate. User packs / unpacks at the port boundary."""
+def test_sim_composite_elem_type_fifo():
+    """Element type is an HDLComposite. User packs / unpacks at the port boundary."""
 
     class TopAggFifo(Component):
         def __init__(self):
@@ -269,7 +269,7 @@ def test_sim_aggregate_elem_type_fifo():
 
     reset_shared_cache()
     m = TopAggFifo().to_module(name="aggfifo", with_clock=True, with_reset=True)
-    # Sanity: storage width matches the packed aggregate.
+    # Sanity: storage width matches the packed composite.
     v = m.to_verilog()
     assert "reg [8:0] bfifo__mem[0:3];" in v
 

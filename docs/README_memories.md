@@ -73,8 +73,8 @@ MemoryPrimitive(elem_type, depth, *,
                 name=None)
 ```
 
-`elem_type` is an `HDLType` (`UInt`/`SInt`/`Bool`) **or** an `HDLAggregate` — see
-[Aggregate element types](#aggregate-element-types).
+`elem_type` is an `HDLType` (`UInt`/`SInt`/`Bool`) **or** an `HDLComposite` — see
+[Composite element types](#composite-element-types).
 
 ### Ports (`mem.io.*`)
 
@@ -204,13 +204,13 @@ self.io.count <<= fifo.io.count
 Ports: `push`, `pop`, `din` (in); `dout`, `full`, `empty`, `count` (out). Simultaneous
 push+pop on a non-empty/non-full FIFO leaves `count` unchanged; underflow/overflow self-gate.
 
-## Aggregate element types
+## Composite element types
 
-Any primitive's `elem_type` may be an `HDLAggregate` (record). Boundary ports are flat
+Any primitive's `elem_type` may be an `HDLComposite` (record). Boundary ports are flat
 `UInt(width)`; pack/unpack at the edge with `to_bits()` / `from_bits()`:
 
 ```python
-class Bus(AggregateRecord):
+class Bus(CompositeRecord):
     data  = Wire(UInt(8))
     valid = Wire(UInt(1))
 

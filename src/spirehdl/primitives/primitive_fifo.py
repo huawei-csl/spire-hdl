@@ -1,7 +1,7 @@
 """``FIFOPrimitive`` — standard synchronous FIFO built as a ``Component``.
 
 Synthesisable Verilog comes from ``custom_verilog()``; Python simulation runs
-``elaborate()``'s register-file reference model. Aggregate element types are
+``elaborate()``'s register-file reference model. Composite element types are
 supported via user-side pack / unpack at the port boundary.
 
 Semantics (one-cycle read latency, *not* first-word-fallthrough):
@@ -44,7 +44,7 @@ class FIFOPrimitive(Component):
     """Standard sync FIFO with registered output (one-cycle read latency).
 
     Parameters:
-      ``elem_type``  HDLType or HDLAggregate (class / instance).
+      ``elem_type``  HDLType or HDLComposite (class / instance).
       ``depth``      Power of two, ``>= 2``.
       ``name``       Optional instance name; used as Verilog mem-array prefix.
 

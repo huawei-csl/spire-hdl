@@ -5,7 +5,7 @@ from typing import Iterable, List, Literal, Sequence
 
 import numpy as np
 
-from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.composite.array import Array
 from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
@@ -133,10 +133,10 @@ def build_matmul_accumulate_core(
     m = Module("matmul_accumulate_core")
 
     # not for now, but in the future we would like a module, e.g. with IOs. But to convert to a module we need basic hdl types (signals with kind input and output)
-    # maybe have an inner componenet with arrays as input and output (need input output kind for aggregate hdl type?), 
+    # maybe have an inner componenet with arrays as input and output (need input output kind for composite hdl type?), 
     # then wrap an outer comoponent or module with signals as input and output that connect to the inner component
     # io could be defined like this:
-    # class MyRecord(AggregateRecord):
+    # class MyRecord(CompositeRecord):
     #    a: Array = self.A
     #    b: Array = self.B
     #    c: Array = self.C

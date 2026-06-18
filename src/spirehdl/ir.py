@@ -19,7 +19,7 @@ from spirehdl.spirehdl import (Bool, Const, Expr, ExprLike, HDLType, Signal, UIn
 from spirehdl.spirehdl_memory import _MemoryArray
 from spirehdl.spirehdl_analyzer import _Analyzer, GraphReport
 from spirehdl.spirehdl_visitor import ExprVisitor, expr_children
-from spirehdl.aggregate.aggregate_record_dynamic import iter_values  # used by _SignalCollector
+from spirehdl.composite.record_dynamic import iter_values  # used by _SignalCollector
 
 
 class Netlist:
@@ -450,7 +450,7 @@ class _PortGrouper:
     Group scattered 1-bit ports like a[0], a[1], ..., a[N-1] into a wide UInt port 'a' of width N.
     Mutates the module in-place:
       - The old bit-ports are converted to internal 'wire's.
-      - New aggregated ports are created and connected.
+      - New composited ports are created and connected.
     API:
         IOCollector().group(m, {"a": UInt(16), "b": UInt(16), "y": UInt(16)})
     """
@@ -458,7 +458,7 @@ class _PortGrouper:
     def group(self, m: Module, spec: Dict[str, Any]) -> Dict[str, Any]:
         """
         spec: { base_name -> SpireHDL type (e.g., UInt(16)) }
-        Returns a mapping { base_name -> aggregated Signal } for convenience.
+        Returns a mapping { base_name -> composited Signal } for convenience.
         """
         out: Dict[str, Any] = {}
         for base, typ in spec.items():
@@ -543,8 +543,8 @@ class _PortGrouper:
         return agg
 
 
-# `_to_aggregate` / `iter_values` now live in spirehdl.aggregate.aggregate_record_dynamic
-# (the layer that owns AggregateRecordDynamic); `iter_values` is imported at the top of this module.
+# `_to_composite` / `iter_values` now live in spirehdl.composite.record_dynamic
+# (the layer that owns CompositeRecordDynamic); `iter_values` is imported at the top of this module.
 
 
 # ---------------------------------------------------------------------------

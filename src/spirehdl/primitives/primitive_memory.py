@@ -10,10 +10,10 @@ cannot prove equivalence — the tests do.
 The legacy O(depth) register-bank model is preserved as ``MemoryPrimitive_via_reg``
 (``primitive_memory_via_reg.py``) for comparison / fallback.
 
-Aggregate element types are supported via user-side pack / unpack at the port
+Composite element types are supported via user-side pack / unpack at the port
 boundary. The port wires are always ``UInt(elem_w)``; callers do::
 
-    class Bus(AggregateRecord):
+    class Bus(CompositeRecord):
         data  = Wire(UInt(8))
         valid = Wire(UInt(1))
 
@@ -44,7 +44,7 @@ from spirehdl.spirehdl import (
 )
 from spirehdl.spirehdl_module import Component
 from spirehdl.io_record import IORecord, Input, Output
-from spirehdl.aggregate.hdl_aggregate import HDLAggregate
+from spirehdl.composite.base import HDLComposite
 from spirehdl.primitives._ram_template import ram_block
 
 
@@ -61,17 +61,17 @@ def _next_uid() -> int:
 
 
 def _elem_bit_width(elem_type) -> int:
-    """Packed bit-width of an HDLType or HDLAggregate (class or instance)."""
+    """Packed bit-width of an HDLType or HDLComposite (class or instance)."""
     # HDLType (UInt, SInt, Bool, …) — exposes `.width` directly
-    if isinstance(elem_type, type) and issubclass(elem_type, HDLAggregate):
-        # Aggregate class — instantiate (wire-only template) to read packed width
+    if isinstance(elem_type, type) and issubclass(elem_type, HDLComposite):
+        # Composite class — instantiate (wire-only template) to read packed width
         return elem_type().width
-    if isinstance(elem_type, HDLAggregate):
+    if isinstance(elem_type, HDLComposite):
         return elem_type.width
     if hasattr(elem_type, "width"):
         return elem_type.width
     raise TypeError(
-        f"elem_type must be HDLType or HDLAggregate (class or instance); got {type(elem_type).__name__}"
+        f"elem_type must be HDLType or HDLComposite (class or instance); got {type(elem_type).__name__}"
     )
 
 
@@ -79,8 +79,8 @@ class MemoryPrimitive(Component):
     """Component-based memory primitive (replacement candidate for built-in ``Memory``).
 
     Parameters (all kwargs except ``elem_type`` and ``depth``):
-      ``elem_type``        HDLType (e.g. ``UInt(8)``) **or** HDLAggregate class / instance.
-                           For aggregates, the user packs / unpacks at the port boundary.
+      ``elem_type``        HDLType (e.g. ``UInt(8)``) **or** HDLComposite class / instance.
+                           For composites, the user packs / unpacks at the port boundary.
       ``depth``            Number of entries.
       ``init``             Optional per-cell init bit-pattern (length must equal ``depth``).
       ``registered_read``  ``True`` → adds ``read_enable`` port and registers ``read_data``.
@@ -89,7 +89,7 @@ class MemoryPrimitive(Component):
       ``reset_value``      Static integer used when ``reset_enable`` fires (default 0).
       ``name``             Optional instance name; used as the inlined Verilog mem array name.
 
-    Ports (all UInt at the boundary; aggregates pack via ``to_bits()`` / ``from_bits()``):
+    Ports (all UInt at the boundary; composites pack via ``to_bits()`` / ``from_bits()``):
       | name           | dir | when                |
       |----------------|-----|---------------------|
       | ``write_addr``   | in  | always              |

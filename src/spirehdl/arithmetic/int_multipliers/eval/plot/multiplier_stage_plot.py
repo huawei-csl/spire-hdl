@@ -573,7 +573,7 @@ def scaling_plot(
 ) -> None:
     """
     Scaling law plot: metric vs n_bits; one line per category (color_by).
-    - Aggregates duplicates per (category, n_bits) using 'agg'.
+    - Composites duplicates per (category, n_bits) using 'agg'.
     - If loglog=True: both axes in log scale (x base 2).
     - If fit_power=True: fit y ≈ a*n^p per line and annotate p in legend.
     """
@@ -611,7 +611,7 @@ def scaling_plot(
             continue
 
         color = cmap.get(str(cat_value))
-        # Plot aggregated points/lines
+        # Plot composited points/lines
         ax.plot(x, y, marker="o", markersize=4, linewidth=1.4, alpha=0.95, label=str(cat_value), color=color)
 
         # Optional power-law fit
@@ -703,7 +703,7 @@ def relative_scaling_plot(
     cmap = _category_colors(cat_series.values)
     agg_fn = _agg_from_name(agg)
 
-    # ---- baseline aggregate per n_bits ----
+    # ---- baseline composite per n_bits ----
     base_df = (
         design_df[cat_series == base_key]
         .dropna(subset=[y_metric, "n_bits"])

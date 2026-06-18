@@ -1,7 +1,7 @@
 from typing import Optional
 
 import numpy as np
-from spirehdl.aggregate.aggregate_array import Array  # your renamed class
+from spirehdl.composite.array import Array  # your renamed class
 from spirehdl.spirehdl import Expr, ExprLike, Const, UInt, Wire, fit_width, reset_shared_cache
 from spirehdl.spirehdl_module import Module
 from spirehdl.spirehdl_simulator import Simulator

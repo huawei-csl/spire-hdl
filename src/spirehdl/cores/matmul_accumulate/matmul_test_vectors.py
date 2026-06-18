@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.composite.array import Array
 from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode, fp_encode
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel
 from spirehdl.cores.matmul_accumulate.matmul_accumulate_core import MatmulAccumulateCore

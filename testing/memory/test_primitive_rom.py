@@ -15,7 +15,7 @@ from spirehdl.spirehdl import Bool, Signal, UInt, Wire, reset_shared_cache
 from spirehdl.spirehdl_module import Component
 from spirehdl.spirehdl_simulator import Simulator
 from spirehdl.primitives import RomPrimitive
-from spirehdl.aggregate.aggregate_record import AggregateRecord
+from spirehdl.composite.record import CompositeRecord
 
 
 def _build_rom(init, *, depth, width, registered=False, name="rom"):
@@ -134,16 +134,16 @@ def test_rom_contents_are_immutable():
 
 
 # ---------------------------------------------------------------------------
-# Aggregate element type
+# Composite element type
 # ---------------------------------------------------------------------------
 
-class _Bus(AggregateRecord):
+class _Bus(CompositeRecord):
     data  = Wire(UInt(8))
     valid = Wire(UInt(1))
 
 
-def test_aggregate_rom():
-    """Element type is an HDLAggregate; init entries are packed bit-patterns."""
+def test_composite_rom():
+    """Element type is an HDLComposite; init entries are packed bit-patterns."""
     bus_w = _Bus().width  # 9 bits
     # pack (data, valid) → bits: valid is the MSB given field order (data low, valid high).
     init = [0x42 | (1 << 8), 0x7E | (0 << 8), 0x00, 0xFF | (1 << 8)]

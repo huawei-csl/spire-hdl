@@ -3,16 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from spirehdl.aggregate.aggregate_array import Array
-from spirehdl.aggregate.aggregate_floating_point import FloatingPoint, FloatingPointType
-from spirehdl.aggregate.aggregate_record_dynamic import AggregateRecordDynamic
+from spirehdl.composite.array import Array
+from spirehdl.composite.floating_point import FloatingPoint, FloatingPointType
+from spirehdl.composite.record_dynamic import CompositeRecordDynamic
 from spirehdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
 from spirehdl.spirehdl import Signal, UInt
 from spirehdl.spirehdl_module import Component
 
 
 @dataclass
-class FpMMAcIO(AggregateRecordDynamic):
+class FpMMAcIO(CompositeRecordDynamic):
     A: Array  # dim_m x dim_k, FloatingPoint elements
     B: Array  # dim_k x dim_n, FloatingPoint elements
     C: Array  # dim_m x dim_n, FloatingPoint elements

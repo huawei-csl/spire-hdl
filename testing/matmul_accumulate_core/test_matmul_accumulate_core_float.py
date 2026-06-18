@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from spirehdl.aggregate.aggregate_floating_point import FloatingPointType
+from spirehdl.composite.floating_point import FloatingPointType
 from spirehdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
 from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,

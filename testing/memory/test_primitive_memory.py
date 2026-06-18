@@ -1,7 +1,7 @@
 """Tests for ``MemoryPrimitive`` — the Component-based memory built via ``custom_verilog``.
 
 Mirrors ``testing/test_memory.py`` (built-in ``Memory``) so the two can be compared
-side-by-side, plus an aggregate-element-type test that the built-in ``Memory``
+side-by-side, plus an composite-element-type test that the built-in ``Memory``
 cannot express.
 """
 
@@ -22,7 +22,7 @@ from spirehdl.spirehdl import (
 from spirehdl.spirehdl_module import Component, Module
 from spirehdl.spirehdl_simulator import Simulator
 from spirehdl.primitives import MemoryPrimitive
-from spirehdl.aggregate.aggregate_record import AggregateRecord
+from spirehdl.composite.record import CompositeRecord
 
 
 # ---------------------------------------------------------------------------
@@ -220,16 +220,16 @@ def test_sim_rom_init_and_registered_read():
 
 
 # ---------------------------------------------------------------------------
-# Aggregate element type — the capability the built-in Memory lacks.
+# Composite element type — the capability the built-in Memory lacks.
 # ---------------------------------------------------------------------------
 
-class _Bus(AggregateRecord):
+class _Bus(CompositeRecord):
     data  = Wire(UInt(8))
     valid = Wire(UInt(1))
 
 
-def test_sim_aggregate_elem_type():
-    """Element type is an HDLAggregate. User packs / unpacks at the port boundary."""
+def test_sim_composite_elem_type():
+    """Element type is an HDLComposite. User packs / unpacks at the port boundary."""
 
     bus_width = _Bus().width  # 9 bits
 
@@ -275,7 +275,7 @@ def test_sim_aggregate_elem_type():
     m = TopAgg().to_module(name="aggmem", with_clock=True, with_reset=True)
     # Sanity: width is what we expect.
     assert bus_width == 9
-    # Storage array width matches the packed aggregate.
+    # Storage array width matches the packed composite.
     v = m.to_verilog()
     assert "reg [8:0] busmem[0:3];" in v
 

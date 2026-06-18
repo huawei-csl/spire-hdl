@@ -1,5 +1,5 @@
 # -----------------------------
-# High-level aggregates (Bundle, Array, FixedPoint, ...)
+# High-level composites (Bundle, Array, FixedPoint, ...)
 # -----------------------------
 from __future__ import annotations
 from abc import ABC, abstractmethod
@@ -8,11 +8,11 @@ from typing import List, Type, TypeVar, Union
 from spirehdl.spirehdl import Concat, Expr, ExprLike, Signal, as_expr, fit_width
 
 
-T_Agg = TypeVar("T_Agg", bound="HDLAggregate")
-SelfAgg = TypeVar("SelfAgg", bound="HDLAggregate")
+T_Comp = TypeVar("T_Comp", bound="HDLComposite")
+SelfComp = TypeVar("SelfComp", bound="HDLComposite")
 
 
-class HDLAggregate(ABC):
+class HDLComposite(ABC):
     """
     Base class for structured HDL values (Bundle, Array, FixedPoint, ...).
 
@@ -24,7 +24,7 @@ class HDLAggregate(ABC):
     """
 
     @abstractmethod
-    def to_list_first_level(self) -> List[Union[Expr, "HDLAggregate"]]:
+    def to_list_first_level(self) -> List[Union[Expr, "HDLComposite"]]:
         """Return the ordered list of Expr leaves (Signals, Consts, etc.)."""
         ...
 
@@ -33,26 +33,26 @@ class HDLAggregate(ABC):
         for elem in self.to_list_first_level():
             if isinstance(elem, Expr):
                 flat_list.append(elem)
-            elif isinstance(elem, HDLAggregate):
+            elif isinstance(elem, HDLComposite):
                 flat_list.extend(elem.to_list())
             else:
                 raise TypeError(
                     f"Unsupported field type in {self.__class__.__name__}.to_list(): {elem} -> {type(elem)}"
                 )
         if not flat_list:
-            raise ValueError(f"AggregateRecord {self.__class__.__name__} has no fields")
+            raise ValueError(f"CompositeRecord {self.__class__.__name__} has no fields")
         return flat_list
 
-    # -------- Convenience API shared by all aggregates --------
+    # -------- Convenience API shared by all composites --------
 
     @property
     def width(self) -> int:
-        """Total bit-width of this aggregate."""
+        """Total bit-width of this composite."""
         return self.to_bits().typ.width
 
     def to_bits(self) -> Expr:
         """
-        Flatten this aggregate into a single Expr bitvector using the leaf list.
+        Flatten this composite into a single Expr bitvector using the leaf list.
         """
         parts = self.to_list()
         if not parts:
@@ -74,7 +74,7 @@ class HDLAggregate(ABC):
 
             if not isinstance(leaf, Signal):
                 raise TypeError(
-                    f"Aggregate assignment expects Signal leaves, got {type(leaf)} in {self.__class__.__name__}"
+                    f"Composite assignment expects Signal leaves, got {type(leaf)} in {self.__class__.__name__}"
                 )
             leaf <<= slice_bits
 
@@ -84,27 +84,27 @@ class HDLAggregate(ABC):
                 f"used {bit_pos} of {bits.typ.width} bits"
             )
 
-    def _coerce_rhs_to_bits(self, rhs: Union["HDLAggregate", ExprLike]) -> Expr:
+    def _coerce_rhs_to_bits(self, rhs: Union["HDLComposite", ExprLike]) -> Expr:
         """
         Convert rhs into a bitvector Expr with the same width as self.
-        - HDLAggregate → rhs.to_bits()
+        - HDLComposite → rhs.to_bits()
         - Expr/int/bool → as_expr + fit_width(...)
         """
         lhs_bits = self.to_bits()
         t = lhs_bits.typ
 
-        if isinstance(rhs, HDLAggregate):
+        if isinstance(rhs, HDLComposite):
             rhs_bits = rhs.to_bits()
         else:
             rhs_bits = fit_width(as_expr(rhs), t)
 
         if rhs_bits.typ.width != t.width:
-            raise ValueError(f"Width mismatch in aggregate assignment: " f"lhs width={t.width}, rhs width={rhs_bits.typ.width}")
+            raise ValueError(f"Width mismatch in composite assignment: " f"lhs width={t.width}, rhs width={rhs_bits.typ.width}")
         return rhs_bits
 
-    def assign(self, rhs: Union["HDLAggregate", ExprLike]) -> None:
+    def assign(self, rhs: Union["HDLComposite", ExprLike]) -> None:
         """
-        Structural assignment: drive this aggregate from rhs.
+        Structural assignment: drive this composite from rhs.
 
         Example:
             my_bundle.assign(other_bundle)
@@ -113,13 +113,13 @@ class HDLAggregate(ABC):
         bits = self._coerce_rhs_to_bits(rhs)
         self._assign_from_bits(bits)
 
-    def __imatmul__(self: SelfAgg, rhs: "HDLAggregate") -> SelfAgg:
+    def __imatmul__(self: SelfComp, rhs: "HDLComposite") -> SelfComp:
         """
         Element-wise assignment across Signal leaves:
           lhs @= rhs
         """
-        if not isinstance(rhs, HDLAggregate):
-            raise TypeError(f"{self.__class__.__name__} @= expects an HDLAggregate, got {type(rhs)}")
+        if not isinstance(rhs, HDLComposite):
+            raise TypeError(f"{self.__class__.__name__} @= expects an HDLComposite, got {type(rhs)}")
 
         lhs_leaves = self.to_list()
         rhs_leaves = rhs.to_list()
@@ -132,14 +132,14 @@ class HDLAggregate(ABC):
         for lhs_leaf, rhs_leaf in zip(lhs_leaves, rhs_leaves):
             if not isinstance(lhs_leaf, Signal):
                 raise TypeError(
-                    f"Aggregate element-wise assignment expects Signal leaves, got {type(lhs_leaf)} "
+                    f"Composite element-wise assignment expects Signal leaves, got {type(lhs_leaf)} "
                     f"in {self.__class__.__name__}"
                 )
             lhs_leaf <<= rhs_leaf
 
         return self
 
-    def __ilshift__(self: SelfAgg, rhs: Union["HDLAggregate", ExprLike]) -> SelfAgg:
+    def __ilshift__(self: SelfComp, rhs: Union["HDLComposite", ExprLike]) -> SelfComp:
         """
         Sugar:  agg <<= rhs
 

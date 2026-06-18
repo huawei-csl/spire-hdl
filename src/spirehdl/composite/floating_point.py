@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import List, Optional, Union
 
-from spirehdl.aggregate.hdl_aggregate import HDLAggregate
+from spirehdl.composite.base import HDLComposite
 from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import FpMul
 from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import FpMulSN
 from spirehdl.arithmetic.floating_point.spire_hdl_float_add import FpAdd
@@ -36,8 +36,8 @@ class FloatingPointType:
         return UInt(self.width_total)
 
 
-class FloatingPoint(HDLAggregate):
-    """Flat floating-point aggregate backed by a single Expr/Signal."""
+class FloatingPoint(HDLComposite):
+    """Flat floating-point composite backed by a single Expr/Signal."""
 
     def __init__(
         self,
@@ -86,8 +86,8 @@ class FloatingPoint(HDLAggregate):
     def sign(self) -> Expr:
         return self._bits[self.width - 1]
 
-    # ---- HDLAggregate API ----
-    def to_list_first_level(self) -> List[Expr | HDLAggregate]:
+    # ---- HDLComposite API ----
+    def to_list_first_level(self) -> List[Expr | HDLComposite]:
         return [self._bits]
 
     @classmethod

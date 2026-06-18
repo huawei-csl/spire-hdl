@@ -208,7 +208,7 @@ def run_stage_multiplier_ext_demo(config_items: list[ConfigItem]) -> None:  # pr
                 for fut in tqdm(as_completed(futures), total=len(futures), desc="Running demos", unit="demo"):
                     try:
                         rec = fut.result()
-                        # Safely aggregate on the main process:
+                        # Safely composite on the main process:
                         if collector is not None and rec is not None:
                             collector.extend(rec)   # or whatever your API is
                             results.extend(rec)

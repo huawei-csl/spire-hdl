@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, List, Type
 
-from spirehdl.aggregate.aggregate_array import Array
+from spirehdl.composite.array import Array
 from spirehdl.arithmetic.encoding.sign_magnitude import (
     EncoderDecoderBase,
     SignMagnitudeToTwosComplementDecoder,
