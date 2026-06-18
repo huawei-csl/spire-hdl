@@ -5,11 +5,11 @@
 # - float16:  EW=5, FW=10   (total 16)
 # - bfloat16: EW=8, FW=7    (total 16)
 
-from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 from spirehdl.helpers import run_vectors_on_simulator
 from spirehdl.spirehdl import *
 from spirehdl.spirehdl_module import Component, Module
+from spirehdl.io_record import IORecord, Input, Output
 from spirehdl.spirehdl_simulator import Simulator
 from spirehdl.arithmetic.int_arithmetic_config import (
     MultiplierConfig,
@@ -163,22 +163,16 @@ class FpMul(Component):
         sign_field = mux(is_nan, 0, sY)  # sign is don't-care for NaN; choose 0
         return sign_field, exp_field, frac_field
 
-    @dataclass
-    class IO:
-        a: Signal  # input
-        b: Signal  # input
-        y: Signal  # output
-
     def __init__(self, EW: int, FW: int, mult_cfg: Optional[MultiplierConfig] = None) -> None:
         self.EW = EW
         self.FW = FW
         self.W = 1 + EW + FW
         self.mult_cfg = mult_cfg
 
-        self.io = self.IO(
-            a=Signal(typ=UInt(self.W), kind="input"),
-            b=Signal(typ=UInt(self.W), kind="input"),
-            y=Signal(typ=UInt(self.W), kind="output"),
+        self.io = IORecord(
+            a=Input(UInt(self.W)),
+            b=Input(UInt(self.W)),
+            y=Output(UInt(self.W)),
         )
 
         self.elaborate()

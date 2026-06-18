@@ -65,22 +65,19 @@ def _aig_to_aag_via_module(
     Returns (aag_lines, output_spec).
     """
     from spirehdl.spirehdl import Signal
-    from spirehdl.spirehdl_module import Component, Module
+    from spirehdl.spirehdl_module import Component, ImportedComponent, Module
     from spirehdl.spirehdl_aiger import AigerExporter
-    from dataclasses import make_dataclass
+    from spirehdl.io_record import IORecord
 
     io_sigs: Dict[str, Signal] = {}
     for name, typ in spec.items():
         io_sigs[name] = Signal(name=name, typ=typ, kind="input")
 
-    IO = make_dataclass("IO", [(name, Signal) for name in io_sigs])
-    io = IO(**io_sigs)
+    io = IORecord(**io_sigs)
 
-    class _Comp(Component):
+    class _Comp(ImportedComponent):
         def __init__(self, io_obj):
             self.io = io_obj
-        def elaborate(self):
-            pass
 
     comp = _Comp(io)
     comp.from_aig_file(aig_path, map_path, make_internal=False)

@@ -15,11 +15,11 @@ as the other primitives (``init`` entries are packed bit-patterns).
 
 from __future__ import annotations
 
-from dataclasses import make_dataclass
 from typing import Optional, Sequence
 
 from spirehdl.spirehdl import Bool, Register, Signal, UInt, mux
 from spirehdl.spirehdl_module import Component
+from spirehdl.io_record import IORecord, Input, Output
 from spirehdl.primitives.primitive_memory import _elem_bit_width, _next_uid
 from spirehdl.primitives._ram_template import ram_block
 
@@ -69,14 +69,13 @@ class RomPrimitive(Component):
         self._instance_name = name or f"rom_{self._uid}"
 
         kwargs = dict(
-            read_addr = Signal(typ=UInt(self._addr_w), kind="input"),
-            read_data = Signal(typ=UInt(self._elem_w), kind="output"),
+            read_addr = Input(UInt(self._addr_w)),
+            read_data = Output(UInt(self._elem_w)),
         )
         if registered_read:
-            kwargs["read_enable"] = Signal(typ=Bool(), kind="input", name="read_enable")
+            kwargs["read_enable"] = Input(Bool())
 
-        IO = make_dataclass("RomPrimitiveIO", [(k, Signal) for k in kwargs.keys()])
-        self.io = IO(**kwargs)
+        self.io = IORecord(**kwargs)
         self.elaborate()
 
     @property

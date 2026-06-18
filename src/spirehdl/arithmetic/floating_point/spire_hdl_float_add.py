@@ -6,10 +6,10 @@ of NaN/Inf/zero plus subnormal inputs by treating their implicit leading bit as
 0 and using an exponent of 1 for alignment.
 """
 
-from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from spirehdl.spirehdl_module import Component, Module
+from spirehdl.io_record import IORecord, Input, Output
 from spirehdl.spirehdl import Expr, Signal, UInt, cat, mux, Const
 from spirehdl.arithmetic.int_arithmetic_config import (
     AdderConfig,
@@ -17,11 +17,8 @@ from spirehdl.arithmetic.int_arithmetic_config import (
 )
 
 
-@dataclass
-class FpAddIO:
-    a: Signal
-    b: Signal
-    y: Signal
+class FpAddIO(IORecord):
+    """IO for FpAdd: a, b inputs and y output (named via IORecord field keys)."""
 
 class FpAdd(Component):
 
@@ -35,9 +32,9 @@ class FpAdd(Component):
         self.subnormals = subnormals
 
         self.io: FpAddIO = FpAddIO(
-            a=Signal(typ=UInt(self.W), kind="input"),
-            b=Signal(typ=UInt(self.W), kind="input"),
-            y=Signal(typ=UInt(self.W), kind="output"),
+            a=Input(UInt(self.W)),
+            b=Input(UInt(self.W)),
+            y=Output(UInt(self.W)),
         )
 
         self.elaborate()

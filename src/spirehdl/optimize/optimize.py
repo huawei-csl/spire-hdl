@@ -22,12 +22,12 @@ import subprocess
 import tempfile
 import time
 import warnings
-from dataclasses import make_dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from spirehdl.spirehdl import Expr, HDLType, Signal
-from spirehdl.spirehdl_module import Component, Module
+from spirehdl.spirehdl_module import Component, ImportedComponent, Module
+from spirehdl.io_record import IORecord, Input, Output
 
 
 # ---------------------------------------------------------------------------
@@ -395,7 +395,7 @@ def flowy_optimize(m: Module | Component,
         aig_file_path = best_design_item.get("aiger_filepath").path
         aiger_map_file_path = best_design_item.get("aiger_map_filepath").path
 
-    c_out: Component = m.to_component().from_aig_file(
+    c_out: Component = Component.from_netlist(m).from_aig_file(
         aig_file_path, aiger_map_file_path, make_internal=False
     )
     module: Module = c_out.to_module("optimized_design")
@@ -514,20 +514,16 @@ def _build_component(
         out_sig <<= expr
         output_sigs[out_name] = out_sig
 
-    # Build a concrete Component using make_dataclass so iter_values works
+    # Build a concrete Component whose IO is an IORecord (logic arrives via from_*; an import shell).
     all_sigs: Dict[str, Signal] = {}
     all_sigs.update(input_sigs)
     all_sigs.update(output_sigs)
 
-    IO: type = make_dataclass("IO", [(name, Signal) for name in all_sigs])
-    io: Any = IO(**all_sigs)
+    io: Any = IORecord(**all_sigs)
 
-    class _GeneratedComponent(Component):
+    class _GeneratedComponent(ImportedComponent):
         def __init__(self, io_obj: Any) -> None:
             self.io = io_obj
-
-        def elaborate(self) -> None:
-            pass
 
     comp: Component = _GeneratedComponent(io)
     output_names = [name for name, _ in outputs]
@@ -710,15 +706,11 @@ def _instantiate_from_cache(
         else:
             io_sigs[name] = Signal(name=name, typ=typ, kind="output")
 
-    IO: type = make_dataclass("IO", [(name, Signal) for name in io_sigs])
-    io: Any = IO(**io_sigs)
+    io: Any = IORecord(**io_sigs)
 
-    class _CachedComponent(Component):
+    class _CachedComponent(ImportedComponent):
         def __init__(self, io_obj: Any) -> None:
             self.io = io_obj
-
-        def elaborate(self) -> None:
-            pass
 
     comp: Component = _CachedComponent(io)
     comp.from_aag_lines(aag_lines, group=True, make_internal=True)

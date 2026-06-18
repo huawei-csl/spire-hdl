@@ -66,7 +66,7 @@ Beyond the automatic passes above, the unified arithmetic generator lets you han
 In its simplest form, SpireHDL only needs these core files. This is intentional — the HDL is kept to a minimal, self-contained core, and higher-level features are layered on top:
 
 - **[`spirehdl/spirehdl.py`](src/spirehdl/spirehdl.py)** – the expression DSL. It provides bit-precise types such as `Bool`, `UInt`, and `SInt`, shared-expression caching, and the overloaded arithmetic / bitwise operators that make the Python syntax feel like an HDL.
-- **[`spirehdl/spirehdl_module.py`](src/spirehdl/spirehdl_module.py)** – structural modeling helpers. The `Module` class constructs ports, wires, and registers, produces Verilog, and exposes analysis utilities. The `Component` base class lets you package reusable sub-designs and convert them to or from SpireHDL modules.
+- **[`spirehdl/spirehdl_module.py`](src/spirehdl/spirehdl_module.py)** – the `Component` base class: author reusable designs, declare IO with `IORecord`/`Input`/`Output`, emit Verilog/AIG, analyze, and import/inline sub-designs. The flat netlist IR it lowers to lives in **[`spirehdl/ir.py`](src/spirehdl/ir.py)** (`Netlist`, formerly `Module`).
 - **[`spirehdl/spirehdl_simulator.py`](src/spirehdl/spirehdl_simulator.py)** – a lightweight simulator that can drive inputs, tick clocks, inspect outputs or internal expressions, and capture probes for debugging—all without leaving Python.
 
 ### 📚 Further reading
@@ -105,52 +105,69 @@ The library relies on the packages listed in `requirements.txt`.
 
 ## Quick start
 
-### 1. Describe a module
+### 1. Describe a component
+
+A `Component` is the one abstraction you author. Declare its IO once with `IORecord`
+(field names become signal names; `Input`/`Output` set direction), put the logic in
+`elaborate()`, and emit Verilog directly — without ever touching the IR:
 
 ```python
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl import Bool, UInt, mux, cat
+from spirehdl import Component, IORecord, Input, Output, Bool, UInt
+from spirehdl.spirehdl import mux, cat
 
-m = Module("LogicDemo", with_clock=False, with_reset=False)
-a = m.input(UInt(8), "a")
-b = m.input(UInt(8), "b")
-sel = m.input(Bool(), "sel")
-sum_ = m.output(UInt(9), "sum")
-mask = m.output(UInt(4), "mask")
-out = m.output(UInt(8), "out")
+class LogicDemo(Component):
+    def __init__(self):
+        self.io = IORecord(
+            a=Input(UInt(8)),
+            b=Input(UInt(8)),
+            sel=Input(Bool()),
+            sum=Output(UInt(9)),
+            mask=Output(UInt(4)),
+            out=Output(UInt(8)),
+        )
+        self.elaborate()
 
-sum_ <<= a + b              # automatic width growth
-top_bits = cat(a[7], b[7])
-mask <<= top_bits           # concatenate slices
-a_and_b = a & b
-b_or_a = a | b
-out <<= mux(sel, a_and_b, b_or_a)
+    def elaborate(self):
+        io = self.io
+        io.sum <<= io.a + io.b                        # automatic width growth
+        io.mask <<= cat(io.a[7], io.b[7])             # concatenate slices
+        io.out <<= mux(io.sel, io.a & io.b, io.a | io.b)
 
-print(m.to_verilog())
+demo = LogicDemo()
+print(demo.to_verilog(name="LogicDemo"))
 ```
 
-The `Module` API checks that every output has a driver and every register has a next-state assignment before emitting Verilog (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
+`to_verilog()` checks that every output has a driver (and every register a next-state assignment) before emitting Verilog (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
 
-**Registers** are created either via the standalone `Register` class or `Module.reg(...)`. Both take a `typ` and an optional reset value via the `init=` keyword (note: the keyword is `init`, not `reset_value` / `reset`). Assign the next-state expression with `<<=`:
+**Registers** are created via the standalone `Register` class, which takes a `typ` and an optional reset value via the `init=` keyword (note: the keyword is `init`, not `reset_value` / `reset`). Assign the next-state expression with `<<=`, and pass `with_clock`/`with_reset` when emitting a sequential component:
 
 ```python
+from spirehdl import Component, IORecord, Output
 from spirehdl.spirehdl import Register, UInt
 
-m = Module("Counter", with_clock=True, with_reset=True)
-cnt = Register(UInt(8), init=0)       # or: cnt = m.reg(UInt(8), "cnt", init=0)
-cnt <<= cnt + 1                                   # next-state = cnt + 1
-q = m.output(UInt(8), "q")                        # bind to a name first
-q <<= cnt                                          # (q <<= ... ; not m.output(...) <<= ...)
+class Counter(Component):
+    def __init__(self):
+        self.io = IORecord(q=Output(UInt(8)))
+        self.elaborate()
+
+    def elaborate(self):
+        cnt = Register(UInt(8), init=0)   # reset value via init=
+        cnt <<= cnt + 1                   # next-state = cnt + 1
+        self.io.q <<= cnt
+
+print(Counter().to_verilog(name="Counter", with_clock=True, with_reset=True))
 ```
 
 ### 2. Simulate the design
 
 ```python
-from spirehdl.spirehdl_simulator import Simulator
+from spirehdl import Simulator
 
-sim = Simulator(m)
-sim.set("a", 0xC3).set("b", 0x99).set("sel", 1)
-sim.eval()                 # recompute combinational logic
+sim = Simulator(demo)       # Simulator lowers the Component internally
+sim.set("a", 0xC3)
+sim.set("b", 0x99)
+sim.set("sel", 1)
+sim.eval()                  # recompute combinational logic
 print(sim.peek_outputs())   # {'sum': 0x15c, 'mask': 0x3, 'out': 0x81}
 ```
 
@@ -160,31 +177,24 @@ The simulator keeps track of inputs, wires, outputs, and registers, supports `ev
 
 Modules can be exported to Verilog or AIG for downstream synthesis, equivalence checking, or integration into larger verification environments. Import helpers then let you bring optimized or third-party netlists back into SpireHDL for continued composition and simulation (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py) and [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
 
-## Modules and components in detail
+## Components and the netlist IR
 
-- `Component` subclasses package reusable structures. They can materialize new modules (`to_module`), import designs from Verilog or AIG formats (`from_verilog`, `from_aag_lines`), and retag ports as internals (`make_internal`). Components also expose `get_spec()` to drive `IOCollector` regrouping when you import flattened designs (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
-- `Module` is typically used at the top level or as an intermediate representation while you are still wiring a design. It offers constructors for inputs, outputs, wires, and registers; utilities for enumerating signals; Verilog emission with automatic width fitting; and a `module_analyze()` routine that reports combinational depth and node counts for timing exploration ([`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
+- `Component` is the one abstraction you author. It builds Verilog/AIG directly (`to_verilog`, `to_aag`), analyzes timing (`analyze`), imports designs from Verilog or AIG formats (`from_verilog`, `from_aag_lines`, `from_netlist`), and inlines reusable sub-designs into the surrounding logic (`inline`). Components expose `get_ios()` / `get_spec()` as the single IO normalization point — also what drives port regrouping when you import flattened designs (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
+- `Netlist` (in [`spirehdl.ir`](src/spirehdl/ir.py)) is the flat, lowered netlist that every backend consumes — SpireHDL's internal IR (formerly named `Module`, still importable under that alias). Power users can build one directly: it offers constructors for inputs, outputs, wires, and registers; signal enumeration; Verilog emission with automatic width fitting; and an `analyze()` routine reporting combinational depth and node counts. The quick start never needs it.
 - Minimal end-to-end component example: [`testing/examples/simple_component.py`](testing/examples/simple_component.py).
 
 Short component + hierarchy usage example:
 
 ```python
-from dataclasses import dataclass
-from spirehdl.spirehdl import UInt, Signal
-from spirehdl.spirehdl_module import Component
+from spirehdl import Component, IORecord, Input, Output, UInt
 
 class SimpleAdder(Component):
     def __init__(self, width=8):
         self.width = width
-        @dataclass
-        class IO:
-            a: Signal
-            b: Signal
-            sum: Signal
-        self.io = IO(
-            a=Signal(typ=UInt(width), kind="input"),
-            b=Signal(typ=UInt(width), kind="input"),
-            sum=Signal(typ=UInt(width + 1), kind="output"),
+        self.io = IORecord(
+            a=Input(UInt(width)),
+            b=Input(UInt(width)),
+            sum=Output(UInt(width + 1)),
         )
         self.elaborate()
 
@@ -193,31 +203,24 @@ class SimpleAdder(Component):
 
 class Sum3Hierarchical(Component):
     def __init__(self):
-        @dataclass
-        class IO:
-            a: Signal
-            b: Signal
-            c: Signal
-            sum: Signal
-        self.io = IO(
-            a=Signal(typ=UInt(8), kind="input"),
-            b=Signal(typ=UInt(8), kind="input"),
-            c=Signal(typ=UInt(8), kind="input"),
-            sum=Signal(typ=UInt(10), kind="output"),
+        self.io = IORecord(
+            a=Input(UInt(8)),
+            b=Input(UInt(8)),
+            c=Input(UInt(8)),
+            sum=Output(UInt(10)),
         )
         self.elaborate()
 
     def elaborate(self):
-        add_ab = SimpleAdder(width=8).make_internal()     # first sub-component
-        add_abc = SimpleAdder(width=9).make_internal()    # second sub-component
+        add_ab = SimpleAdder(width=8).inline()     # first sub-component (logic inlined)
+        add_abc = SimpleAdder(width=9).inline()    # second sub-component
         add_ab.io.a <<= self.io.a
         add_ab.io.b <<= self.io.b
         add_abc.io.a <<= add_ab.io.sum
         add_abc.io.b <<= self.io.c
         self.io.sum <<= add_abc.io.sum
 
-module = Sum3Hierarchical().to_module(name="Sum3Hier")
-print(module.to_verilog())  # one top module, built from internal components
+print(Sum3Hierarchical().to_verilog(name="Sum3Hier"))  # one flat module, built from inlined components
 ```
 
 ### Hierarchical design with components

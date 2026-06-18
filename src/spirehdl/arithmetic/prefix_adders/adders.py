@@ -8,6 +8,7 @@ import numpy as np
 from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType, CompressorTreeAccumulator, FinalStageAdderBase, StageMultiplierConfig, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO, TwoInputAritConfig
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, from_encoding, to_encoding
 from spirehdl.spirehdl_module import Component
+from spirehdl.io_record import Input, Output
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, Signal, SInt, UInt, mux, mux_if
 from spirehdl.spirehdl_module import Module
 
@@ -63,9 +64,9 @@ class StageBasedPrefixAdder(StageBasedAdderBase):
         # Additional initialization for prefix adder can go here
 
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=UInt(self.aw), kind="input"),
-            b=Signal(typ=UInt(self.bw), kind="input"),
-            y=Signal(typ=UInt(self.config.out_width), kind="output"),
+            a=Input(UInt(self.aw)),
+            b=Input(UInt(self.bw)),
+            y=Output(UInt(self.config.out_width)),
         )
 
         self.fsa = self.fsa_cls(self.config) if self.fsa_cls is not None else RippleCarryFinalAdder(self.config)
@@ -107,9 +108,9 @@ class StageBasedSubtractor(StageBasedAdderBase):
         super().__init__(a_w, b_w, signed_a=signed_a, signed_b=signed_b, optim_type=optim_type, fsa_cls=fsa_cls, full_output_bit=full_output_bit)
 
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=UInt(self.aw), kind="input"),
-            b=Signal(typ=UInt(self.bw), kind="input"),
-            y=Signal(typ=UInt(self.config.out_width), kind="output"),
+            a=Input(UInt(self.aw)),
+            b=Input(UInt(self.bw)),
+            y=Output(UInt(self.config.out_width)),
         )
 
         self.fsa = self.fsa_cls(self.config) if self.fsa_cls is not None else RippleCarryFinalAdder(self.config)

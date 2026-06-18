@@ -19,11 +19,11 @@ Plain read ports are readFirst. Multiple writers to one address resolve last-wri
 
 from __future__ import annotations
 
-from dataclasses import make_dataclass
 from typing import Optional, Sequence
 
 from spirehdl.spirehdl import Bool, Register, Signal, UInt, mux
 from spirehdl.spirehdl_module import Component
+from spirehdl.io_record import IORecord, Input, Output
 from spirehdl.primitives.primitive_memory import _elem_bit_width, _next_uid
 from spirehdl.primitives._ram_template import ram_block
 
@@ -73,27 +73,26 @@ class RamPrimitive(Component):
         AW, EW, MW = UInt(self._addr_w), UInt(self._elem_w), UInt(self._mask_chunks or 1)
         kw: dict = {}
         for k in range(self._nw):
-            kw[f"w{k}_addr"] = Signal(typ=AW, kind="input", name=f"w{k}_addr")
-            kw[f"w{k}_data"] = Signal(typ=EW, kind="input", name=f"w{k}_data")
-            kw[f"w{k}_en"]   = Signal(typ=Bool(), kind="input", name=f"w{k}_en")
+            kw[f"w{k}_addr"] = Input(AW)
+            kw[f"w{k}_data"] = Input(EW)
+            kw[f"w{k}_en"]   = Input(Bool())
             if self._mask_chunks:
-                kw[f"w{k}_mask"] = Signal(typ=MW, kind="input", name=f"w{k}_mask")
+                kw[f"w{k}_mask"] = Input(MW)
         for k in range(self._nr):
-            kw[f"r{k}_addr"] = Signal(typ=AW, kind="input", name=f"r{k}_addr")
-            kw[f"r{k}_data"] = Signal(typ=EW, kind="output", name=f"r{k}_data")
+            kw[f"r{k}_addr"] = Input(AW)
+            kw[f"r{k}_data"] = Output(EW)
             if self._registered_read:
-                kw[f"r{k}_en"] = Signal(typ=Bool(), kind="input", name=f"r{k}_en")
+                kw[f"r{k}_en"] = Input(Bool())
         for k in range(self._nrw):
-            kw[f"rw{k}_addr"]  = Signal(typ=AW, kind="input", name=f"rw{k}_addr")
-            kw[f"rw{k}_din"]   = Signal(typ=EW, kind="input", name=f"rw{k}_din")
-            kw[f"rw{k}_write"] = Signal(typ=Bool(), kind="input", name=f"rw{k}_write")
-            kw[f"rw{k}_en"]    = Signal(typ=Bool(), kind="input", name=f"rw{k}_en")
-            kw[f"rw{k}_dout"]  = Signal(typ=EW, kind="output", name=f"rw{k}_dout")
+            kw[f"rw{k}_addr"]  = Input(AW)
+            kw[f"rw{k}_din"]   = Input(EW)
+            kw[f"rw{k}_write"] = Input(Bool())
+            kw[f"rw{k}_en"]    = Input(Bool())
+            kw[f"rw{k}_dout"]  = Output(EW)
             if self._mask_chunks:
-                kw[f"rw{k}_mask"] = Signal(typ=MW, kind="input", name=f"rw{k}_mask")
+                kw[f"rw{k}_mask"] = Input(MW)
 
-        IO = make_dataclass("RamPrimitiveIO", [(n, Signal) for n in kw.keys()])
-        self.io = IO(**kw)
+        self.io = IORecord(**kw)
         self.elaborate()
 
     @property

@@ -1,4 +1,4 @@
-from spirehdl.spirehdl_module import Module
+from spirehdl.spirehdl_module import Component, Module
 from spirehdl.spirehdl import *
 from spirehdl.spirehdl import Signal, Expr, Const, Op1, Op2, Ternary, Concat, Slice, Resize
 from spirehdl.spirehdl_memory import _MemoryArray, _ArrayIndex
@@ -148,7 +148,10 @@ class Simulator(SimulatorBase):
     - eval(): recompute combinational paths (lazy anyway)
     """
 
-    def __init__(self, module: "Module"):
+    def __init__(self, module: "Module | Component"):
+        # Accept a Component directly and lower it to its netlist IR (a Netlist/Module is used as-is).
+        if isinstance(module, Component):
+            module = module.to_netlist()
         self.m = module
         # A _MemoryArray and its port wires are constructed standalone. Collecting signals pulls them in via the
         # design graph (the walker traverses `read_data._memory_parent` back-edges and the store's port-children).

@@ -1,13 +1,11 @@
-from dataclasses import dataclass
 
 from spirehdl.spirehdl import Bool, Concat, Const, Signal, UInt, mux_if
 from spirehdl.spirehdl_module import Component
+from spirehdl.io_record import IORecord, Input, Output
 
 
-@dataclass
-class EncodingIO:
-    i: Signal
-    o: Signal
+class EncodingIO(IORecord):
+    """IO for encoder/decoder components: input ``i`` and output ``o``."""
 
 class EncoderDecoderBase(Component):
     io: EncodingIO
@@ -20,8 +18,8 @@ class TwosComplementToSignMagnitudeEncoder(EncoderDecoderBase):
         self.clip_most_negative = clip_most_negative
 
         self.io: EncodingIO = EncodingIO(
-            i=Signal(typ=UInt(width), kind="input"),
-            o=Signal(typ=UInt(width), kind="output"),
+            i=Input(UInt(width)),
+            o=Output(UInt(width)),
         )
 
         self.elaborate()
@@ -52,8 +50,8 @@ class SignMagnitudeToTwosComplementDecoder(EncoderDecoderBase):
         self.clip_most_negative = clip_most_negative
 
         self.io: EncodingIO = EncodingIO(
-            i=Signal(typ=UInt(width), kind="input"),
-            o=Signal(typ=UInt(width), kind="output"),
+            i=Input(UInt(width)),
+            o=Output(UInt(width)),
         )
 
         self.elaborate()

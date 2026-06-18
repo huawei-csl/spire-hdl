@@ -12,7 +12,6 @@ both emit the same Yosys-inferable ``reg [W-1:0] mem[0:D-1]`` idiom.
 
 from __future__ import annotations
 
-from dataclasses import make_dataclass
 from typing import Optional, Sequence
 
 from spirehdl.spirehdl import (
@@ -24,6 +23,7 @@ from spirehdl.spirehdl import (
     mux,
 )
 from spirehdl.spirehdl_module import Component
+from spirehdl.io_record import IORecord, Input, Output
 from spirehdl.primitives.primitive_memory import _elem_bit_width, _next_uid
 
 
@@ -64,19 +64,18 @@ class MemoryPrimitive_via_reg(Component):
         self._instance_name = name or f"mem_{self._uid}"
 
         kwargs = dict(
-            write_addr   = Signal(typ=UInt(self._addr_w), kind="input"),
-            write_data   = Signal(typ=UInt(self._elem_w), kind="input"),
-            write_enable = Signal(typ=Bool(), kind="input"),
-            read_addr    = Signal(typ=UInt(self._addr_w), kind="input"),
-            read_data    = Signal(typ=UInt(self._elem_w), kind="output"),
+            write_addr   = Input(UInt(self._addr_w)),
+            write_data   = Input(UInt(self._elem_w)),
+            write_enable = Input(Bool()),
+            read_addr    = Input(UInt(self._addr_w)),
+            read_data    = Output(UInt(self._elem_w)),
         )
         if with_reset_arm:
-            kwargs["reset_enable"] = Signal(typ=Bool(), kind="input", name="reset_enable")
+            kwargs["reset_enable"] = Input(Bool())
         if registered_read:
-            kwargs["read_enable"] = Signal(typ=Bool(), kind="input", name="read_enable")
+            kwargs["read_enable"] = Input(Bool())
 
-        IO = make_dataclass("MemoryPrimitiveViaRegIO", [(k, Signal) for k in kwargs.keys()])
-        self.io = IO(**kwargs)
+        self.io = IORecord(**kwargs)
         self.elaborate()
 
     @property

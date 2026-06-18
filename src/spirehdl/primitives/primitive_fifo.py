@@ -25,7 +25,6 @@ The legacy O(depth) register-bank model is preserved as ``FIFOPrimitive_via_reg`
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional
 
 from spirehdl.spirehdl import (
@@ -37,6 +36,7 @@ from spirehdl.spirehdl import (
     mux,
 )
 from spirehdl.spirehdl_module import Component
+from spirehdl.io_record import IORecord, Input, Output
 from spirehdl.primitives.primitive_memory import _elem_bit_width, _next_uid
 
 
@@ -80,24 +80,14 @@ class FIFOPrimitive(Component):
         self._uid = _next_uid()
         self._instance_name = name or f"fifo_{self._uid}"
 
-        @dataclass
-        class IO:
-            push:  Signal
-            pop:   Signal
-            din:   Signal
-            dout:  Signal
-            full:  Signal
-            empty: Signal
-            count: Signal
-
-        self.io = IO(
-            push  = Signal(typ=Bool(), kind="input"),
-            pop   = Signal(typ=Bool(), kind="input"),
-            din   = Signal(typ=UInt(self._elem_w), kind="input"),
-            dout  = Signal(typ=UInt(self._elem_w), kind="output"),
-            full  = Signal(typ=Bool(), kind="output"),
-            empty = Signal(typ=Bool(), kind="output"),
-            count = Signal(typ=UInt(self._count_w), kind="output"),
+        self.io = IORecord(
+            push  = Input(Bool()),
+            pop   = Input(Bool()),
+            din   = Input(UInt(self._elem_w)),
+            dout  = Output(UInt(self._elem_w)),
+            full  = Output(Bool()),
+            empty = Output(Bool()),
+            count = Output(UInt(self._count_w)),
         )
         self.elaborate()
 

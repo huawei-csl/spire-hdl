@@ -20,7 +20,8 @@ from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encod
 from spirehdl.aig.aig_aigerverse import _get_aag_sym, file_to_lines
 from spirehdl.helpers import get_aig_stats, get_yosys_metrics, get_yosys_transistor_count, optimize_aag, run_vectors
 from spirehdl.spirehdl_aiger import AigerImporter
-from spirehdl.spirehdl_module import Component
+from spirehdl.spirehdl_module import Component, ImportedComponent
+from spirehdl.io_record import IORecord, Input, Output
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, Signal, SInt, UInt, mux, mux_if
 from spirehdl.spirehdl_module import Module
 
@@ -145,9 +146,9 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
                 return SInt
 
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=get_type(self.a_encoding)(self.aw), kind="input"),
-            b=Signal(typ=get_type(self.b_encoding)(self.bw), kind="input"),
-            y=Signal(typ=get_type(y_encoding)(self.aw + self.bw), kind="output"),
+            a=Input(get_type(self.a_encoding)(self.aw)),
+            b=Input(get_type(self.b_encoding)(self.bw)),
+            y=Output(get_type(y_encoding)(self.aw + self.bw)),
         )
 
         self.f_aag_lines = f_aag_lines if f_aag_lines is not None else get_aag_lines_default
@@ -160,19 +161,13 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
 
         this_class = self
 
-        class LoadedMultiplier(Component):
-
+        class LoadedMultiplier(ImportedComponent):
+            # Import shell: logic is reinjected via from_module(); no elaborate().
             def __init__(self):
-                @dataclass
-                class IO:
-                    operand_a_i: Signal
-                    operand_b_i: Signal
-                    result_o: Signal
-
-                self.io: IO = IO(
-                    operand_a_i=Signal(typ=UInt(this_class.aw), kind="input"),
-                    operand_b_i=Signal(typ=UInt(this_class.bw), kind="input"),
-                    result_o=Signal(typ=UInt(this_class.aw + this_class.bw), kind="output"),
+                self.io = IORecord(
+                    operand_a_i=Input(UInt(this_class.aw)),
+                    operand_b_i=Input(UInt(this_class.bw)),
+                    result_o=Output(UInt(this_class.aw + this_class.bw)),
                 )
 
         self.mult = LoadedMultiplier()
@@ -197,9 +192,9 @@ class OptimizedSignMagnitudeMultiplier(StageBasedMultiplierBase):
         assert self.fsa_cls is None, "FSA must be None"
 
         self.io : StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=UInt(self.aw), kind="input"),
-            b=Signal(typ=UInt(self.bw), kind="input"),
-            y=Signal(typ=UInt(self.aw + self.bw - 1), kind="output"),
+            a=Input(UInt(self.aw)),
+            b=Input(UInt(self.bw)),
+            y=Output(UInt(self.aw + self.bw - 1)),
         )
         
         self.f_aag_lines = f_aag_lines
@@ -263,9 +258,9 @@ class OptimizedMultiplierFrom4BitBlocks(StageBasedMultiplierBase):
         assert self.aw >= 4 and self.bw >= 4 and ((self.aw & (self.aw - 1)) == 0) and ((self.bw & (self.bw - 1)) == 0), "This composite multiplier expects input widths >=8 and powers of two"
 
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=UInt(self.aw), kind="input"),
-            b=Signal(typ=UInt(self.bw), kind="input"),
-            y=Signal(typ=UInt(self.aw + self.bw), kind="output"),
+            a=Input(UInt(self.aw)),
+            b=Input(UInt(self.bw)),
+            y=Output(UInt(self.aw + self.bw)),
         )
 
         # check class attribut f_aag_lines exists

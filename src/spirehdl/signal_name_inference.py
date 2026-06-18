@@ -7,11 +7,11 @@ import time
 from typing import Any, Optional
 
 _VALID_VERILOG_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
-# Matches `x = Signal(...)` / `x = Wire(...)` / `x = Register(...)` (including the keyword-argument form used in
-# dataclass IO bundles, e.g. `clk = Signal(...)`). One regex covers all three since Wire/Register now route their
-# name inference through Signal.
+# Matches `x = Signal(...)` / `x = Wire(...)` / `x = Register(...)` / `x = Input(...)` / `x = Output(...)`
+# (including the keyword-argument form used in IO bundles, e.g. `a = Input(...)`). One regex covers all of
+# them since Wire/Register/Input/Output are Signal subclasses that route their name inference through Signal.
 _ASSIGN_SIGNAL_RE = re.compile(
-    r"^\s*(?:self\.)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?::[^=]+)?=\s*(?:Signal|Wire|Register)\s*\("
+    r"^\s*(?:self\.)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?::[^=]+)?=\s*(?:Signal|Wire|Register|Input|Output)\s*\("
 )
 _ASSIGN_MEM_RE = re.compile(
     r"^\s*(?:self\.)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?::[^=]+)?=\s*_MemoryArray\s*\("

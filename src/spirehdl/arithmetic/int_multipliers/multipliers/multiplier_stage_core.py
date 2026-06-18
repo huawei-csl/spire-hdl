@@ -10,6 +10,7 @@ import numpy as np
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
 from spirehdl.spirehdl_module import Component
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, Signal, SInt, UInt, mux
+from spirehdl.io_record import IORecord, Input, Output
 
 
 # ---- common arithmetic helpers -------------------------------------------------
@@ -435,11 +436,8 @@ class RippleCarryFinalAdder(FinalStageAdderBase):
         return result_bits
 
 
-@dataclass
-class StageBasedMultiplierIO:
-    a: Signal
-    b: Signal
-    y: Signal
+class StageBasedMultiplierIO(IORecord):
+    """IO for stage-based multipliers: operands ``a``, ``b`` and product ``y``."""
 
 
 class StageBasedMultiplierBasic(Component):
@@ -472,9 +470,9 @@ class StageBasedMultiplierBasic(Component):
         base_type_y = SInt if (signed_a or signed_b) else UInt
 
         self.io : StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=base_typ_a(a_w), kind="input"),
-            b=Signal(typ=base_typ_b(b_w), kind="input"),
-            y=Signal(typ=base_type_y(self.config.out_width), kind="output"),
+            a=Input(base_typ_a(a_w)),
+            b=Input(base_typ_b(b_w)),
+            y=Output(base_type_y(self.config.out_width)),
         )
 
         self.ppg = ppg_cls(self.config)

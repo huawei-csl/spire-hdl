@@ -10,6 +10,7 @@ from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encod
 from spirehdl.helpers import get_aig_stats, get_yosys_metrics, get_yosys_transistor_count, optimize_aag, run_vectors
 
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, Signal, SInt, UInt, mux, mux_if
+from spirehdl.io_record import Input, Output
 
 
 from typing import List, Optional
@@ -76,9 +77,9 @@ class KaratsubaMultiplier(StageBasedMultiplierBase):
 
         # I/O interface
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=UInt(self.aw), kind="input"),
-            b=Signal(typ=UInt(self.bw), kind="input"),
-            y=Signal(typ=UInt(self.aw + self.bw), kind="output"),
+            a=Input(UInt(self.aw)),
+            b=Input(UInt(self.bw)),
+            y=Output(UInt(self.aw + self.bw)),
         )
 
         self.use_compressor = use_compressor

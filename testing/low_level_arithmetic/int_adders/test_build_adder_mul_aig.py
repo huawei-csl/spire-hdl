@@ -70,6 +70,9 @@ def _make_adder_component(adder_cfg: AdderConfig, signed: bool):
             # build_adder always returns UInt(N_BITS+1); assign directly
             self.io.y <<= y_val
 
+        def elaborate(self):  # logic built in __init__; no-op to satisfy the abstract method
+            pass
+
     return AdderWrap()
 
 
@@ -87,6 +90,9 @@ def _make_multiplier_component(mult_cfg: MultiplierConfig, signed: bool):
             )
             y_val = build_multiplier(self.io.a, self.io.b, mult_cfg)
             self.io.y <<= y_val
+
+        def elaborate(self):  # logic built in __init__; no-op to satisfy the abstract method
+            pass
 
     return MulWrap()
 
@@ -326,6 +332,9 @@ def test_signed_sub_sext_in_aig():
                 y=Signal(typ=UInt(N_BITS + 1), kind="output"),
             )
             self.io.y <<= self.io.a - self.io.b
+
+        def elaborate(self):  # logic built in __init__; no-op to satisfy the abstract method
+            pass
 
     comp = SubWrap()
     module = comp.to_module("SignedSubSext", with_clock=True, with_reset=True)

@@ -21,6 +21,7 @@ from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_fused import (
 )
 from spirehdl.spirehdl import SInt, Signal, UInt
 from spirehdl.spirehdl_module import Component
+from spirehdl.io_record import IORecord
 
 MAC_SUPPORTED_INPUT_ENCODINGS = {Encoding.unsigned, Encoding.twos_complement}
 
@@ -72,12 +73,8 @@ class MacBuildConfig:
     split_mode: Optional[SplitMode] = None
 
 
-@dataclass
-class MacIO:
-    a: Signal
-    b: Signal
-    c: Signal
-    y: Signal
+class MacIO(IORecord):
+    """IO for FusedMacComponent: a, b, c inputs and y output."""
 
 
 class FusedMacComponent(Component):

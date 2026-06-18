@@ -32,7 +32,6 @@ boundary. The port wires are always ``UInt(elem_w)``; callers do::
 
 from __future__ import annotations
 
-from dataclasses import make_dataclass
 from typing import Optional, Sequence
 
 from spirehdl.spirehdl import (
@@ -44,6 +43,7 @@ from spirehdl.spirehdl import (
     mux,
 )
 from spirehdl.spirehdl_module import Component
+from spirehdl.io_record import IORecord, Input, Output
 from spirehdl.aggregate.hdl_aggregate import HDLAggregate
 from spirehdl.primitives._ram_template import ram_block
 
@@ -142,21 +142,20 @@ class MemoryPrimitive(Component):
         self._instance_name = name or f"mem_{self._uid}"
 
         kwargs = dict(
-            write_addr   = Signal(typ=UInt(self._addr_w), kind="input"),
-            write_data   = Signal(typ=UInt(self._elem_w), kind="input"),
-            write_enable = Signal(typ=Bool(), kind="input"),
-            read_addr    = Signal(typ=UInt(self._addr_w), kind="input"),
-            read_data    = Signal(typ=UInt(self._elem_w), kind="output"),
+            write_addr   = Input(UInt(self._addr_w)),
+            write_data   = Input(UInt(self._elem_w)),
+            write_enable = Input(Bool()),
+            read_addr    = Input(UInt(self._addr_w)),
+            read_data    = Output(UInt(self._elem_w)),
         )
         if self._mask_chunks:
-            kwargs["write_mask"] = Signal(typ=UInt(self._mask_chunks), kind="input", name="write_mask")
+            kwargs["write_mask"] = Input(UInt(self._mask_chunks))
         if with_reset_arm:
-            kwargs["reset_enable"] = Signal(typ=Bool(), kind="input", name="reset_enable")
+            kwargs["reset_enable"] = Input(Bool())
         if registered_read:
-            kwargs["read_enable"] = Signal(typ=Bool(), kind="input", name="read_enable")
+            kwargs["read_enable"] = Input(Bool())
 
-        IO = make_dataclass("MemoryPrimitiveIO", [(k, Signal) for k in kwargs.keys()])
-        self.io = IO(**kwargs)
+        self.io = IORecord(**kwargs)
         self.elaborate()
 
     @property

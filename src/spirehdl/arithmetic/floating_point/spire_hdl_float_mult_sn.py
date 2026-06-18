@@ -13,10 +13,10 @@
 #
 # Requires: Module, UInt, Bool, mux, cat from your spire_hdl.
 
-from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from spirehdl.spirehdl_module import Component, Module
+from spirehdl.io_record import IORecord, Input, Output
 from spirehdl.spirehdl import *
 from spirehdl.spirehdl_simulator import Simulator
 from spirehdl.arithmetic.int_arithmetic_config import (
@@ -55,12 +55,6 @@ def _prefix_or_bits(x: Expr, width: int) -> List[Expr]:
 
 class FpMulSN(Component):
 
-    @dataclass
-    class IO:
-        a: Signal  # input
-        b: Signal  # input
-        y: Signal  # output
-
     def __init__(self, EW: int, FW: int, *, subnormals: bool = True, always_subnormal_rounding: bool = False, mult_cfg: Optional[MultiplierConfig] = None, adder_cfg: Optional[AdderConfig] = None) -> None:
         self.EW = EW
         self.FW = FW
@@ -73,10 +67,10 @@ class FpMulSN(Component):
         self.mult_cfg = mult_cfg
         self.adder_cfg = adder_cfg
 
-        self.io = self.IO(
-            a=Signal(typ=UInt(self.W), kind="input"),
-            b=Signal(typ=UInt(self.W), kind="input"),
-            y=Signal(typ=UInt(self.W), kind="output"),
+        self.io = IORecord(
+            a=Input(UInt(self.W)),
+            b=Input(UInt(self.W)),
+            y=Output(UInt(self.W)),
         )
 
         self.elaborate()

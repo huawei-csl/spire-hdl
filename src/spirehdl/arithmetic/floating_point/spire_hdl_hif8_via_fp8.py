@@ -11,7 +11,6 @@ small adders so the area footprint stays close to that of the FP8 core itself.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 
 from spirehdl.spirehdl import (
     Bool,
@@ -25,6 +24,7 @@ from spirehdl.spirehdl import (
     mux,
 )
 from spirehdl.spirehdl_module import Component, Module
+from spirehdl.io_record import IORecord, Input, Output
 
 from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import build_fp_mul
 from spirehdl.arithmetic.floating_point.spire_hdl_hif8 import _abs_sint, _const_sint, _const_uint, _decode_operand_expr, _round_bucket
@@ -319,16 +319,10 @@ class HiF8MulViaFP8(Component):
     """Component that multiplies two HiFloat8 numbers using an FP8 core."""
 
     def __init__(self):
-        @dataclass
-        class IO:
-            a: Signal
-            b: Signal
-            y: Signal
-
-        self.io = IO(
-            a=Signal(typ=UInt(8), kind="input"),
-            b=Signal(typ=UInt(8), kind="input"),
-            y=Signal(typ=UInt(8), kind="output"),
+        self.io = IORecord(
+            a=Input(UInt(8)),
+            b=Input(UInt(8)),
+            y=Output(UInt(8)),
         )
         self.elaborate()
 
@@ -336,7 +330,7 @@ class HiF8MulViaFP8(Component):
         enc_a = _hif8_to_fp8_expr(self.io.a)
         enc_b = _hif8_to_fp8_expr(self.io.b)
 
-        core = build_fp_mul("HiF8Fp8Core", EW=_FP_EW, FW=_FP_FW).to_component().make_internal()
+        core = Component.from_netlist(build_fp_mul("HiF8Fp8Core", EW=_FP_EW, FW=_FP_FW)).inline()
         core.io.a <<= enc_a
         core.io.b <<= enc_b
 

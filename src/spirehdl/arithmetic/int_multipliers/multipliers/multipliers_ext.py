@@ -8,6 +8,7 @@ from spirehdl.arithmetic.encoding.sign_magnitude import SignMagnitudeToTwosCompl
 from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType, CompressorTreeAccumulator, FinalStageAdderBase, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, SelectionMode, SplitMode, StageBasedMultiplierBasic, StageBasedMultiplierIO
 from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, from_encoding, to_encoding
 from spirehdl.spirehdl_module import Component
+from spirehdl.io_record import Input, Output
 from spirehdl.spirehdl import Bool, Concat, Const, Expr, Signal, SInt, UInt, mux, mux_if
 from spirehdl.spirehdl_module import Module
 
@@ -55,9 +56,9 @@ class StageBasedMultiplier(StageBasedMultiplierBase):
                 return SInt
 
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=get_type(self.a_encoding)(self.aw), kind="input"),
-            b=Signal(typ=get_type(self.b_encoding)(self.bw), kind="input"),
-            y=Signal(typ=get_type(y_encoding)(self.aw + self.bw), kind="output"),
+            a=Input(get_type(self.a_encoding)(self.aw)),
+            b=Input(get_type(self.b_encoding)(self.bw)),
+            y=Output(get_type(y_encoding)(self.aw + self.bw)),
         )
 
         self.elaborate()
@@ -94,9 +95,9 @@ class StageBasedSignMagnitudeMultiplier(StageBasedMultiplierBase):
         assert self.a_encoding == Encoding.sign_magnitude and self.b_encoding == Encoding.sign_magnitude, "Only sign-magnitude encoding is supported"
 
         self.io : StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=UInt(self.aw), kind="input"),
-            b=Signal(typ=UInt(self.bw), kind="input"),
-            y=Signal(typ=UInt(self.aw + self.bw - 1), kind="output"),
+            a=Input(UInt(self.aw)),
+            b=Input(UInt(self.bw)),
+            y=Output(UInt(self.aw + self.bw - 1)),
         )
 
         self.elaborate()
@@ -150,9 +151,9 @@ class StageBasedSignMagnitudeExtMultiplier(StageBasedMultiplierBase):
         assert self.a_encoding == Encoding.sign_magnitude_ext and self.b_encoding == Encoding.sign_magnitude_ext, "Only sign-magnitude extended encoding is supported"
 
         self.io : StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=UInt(self.aw), kind="input"),
-            b=Signal(typ=UInt(self.bw), kind="input"),
-            y=Signal(typ=UInt(self.aw + self.bw), kind="output"),
+            a=Input(UInt(self.aw)),
+            b=Input(UInt(self.bw)),
+            y=Output(UInt(self.aw + self.bw)),
         )
 
         self.elaborate()
@@ -242,9 +243,9 @@ class StageBasedSignMagnitudeExtUpMultiplier(StageBasedMultiplierBase):
         assert self.a_encoding == Encoding.sign_magnitude_ext and self.b_encoding == Encoding.sign_magnitude_ext, "Only sign-magnitude extended encoding is supported"
 
         self.io : StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=UInt(self.aw), kind="input"),
-            b=Signal(typ=UInt(self.bw), kind="input"),
-            y=Signal(typ=UInt(self.aw + self.bw - 1), kind="output"),
+            a=Input(UInt(self.aw)),
+            b=Input(UInt(self.bw)),
+            y=Output(UInt(self.aw + self.bw - 1)),
         )
 
         self.elaborate()
@@ -338,9 +339,9 @@ class StageBasedSignMagnitudeToTwosComplementMultiplier(StageBasedMultiplierBase
         assert self.a_encoding == Encoding.sign_magnitude and self.b_encoding == Encoding.sign_magnitude, "Only sign-magnitude encoding is supported"
 
         self.io : StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=UInt(self.aw), kind="input"),
-            b=Signal(typ=UInt(self.bw), kind="input"),
-            y=Signal(typ=UInt(self.aw + self.bw-1), kind="output"),
+            a=Input(UInt(self.aw)),
+            b=Input(UInt(self.bw)),
+            y=Output(UInt(self.aw + self.bw-1)),
         )
 
         self.elaborate()
@@ -380,9 +381,9 @@ class StageBasedSignMagnitudeExtToTwosComplementMultiplier(StageBasedMultiplierB
         assert self.b_encoding == Encoding.sign_magnitude or self.b_encoding == Encoding.sign_magnitude_ext, "Only sign-magnitude encoding is supported"
 
         self.io : StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=UInt(self.aw), kind="input"),
-            b=Signal(typ=UInt(self.bw), kind="input"),
-            y=Signal(typ=UInt(self.aw + self.bw), kind="output"),
+            a=Input(UInt(self.aw)),
+            b=Input(UInt(self.bw)),
+            y=Output(UInt(self.aw + self.bw)),
         )
 
         self.elaborate()
@@ -422,9 +423,9 @@ class StageBasedSignMagnitudeExtToTwosComplementUpperMultiplier(StageBasedMultip
         assert self.b_encoding == Encoding.sign_magnitude or self.b_encoding == Encoding.sign_magnitude_ext, "Only sign-magnitude encoding is supported"
 
         self.io : StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=UInt(self.aw), kind="input"),
-            b=Signal(typ=UInt(self.bw), kind="input"),
-            y=Signal(typ=UInt(self.aw + self.bw-1), kind="output"),
+            a=Input(UInt(self.aw)),
+            b=Input(UInt(self.bw)),
+            y=Output(UInt(self.aw + self.bw-1)),
         )
 
         self.elaborate()
@@ -475,9 +476,9 @@ class StarMultiplier(StageBasedMultiplierBase):
                 return SInt
 
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
-            a=Signal(typ=get_type(self.a_encoding)(self.aw), kind="input"),
-            b=Signal(typ=get_type(self.b_encoding)(self.bw), kind="input"),
-            y=Signal(typ=get_type(y_encoding)(self.aw + self.bw), kind="output"),
+            a=Input(get_type(self.a_encoding)(self.aw)),
+            b=Input(get_type(self.b_encoding)(self.bw)),
+            y=Output(get_type(y_encoding)(self.aw + self.bw)),
         )
 
         self.elaborate()
