@@ -1,13 +1,13 @@
 # Control Structures
 
-SpireHDL provides `if_`/`elif_`/`else_` and `switch_`/`case_`/`default` as Python
+Spire provides `if_`/`elif_`/`else_` and `switch_`/`case_`/`default` as Python
 context managers, so conditional hardware reads like ordinary control flow. Any
 signal assignment (`<<=`) inside one of these blocks is guarded by the active
 condition and lowered to a mux. When no branch matches, a combinational signal
 keeps its previous driver and a register holds its current value.
 
 > **Note:** this is a convenience layer. Everything here can also be written
-> directly with `mux` from SpireHDL's core ([`spire/expr.py`](../src/spire/expr.py));
+> directly with `mux` from Spire's core ([`spire/expr.py`](../src/spire/expr.py));
 > the context managers lower to exactly those muxes.
 
 The constructs live in [`spire/control_structures.py`](../src/spire/control_structures.py).

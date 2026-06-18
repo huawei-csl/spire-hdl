@@ -1,6 +1,6 @@
 # Custom Verilog Components
 
-SpireHDL's `Component` can opt to emit a hand-written Verilog block instead of
+Spire's `Component` can opt to emit a hand-written Verilog block instead of
 the auto-generated logic derived from its `elaborate()`. Two flavours are
 supported:
 
@@ -8,7 +8,7 @@ supported:
   model) and a `custom_verilog()` (hand-tuned Verilog). Simulation runs the
   Python; synthesis sees the user-supplied Verilog. Useful for hand-tuned
   RTL, external tool output, or anything where you want a different
-  Verilog shape than SpireHDL would generate.
+  Verilog shape than Spire would generate.
 - **Blackbox**: the Component has only `custom_verilog()` — `elaborate()`
   is empty. There's no Python sim model, so the simulator stubs the
   outputs to 0. Useful for vendor IP, opaque macros (PLLs, SerDes, RAM

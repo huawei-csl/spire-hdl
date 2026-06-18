@@ -1,4 +1,4 @@
-"""Post-construction structural CSE (Common Subexpression Elimination) for SpireHDL modules.
+"""Post-construction structural CSE (Common Subexpression Elimination) for Spire modules.
 
 There are two kinds of duplication to collapse in a module's driver DAG:
 
@@ -16,7 +16,7 @@ There are two kinds of duplication to collapse in a module's driver DAG:
 ``apply_structural_cse`` handles both: a single ``ExprVisitor``-based DAG walk gathers canonical
 keys and parent-reference counts in one pass, then creates one shared wire per equivalence class
 (class >= 2 members, or any member with fan-out >= 2) and rewrites every parent edge to point at
-the wire. The result is information-preserving across the SpireHDL → Verilog boundary: the emitted
+the wire. The result is information-preserving across the Spire → Verilog boundary: the emitted
 Verilog's AIG gate count exactly matches the spire-native AigerExporter count.
 """
 

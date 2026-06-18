@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="imgs/spire-hdl.png" alt="SpireHDL" width="250">
+  <img src="imgs/spire-hdl.png" alt="Spire HDL" width="250">
 </div>
 
 <br>
@@ -10,7 +10,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-BSD--3--Clause--Clear-blue.svg" alt="License: BSD-3-Clause-Clear"></a>
 </p>
 
-A modern Python HDL that compiles concise, composable hardware descriptions to synthesizable Verilog and AIG netlists — with synthesis optimization and a cycle-accurate simulator built in.
+**Spire** — a modern Python HDL that compiles concise, composable hardware descriptions to synthesizable Verilog and AIG netlists, with synthesis optimization and a cycle-accurate simulator built in.
 
 - **Built for humans and agents alike:** a small surface that stays readable as a design grows
 - **Reduces area and delay vs. a traditional Verilog flow:** optimization is part of the compile
@@ -21,7 +21,7 @@ A modern Python HDL that compiles concise, composable hardware descriptions to s
 
 ## Optimizations built in 💡
 
-SpireHDL supports **source-level optimization intent**: the designer marks *what* to optimize (e.g. a module, FSM, or arithmetic block) directly in the HDL source, and the compiler realizes it through synthesis-aware passes.
+Spire supports **source-level optimization intent**: the designer marks *what* to optimize (e.g. a module, FSM, or arithmetic block) directly in the HDL source, and the compiler realizes it through synthesis-aware passes.
 
 Because these passes run as part of the compile, the emitted Verilog is already small and fast before external tools see it. The numbers below are measured against a plain Yosys flow on the same RTL.
 
@@ -63,7 +63,7 @@ Beyond the automatic passes above, the unified arithmetic generator lets you han
 
 ### 🪶 Minimal core
 
-In its simplest form, SpireHDL only needs these core files. This is intentional — the HDL is kept to a minimal, self-contained core, and higher-level features are layered on top:
+In its simplest form, Spire only needs these core files. This is intentional — the HDL is kept to a minimal, self-contained core, and higher-level features are layered on top:
 
 - **[`spire/expr.py`](src/spire/expr.py)** – the expression DSL. It provides bit-precise types such as `Bool`, `UInt`, and `SInt`, shared-expression caching, and the overloaded arithmetic / bitwise operators that make the Python syntax feel like an HDL.
 - **[`spire/component.py`](src/spire/component.py)** – the `Component` base class: author reusable designs, declare IO with `IORecord`/`Input`/`Output`, emit Verilog/AIG, analyze, and import/inline sub-designs. The flat netlist IR it lowers to lives in **[`spire/ir.py`](src/spire/ir.py)** (`Netlist`, formerly `Module`).
@@ -83,7 +83,7 @@ Deeper guides for specific features:
 - **[Custom Verilog](docs/README_custom_verilog.md)** — emit a raw Verilog block from a `Component`, with or without a Python sim model (blackbox)
 - **[AIG / AAG export & import](docs/README_aig_export.md)** — lower a `Module` to an AIGER netlist and read AIG/AAG back in as a `Component`
 - **[Verilog testbench](docs/README_verilog_testbench.md)** — turn a `Simulator` run into a self-checking, synthesizable Verilog testbench
-- **[Examples](testing/examples/README.md)** — example designs exercising SpireHDL features
+- **[Examples](testing/examples/README.md)** — example designs exercising Spire features
 
 ## Installation
 
@@ -175,12 +175,12 @@ The simulator keeps track of inputs, wires, outputs, and registers, supports `ev
 
 ### 3. Integrate with external tooling
 
-Modules can be exported to Verilog or AIG for downstream synthesis, equivalence checking, or integration into larger verification environments. Import helpers then let you bring optimized or third-party netlists back into SpireHDL for continued composition and simulation (see [`component.py`](src/spire/component.py) and [`multipliers_ext_optimized.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
+Modules can be exported to Verilog or AIG for downstream synthesis, equivalence checking, or integration into larger verification environments. Import helpers then let you bring optimized or third-party netlists back into Spire for continued composition and simulation (see [`component.py`](src/spire/component.py) and [`multipliers_ext_optimized.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
 
 ## Components and the netlist IR
 
 - `Component` is the one abstraction you author. It builds Verilog/AIG directly (`to_verilog`, `to_aag`), analyzes timing (`analyze`), imports designs from Verilog or AIG formats (`from_verilog`, `from_aag_lines`, `from_netlist`), and inlines reusable sub-designs into the surrounding logic (`inline`). Components expose `get_ios()` / `get_spec()` as the single IO normalization point — also what drives port regrouping when you import flattened designs (see [`component.py`](src/spire/component.py)).
-- `Netlist` (in [`spire.ir`](src/spire/ir.py)) is the flat, lowered netlist that every backend consumes — SpireHDL's internal IR (formerly named `Module`, still importable under that alias). Power users can build one directly: it offers constructors for inputs, outputs, wires, and registers; signal enumeration; Verilog emission with automatic width fitting; and an `analyze()` routine reporting combinational depth and node counts. The quick start never needs it.
+- `Netlist` (in [`spire.ir`](src/spire/ir.py)) is the flat, lowered netlist that every backend consumes — Spire's internal IR (formerly named `Module`, still importable under that alias). Power users can build one directly: it offers constructors for inputs, outputs, wires, and registers; signal enumeration; Verilog emission with automatic width fitting; and an `analyze()` routine reporting combinational depth and node counts. The quick start never needs it.
 - Minimal end-to-end component example: [`testing/examples/simple_component.py`](testing/examples/simple_component.py).
 
 Short component + hierarchy usage example:
@@ -225,11 +225,11 @@ print(Sum3Hierarchical().to_verilog(name="Sum3Hier"))  # one flat module, built 
 
 ### Hierarchical design with components
 
-Components are how to build hierarchy: instantiate one inside another, adapt its IO, or drop in a pre-synthesized netlist — all without leaving Python. A common pattern wraps a reusable SpireHDL block (see [`multipliers_ext.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext.py)). It is also possible to import an external AIG module, turn it into a `Component`, and call `from_module(..., make_internal=True)` so it behaves like a native SpireHDL block inside a larger generator (see [`multipliers_ext_optimized.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)). The same approach covers Verilog imports, so SpireHDL code and external IP mix freely.
+Components are how to build hierarchy: instantiate one inside another, adapt its IO, or drop in a pre-synthesized netlist — all without leaving Python. A common pattern wraps a reusable Spire block (see [`multipliers_ext.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext.py)). It is also possible to import an external AIG module, turn it into a `Component`, and call `from_module(..., make_internal=True)` so it behaves like a native Spire block inside a larger generator (see [`multipliers_ext_optimized.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)). The same approach covers Verilog imports, so Spire code and external IP mix freely.
 
 ## Composite data types
 
-SpireHDL includes structured, bit-packable composites for cleaner interfaces and bulk assignments ([`composite/`](src/spire/composite)). See [`README_composite_types.md`](docs/README_composite_types.md) for the full reference with an example for every type:
+Spire includes structured, bit-packable composites for cleaner interfaces and bulk assignments ([`composite/`](src/spire/composite)). See [`README_composite_types.md`](docs/README_composite_types.md) for the full reference with an example for every type:
 
 - `HDLComposite` defines the base "pack to bits" API that powers all composites ([`base.py`](src/spire/composite/base.py)).
 - `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or composites ([`array.py`](src/spire/composite/array.py)).
@@ -282,7 +282,7 @@ write_vcd(trace_by_names=sim.get_trace_by_names(), filename="run.vcd", top_modul
 ```
 
 ## Slices
-SpireHDL signals follow Python's indexing convention. For example, `sig[4:7]` creates a new expression made up of bits 4, 5, and 6 (counted from the LSB) of the original expression `sig`.
+Spire signals follow Python's indexing convention. For example, `sig[4:7]` creates a new expression made up of bits 4, 5, and 6 (counted from the LSB) of the original expression `sig`.
 
 ## Examples
 

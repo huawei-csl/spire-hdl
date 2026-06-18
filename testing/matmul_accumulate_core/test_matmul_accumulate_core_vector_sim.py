@@ -169,7 +169,7 @@ def test_mmac_core_vector_simulation():
         vectors,
         decoder=None,
         print_on_pass=False,
-        test_name="SpireHDL Simulation, MMAC vectors",
+        test_name="Spire Simulation, MMAC vectors",
     )
 
     sim_tb = TestbenchGenSimulator(core.module)

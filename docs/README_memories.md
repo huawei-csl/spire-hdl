@@ -1,6 +1,6 @@
 # Memories
 
-Memory in SpireHDL is provided by **Component primitives** — you instantiate one,
+Memory in Spire is provided by **Component primitives** — you instantiate one,
 wire its `.io` ports, and embed it with `.make_internal()`. Four primitives cover
 the common cases:
 

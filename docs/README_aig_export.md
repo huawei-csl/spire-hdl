@@ -1,6 +1,6 @@
 # AIG / AAG Export & Import
 
-SpireHDL can lower a `Module` to an **And-Inverter Graph** in AIGER ASCII
+Spire can lower a `Module` to an **And-Inverter Graph** in AIGER ASCII
 (`.aag`) form, and read AIG/AAG netlists back in as a `Component`. That makes it
 easy to round-trip a design through external AIG tooling (ABC, mockturtle,
 Yosys) and continue composing or simulating the result in Python. This is the

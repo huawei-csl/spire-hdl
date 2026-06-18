@@ -19,7 +19,7 @@ from spire.expr import Const, Expr, Op2, SInt, Signal, UInt, fit_type
 
 @dataclass
 class MultiplierConfig:
-    """Configuration for choosing between SpireHDL operator and explicit multiplier."""
+    """Configuration for choosing between Spire operator and explicit multiplier."""
 
     use_operator: bool = False
     multiplier_opt: MultiplierOption | None = None
@@ -32,7 +32,7 @@ class MultiplierConfig:
 
 @dataclass
 class AdderConfig:
-    """Configuration for choosing between SpireHDL operator and explicit adder."""
+    """Configuration for choosing between Spire operator and explicit adder."""
 
     use_operator: bool = False
     encoding: Encoding = Encoding.unsigned
@@ -138,7 +138,7 @@ def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig | ArithmeticAutoConfig)
 
 @dataclass
 class SubtractorConfig:
-    """Configuration for choosing between SpireHDL operator and explicit subtractor."""
+    """Configuration for choosing between Spire operator and explicit subtractor."""
 
     use_operator: bool = False
     encoding: Encoding = Encoding.unsigned
@@ -484,7 +484,7 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
     # --- Pure-add chain detection (pre-pass, runs AFTER MAC detection) ---
     # Look for chains of `+` operators that do NOT contain `*` operands; replace with a carry-save reduction + final 2-input adder (mirrors yosys's `alumacc` pass).
     # Chains of length >=3 operands benefit; chains of length 2 fall through to per-node replacement.
-    # We walk left-associative `+` chains (the natural SpireHDL output of `a + b + c + d`). MAC chains have already been marked in `chain_member_candidates`; we skip those.
+    # We walk left-associative `+` chains (the natural Spire output of `a + b + c + d`). MAC chains have already been marked in `chain_member_candidates`; we skip those.
 
     def _is_plus_op(expr: Expr) -> Op2 | None:
         """Return the underlying Op2<+> if expr is one (possibly Signal-wrapped), and single-consumer at both wrapper and underlying node."""

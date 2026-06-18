@@ -1,4 +1,4 @@
-# Minimal RV32I (single-cycle) core in SpireHDL + tiny assembler + simple simulation.
+# Minimal RV32I (single-cycle) core in Spire + tiny assembler + simple simulation.
 
 from typing import List, Tuple, Dict
 
@@ -379,7 +379,7 @@ def assemble(lines: List[str], *, origin: int = 0) -> List[int]:
 # -----------------------
 def simulate_demo():
     if Simulator is None:
-        raise RuntimeError("Simulator class not found. Import your SpireHDL simulator and retry.")
+        raise RuntimeError("Simulator class not found. Import your Spire simulator and retry.")
     
     print("Running simple RV32I simulation demo...")
 
@@ -485,7 +485,7 @@ def run_all_demos():
     # --- Additional simulations ---
     def run_program(prog_asm, *, verbose=False, max_cycles=5000):
         if Simulator is None:
-            raise RuntimeError("Simulator class not found. Import your SpireHDL simulator and retry.")
+            raise RuntimeError("Simulator class not found. Import your Spire simulator and retry.")
 
         prog = assemble(prog_asm)
         m = build_rv32i_simple("RV32I_Simple")

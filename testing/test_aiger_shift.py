@@ -83,7 +83,7 @@ def test_variable_shift_handles_overshift(op: str, width: int):
     """``x << s`` / ``x >> s`` with a variable amount ``s`` that can exceed the
     output width must zero-fill, not alias to ``s`` modulo a power of two."""
     reset_shared_cache()
-    w_out = width                       # SpireHDL keeps source width for variable shifts
+    w_out = width                       # Spire keeps source width for variable shifts
     mask = (1 << w_out) - 1
 
     aig = _AIG()
@@ -224,7 +224,7 @@ def test_shift_module_end_to_end():
     style) shifts, export it through the AIGER back-end and check the bits.
 
     ``shl32`` reproduces the Verilog auto-widen idiom from the cpu_pipe ALU:
-    ``reg [31:0] shl; shl <= src << tgt;`` -- in SpireHDL the source must be
+    ``reg [31:0] shl; shl <= src << tgt;`` -- in Spire the source must be
     widened explicitly first via ``cat`` before the variable shift."""
     reset_shared_cache()
     m = Module("ShiftAlu", with_clock=False, with_reset=False)
@@ -252,7 +252,7 @@ def test_shift_module_end_to_end():
                 },
             ))
 
-    # 1) SpireHDL Simulator -- confirms the golden vectors match the DSL semantics.
+    # 1) Spire Simulator -- confirms the golden vectors match the DSL semantics.
     run_vectors(m, vecs)
     # 2) AIGER back-end -- the path the bug lived on.
     m_aig = refactor_module_to_aig(m, optimize=False)

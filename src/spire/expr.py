@@ -53,7 +53,7 @@ import contextlib as _contextlib
 def flat_emit(enabled: bool = True):
     """Emit Verilog without *opportunistic* common-subexpression sharing.
 
-    By default SpireHDL wraps every non-leaf subexpression into a named wire (``assign sig_k = ...``) 
+    By default Spire wraps every non-leaf subexpression into a named wire (``assign sig_k = ...``) 
     to shrink the emitted Verilog. This context manager disables this behavior, 
     The emitted Verilog is larger but can give better PPA results in some cases.
     """

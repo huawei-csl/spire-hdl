@@ -1,6 +1,6 @@
 # State Machines
 
-SpireHDL ships with a small `State` base class plus an `Encoding` enum
+Spire ships with a small `State` base class plus an `Encoding` enum
 (`BINARY` / `ONEHOT` / `GRAY`) for declaring finite-state-machine state sets
 in a way that's IDE-friendly, type-checked, and composes with the existing
 `switch_`/`case_`/`if_` control-flow context managers.

@@ -5,7 +5,7 @@ this, the signals/expressions produced by ``elaborate()`` are tagged so the Veri
 custom string is emitted alongside the rest of the module's auto-emitted Verilog. Python simulation still uses
 ``elaborate()``'s logic.
 
-This is the option B / per-signal tagging design (see ``/workspaces/rtl_scout/component_custom_verilog.md``).
+This is a per-signal tagging design.
 Blackboxes (Components with empty ``elaborate()``) are intentionally not supported by this implementation — the
 walker still needs a sim model to evaluate.
 """

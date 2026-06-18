@@ -40,7 +40,7 @@ def write_temp_verilog(m: Module, top_name: str | None = None) -> str:
 
 
 def spire_to_aig_via_exporter(m: Module):
-    """SpireHDL → AAGER lines (ASCII) and AIG object (via read_aag_into_aig)."""
+    """Spire → AAGER lines (ASCII) and AIG object (via read_aag_into_aig)."""
     aag_lines = AigerExporter(m).get_aag()
     # If you want an AIG object as well:
     fd, tmp = tempfile.mkstemp(suffix=".aag")
@@ -52,7 +52,7 @@ def spire_to_aig_via_exporter(m: Module):
 
 
 def roundtrip_aiger_back_to_spire(aag_lines: List[str], *, name="Imported") -> Module:
-    """Import AAG (with symbols kept) back into SpireHDL."""
+    """Import AAG (with symbols kept) back into Spire."""
     # Keep symbol table (last lines); leave as-is if already present
     aag_sym = _get_aag_sym(aag_lines)
     aag_for_import = aag_lines[:-2] + aag_sym if aag_sym else aag_lines
@@ -271,10 +271,10 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
     print("Sim (original) …")
     run_vectors(m, vectors, decoder=decoder)
 
-    # 2) SpireHDL → AIGER (exporter) → AIG
+    # 2) Spire → AIGER (exporter) → AIG
     aag_lines, aig_exp = spire_to_aig_via_exporter(m)
 
-    # optional agi to SpireHDL module
+    # optional agi to Spire module
     # m2 = roundtrip_aiger_back_to_spire(aag_lines, name=m.name+"_exp")
 
     # 3) Verilog → Pyosys → AIGER → AIG
@@ -295,7 +295,7 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
     # yosys AIG
     aig_yosys = read_aag_into_aig(aag_path)
 
-    assert equivalence_checking(aig_from_raw, aig_yosys), "Importer produced a non-equivalent SpireHDL netlist BEFORE regrouping"
+    assert equivalence_checking(aig_from_raw, aig_yosys), "Importer produced a non-equivalent Spire netlist BEFORE regrouping"
 
     # Normalize PI order (by name) before equivalence
     order_exp, po_order_exp = build_io_order(aag_lines)  # e.g., ["a[0]",...,"b[0]",...]
@@ -313,7 +313,7 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
         print("AIG equivalence (exporter vs pyosys) …")
         assert equivalence_checking(aig_exp, aig_pyo), "AIGs not equivalent!"
 
-    # 5) AAG (with symbols) → SpireHDL
+    # 5) AAG (with symbols) → Spire
     aag_back = file_to_lines(aag_path)
     m_back = AigerImporter(aag_back).get_spire_module(m.name + "_back")
     # m_back = roundtrip_aiger_back_to_spire(aag_back, name=m.name + "_back")

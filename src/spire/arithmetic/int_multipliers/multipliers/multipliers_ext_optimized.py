@@ -53,7 +53,7 @@ def _encoding_label(enc: Encoding) -> str:
 
 def _load_aag_lines_from_resources(aig_rel: Path, map_rel: Path, desc: str) -> List[str]:
     # Allow users to point to their own asset directory via env var
-    env_base = os.environ.get("SPIREHDL_OPT_MULT_DIR")
+    env_base = os.environ.get("SPIRE_OPT_MULT_DIR")
     if env_base:
         base_path = Path(env_base).expanduser()
         aig_path = base_path / aig_rel
@@ -67,7 +67,7 @@ def _load_aag_lines_from_resources(aig_rel: Path, map_rel: Path, desc: str) -> L
 
         if missing_env:
             raise FileNotFoundError(
-                f"Missing optimized multiplier asset(s) for {desc} using SPIREHDL_OPT_MULT_DIR={base_path}: "
+                f"Missing optimized multiplier asset(s) for {desc} using SPIRE_OPT_MULT_DIR={base_path}: "
                 f"{', '.join(missing_env)}. "
                 f"Expected layout: {base_path}/{aig_rel.parent}."
             )
@@ -89,7 +89,7 @@ def _load_aag_lines_from_resources(aig_rel: Path, map_rel: Path, desc: str) -> L
         raise FileNotFoundError(
             f"Missing optimized multiplier asset(s) for {desc}: {', '.join(missing)}. "
             "Add the files under 'src/spire/arithmetic/int_multipliers/data/optimized/' "
-            "or set SPIREHDL_OPT_MULT_DIR to point to your own asset directory."
+            "or set SPIRE_OPT_MULT_DIR to point to your own asset directory."
         )
 
     with resources.as_file(aig_resource) as aig_path, resources.as_file(map_resource) as map_path:

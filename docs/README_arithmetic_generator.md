@@ -210,7 +210,7 @@ The multipliers in `spire/arithmetic/int_multipliers/multipliers/multipliers_ext
 - `signed_3b|4b|8b`
 - `unsigned_4b_strong`
 
-To point at your own artifacts, set `SPIREHDL_OPT_MULT_DIR=/path/to/optimized` (keep the same subdirectory names/files) or pass a custom `f_aag_lines` callable when constructing the multiplier. Clear errors are raised if neither packaged nor user-supplied assets are found.
+To point at your own artifacts, set `SPIRE_OPT_MULT_DIR=/path/to/optimized` (keep the same subdirectory names/files) or pass a custom `f_aag_lines` callable when constructing the multiplier. Clear errors are raised if neither packaged nor user-supplied assets are found.
 
 ## References
 - HiFloat8 specification: [1] Luo, Y., Zhang, Z., Wu, R., Liu, H., Jin, Y., Zheng, K., ... & Huang, Z. (2024). Ascend hifloat8 format for deep learning. arXiv preprint arXiv:2409.16626.

@@ -1,4 +1,4 @@
-"""Control structures for SpireHDL using Python context managers.
+"""Control structures for Spire using Python context managers.
 
 This module introduces `if_`/`elif_`/`else_` and `switch_`/`case_` style
 constructs that wrap signal assignments with conditional muxes.  When a

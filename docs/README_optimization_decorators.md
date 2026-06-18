@@ -1,6 +1,6 @@
 # Circuit Optimization Decorators
 
-SpireHDL provides two decorators that optimize combinational logic at the AIG level.  Decorate any Python function that builds logic from `Expr` arguments, and the framework automatically converts it to a circuit, runs the chosen optimizer, caches the result, and splices the optimized logic back into your design.
+Spire provides two decorators that optimize combinational logic at the AIG level.  Decorate any Python function that builds logic from `Expr` arguments, and the framework automatically converts it to a circuit, runs the chosen optimizer, caches the result, and splices the optimized logic back into your design.
 
 ## `@abc_optimized` -- ABC via Yosys
 
@@ -108,7 +108,7 @@ multiplier and the adder).
 | `cache_dir` | `None` | Override cache directory |
 
 > A standalone `abc` binary enables the effective out-of-process optimization. Discovery
-> order: `$SPIREHDL_ABC`, then `abc` on `PATH`, then `yosys-abc`. If none is found,
+> order: `$SPIRE_ABC`, then `abc` on `PATH`, then `yosys-abc`. If none is found,
 > `abc_optimize` automatically falls back to an in-process pyosys path (legacy ordering,
 > largely inert on coarse cells) and emits a `RuntimeWarning` — so it still runs on a
 > pure-pyosys install, just without the gains.

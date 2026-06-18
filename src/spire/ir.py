@@ -1,4 +1,4 @@
-"""SpireHDL internal IR.
+"""Spire internal IR.
 
 `Netlist` (formerly `Module`) is the flat, lowered netlist that every backend consumes —
 the post-elaboration port+signal list. It is one layer below `Component` (the user-facing
@@ -457,7 +457,7 @@ class _PortGrouper:
 
     def group(self, m: Module, spec: Dict[str, Any]) -> Dict[str, Any]:
         """
-        spec: { base_name -> SpireHDL type (e.g., UInt(16)) }
+        spec: { base_name -> Spire type (e.g., UInt(16)) }
         Returns a mapping { base_name -> composited Signal } for convenience.
         """
         out: Dict[str, Any] = {}

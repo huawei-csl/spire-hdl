@@ -1,4 +1,4 @@
-# Export a SpireHDL Module to an AIG in AIGER ASCII (.aag) format
+# Export a Spire Module to an AIG in AIGER ASCII (.aag) format
 # Works with your 'spire_hdl.py' DSL (duck-typing; no hard import required).
 # Tested conceptually with arithmetic & logic-heavy designs (incl. float16/bfloat16 MACs).
 from __future__ import annotations
@@ -525,12 +525,12 @@ class _AigerExprEval(ExprVisitor[List[int]]):
         return self._exp._fit_bits(a, e.to_width, signed=getattr(e.a.typ, "signed", False))
 
 
-# ---- Exporter: SpireHDL Module -> AIGER -------------------------------------
+# ---- Exporter: Spire Module -> AIGER -------------------------------------
 
 
 class AigerExporter:
     """
-    Bit-blasts a SpireHDL Module into an AIG, then writes AIGER ASCII (.aag).
+    Bit-blasts a Spire Module into an AIG, then writes AIGER ASCII (.aag).
     - Supports: Const, Signal (input/output/wire/reg), Op1(~), Op2(& | ^ + - * << >> == != < <= > >=),
                 Ternary (mux), Concat, Slice, Resize.
     - Registers become AIGER latches; async reset is encoded in next-state as ITE(rst, init, next).
@@ -696,7 +696,7 @@ class AigerExporter:
 
         # comment
         lines.append("c")
-        lines.append(f"generated from SpireHDL module '{self.m.name}'")
+        lines.append(f"generated from Spire module '{self.m.name}'")
 
         return lines
 
@@ -713,12 +713,12 @@ def export_module_to_aiger(module: Any, file_path: str) -> None:
     AigerExporter(module).write_aag(file_path)
 
 
-# ---------- SpireHDL adapter ----------
-class SpireHDLAdapter(AbstractAdapter):
+# ---------- Spire adapter ----------
+class SpireAdapter(AbstractAdapter):
     """
-    Build a SpireHDL Module from an AAG.
+    Build a Spire Module from an AAG.
     - graph must be a Module instance.
-    - nodes are SpireHDL expressions (Signal or Expr); we don’t force wires for every AND.
+    - nodes are Spire expressions (Signal or Expr); we don’t force wires for every AND.
     """
     def __init__(self, module: Module):
         super().__init__(module)
@@ -744,11 +744,11 @@ class SpireHDLAdapter(AbstractAdapter):
         return y
 
     def buf(self, node):
-        # no-op in SpireHDL; expressions can be reused freely
+        # no-op in Spire; expressions can be reused freely
         return node
 
     def const(self, value: bool):
-        # Leverage SpireHDL’s int→Const coercion (1-bit)
+        # Leverage Spire’s int→Const coercion (1-bit)
         #return 1 if value else 0
         return Const(1, Bool()) if value else Const(0, Bool())
 
@@ -768,7 +768,7 @@ class AigerImporter:
             name = "ImportedModule"
         m = conv_aag_into_graph(self.lines,
                                 Module(name, with_clock=False, with_reset=False),
-                                adapter=SpireHDLAdapter)
+                                adapter=SpireAdapter)
         #   # sanitized names: for all m._ports replace [ and ] with _ in their names
         for p in m._ports:
             p.name = p.name.replace("[", "_").replace("]", "_")
@@ -791,7 +791,7 @@ def main_small_tst():
     exporter = AigerExporter(m)
     aag_lines = exporter.get_aag()
 
-    # import back to SpireHDL Module
+    # import back to Spire Module
     importer = AigerImporter(aag_lines)
     spire_module = importer.get_spire_module()
 

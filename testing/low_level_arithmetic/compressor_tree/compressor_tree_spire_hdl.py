@@ -17,7 +17,7 @@ from spire.simulator import Simulator
 
 def build_multiplier_from_compressor_graph(name: str, A, nodes):
     """
-    Build a SpireHDL combinational multiplier module from a compressor-tree graph.
+    Build a Spire combinational multiplier module from a compressor-tree graph.
 
     Inputs inferred from graph:
       - n is inferred from pp[i,j] signal names (square n×n multiplier).
@@ -73,14 +73,14 @@ def build_multiplier_from_compressor_graph(name: str, A, nodes):
     n = infer_n()
     W = 2 * n  # product width
 
-    # --- SpireHDL module skeleton ----------------------------------------------
+    # --- Spire module skeleton ----------------------------------------------
     m = Module(name, with_clock=False, with_reset=False)
     a = m.input(UInt(n), "a")
     b = m.input(UInt(n), "b")
     y = m.output(UInt(W), "y")
 
     # One-bit expression for each signal node
-    sig_expr = {}  # node_id -> SpireHDL bit expr
+    sig_expr = {}  # node_id -> Spire bit expr
 
     # Initialize partial products
     for nd in nodes:
@@ -218,7 +218,7 @@ def gen_compressor_tree_graph_and_spire_module(n_bits: int, policy: str = "dadda
 
     """
     Convenience function to build a compressor-tree multiplier graph and
-    corresponding SpireHDL module for an n-bit unsigned multiplier.
+    corresponding Spire module for an n-bit unsigned multiplier.
 
     Args:
       name: module name

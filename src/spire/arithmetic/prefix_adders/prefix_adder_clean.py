@@ -170,7 +170,7 @@ def build_prefix_adder_from_matrix(
     depth_optimize: bool = True,
 ) -> Module:
     """
-    Build an n-bit SpireHDL adder using a prefix tree specified by P.
+    Build an n-bit Spire adder using a prefix tree specified by P.
 
     P: set of (i,j) pairs (combine nodes).
        Leaves (i,i) are implicit and must NOT be listed.

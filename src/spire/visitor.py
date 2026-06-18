@@ -1,4 +1,4 @@
-"""Shared visitor infrastructure for walking SpireHDL expression trees.
+"""Shared visitor infrastructure for walking Spire expression trees.
 
 Provides:
 - ``expr_children(e)`` — return the immediate sub-expressions of any Expr node.

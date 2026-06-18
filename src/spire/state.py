@@ -1,4 +1,4 @@
-"""FSM state enumeration for SpireHDL.
+"""FSM state enumeration for Spire.
 
 Declare states as class variables using :func:`state` so the IDE can
 see (and autocomplete) every state name::

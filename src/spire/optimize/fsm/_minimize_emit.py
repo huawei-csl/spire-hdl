@@ -327,7 +327,7 @@ def minimize_and_rewrite(
                             outputs=outputs, dont_cares=dont_cares)
     sreg = mf.state_reg
 
-    # Build the bit-level DAG with opportunistic CSE OFF: SpireHDL otherwise
+    # Build the bit-level DAG with opportunistic CSE OFF: Spire otherwise
     # wraps every subexpression into a named wire, and that wire-split structure
     # maps ~5-7% worse on PPA than flat inline logic (abc is structurally
     # sensitive — see flat_emit / INVESTIGATION_fsm_encoding_api.md). The whole

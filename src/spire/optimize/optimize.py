@@ -853,12 +853,12 @@ _DEFAULT_PREP_SCRIPT: str = "techmap; opt; abc -fast; opt"
 def _find_abc_binary() -> str:
     """Locate a standalone ``abc`` binary for out-of-process optimization.
 
-    Order: ``$SPIREHDL_ABC`` → ``abc`` on PATH → yosys's bundled ``yosys-abc``.
+    Order: ``$SPIRE_ABC`` → ``abc`` on PATH → yosys's bundled ``yosys-abc``.
     Yosys ships abc, so the last fallback is the same engine the in-process
     ``abc`` pass would call. Raises ``RuntimeError`` with a clear diagnostic if
     none is found.
     """
-    env = os.environ.get("SPIREHDL_ABC")
+    env = os.environ.get("SPIRE_ABC")
     if env and os.path.exists(env):
         return env
     for cand in ("abc", "yosys-abc"):
@@ -867,7 +867,7 @@ def _find_abc_binary() -> str:
             return found
     raise RuntimeError(
         "No abc binary found. Install abc, ensure 'abc' or 'yosys-abc' is on PATH, "
-        "or set $SPIREHDL_ABC to the abc binary path."
+        "or set $SPIRE_ABC to the abc binary path."
     )
 
 
@@ -948,9 +948,7 @@ def abc_optimize(
         Wall-clock seconds allowed for the abc subprocess. Defaults to ``None``
         (wait indefinitely) so long-running scripts (e.g. ``&deepsyn``/
         ``&transtoch`` with large budgets or many restarts) are not cut off; pass
-        a float to impose a limit. Note the abc subprocess is typically nested
-        inside an outer compile timeout (rtl_scout's ``SPIREHDL_TIMEOUT``), which
-        still acts as a hard ceiling.
+        a float to impose a limit.
 
     Returns
     -------
@@ -974,7 +972,7 @@ def abc_optimize(
         warnings.warn(
             "No standalone abc binary found; using the in-process pyosys fallback "
             "for abc_optimize. The abc_script runs pre-techmap (legacy ordering) and "
-            "is largely inert on coarse cells — install abc or set $SPIREHDL_ABC for "
+            "is largely inert on coarse cells — install abc or set $SPIRE_ABC for "
             "the effective out-of-process optimization.",
             RuntimeWarning, stacklevel=2,
         )
@@ -1069,8 +1067,7 @@ def abc_optimized(
         yosys passes that lower coarse cells before abc. Rarely changed.
     timeout : float or None
         Wall-clock seconds for the abc subprocess. Defaults to ``None`` (wait
-        indefinitely); pass a float to impose a limit. The outer compile timeout
-        (rtl_scout's ``SPIREHDL_TIMEOUT``) still bounds a hung run.
+        indefinitely); pass a float to impose a limit.
 
     Cache read/write controls (``cache_read`` / ``cache_write``):
       Each takes one of ``"none"``, ``"mem"``, ``"disk"``, ``"both"``.
