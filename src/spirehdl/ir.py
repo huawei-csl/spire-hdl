@@ -11,8 +11,7 @@ from __future__ import annotations
 import hashlib
 import random
 import time
-from dataclasses import fields, is_dataclass, make_dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
 
 from spirehdl import VERILOG_BANNER
 from spirehdl.spirehdl import (Bool, Const, Expr, ExprLike, HDLType, Signal, UInt, cat,
@@ -20,6 +19,7 @@ from spirehdl.spirehdl import (Bool, Const, Expr, ExprLike, HDLType, Signal, UIn
 from spirehdl.spirehdl_memory import _MemoryArray
 from spirehdl.spirehdl_analyzer import _Analyzer, GraphReport
 from spirehdl.spirehdl_visitor import ExprVisitor, expr_children
+from spirehdl.aggregate.aggregate_record_dynamic import iter_values  # used by _SignalCollector
 
 
 class Netlist:
@@ -543,29 +543,8 @@ class _PortGrouper:
         return agg
 
 
-def _to_aggregate(obj: Any) -> "AggregateRecordDynamic":
-    """Convert any IO container into an AggregateRecordDynamic for uniform handling."""
-    from spirehdl.aggregate.aggregate_record_dynamic import AggregateRecordDynamic
-    if isinstance(obj, AggregateRecordDynamic):  # already an aggregate — no conversion needed
-        return obj
-    if is_dataclass(obj):  # @dataclass IO (most common Component IO pattern)
-        pairs = [(f.name, getattr(obj, f.name)) for f in fields(obj)]
-    elif hasattr(obj, "_fields"):  # namedtuple IO
-        pairs = [(n, getattr(obj, n)) for n in obj._fields]
-    elif isinstance(obj, dict):  # plain dict IO
-        pairs = list(obj.items())
-    else:  # plain object with __dict__
-        pairs = list(vars(obj).items())
-    DynIO = make_dataclass("DynIO", [(n, type(v)) for n, v in pairs], bases=(AggregateRecordDynamic,))
-    return DynIO(**{n: v for n, v in pairs})
-
-
-def iter_values(obj: Any) -> Iterable[Any]:
-    """Extract leaf Signals from an IO container (dataclass, namedtuple, dict,
-    or HDLAggregate).  Converts to AggregateRecordDynamic first, then flattens
-    via to_list() — all aggregate fields (Array, Record, ...) and plain lists
-    are recursively resolved into individual Signals."""
-    return _to_aggregate(obj).to_list()
+# `_to_aggregate` / `iter_values` now live in spirehdl.aggregate.aggregate_record_dynamic
+# (the layer that owns AggregateRecordDynamic); `iter_values` is imported at the top of this module.
 
 
 # ---------------------------------------------------------------------------

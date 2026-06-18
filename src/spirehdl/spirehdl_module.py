@@ -27,8 +27,10 @@ from spirehdl.spirehdl_visitor import ExprVisitor, expr_children
 
 # The flat netlist IR now lives in spirehdl.ir (one-way layering: component -> ir -> spirehdl).
 # Re-exported here so existing `from spirehdl.spirehdl_module import Module/IOCollector/...` keep working.
-from spirehdl.ir import (Netlist, Module, _PortGrouper, IOCollector, _SignalCollector,
-                         get_rand_hash, _to_aggregate, iter_values)
+from spirehdl.ir import (Netlist, Module, _PortGrouper, IOCollector, _SignalCollector, get_rand_hash)
+# IO normalization helpers live in the aggregate layer; re-exported here for back-compat
+# (e.g. `from spirehdl.spirehdl_module import iter_values`).
+from spirehdl.aggregate.aggregate_record_dynamic import _to_aggregate, iter_values
 
 
 class Component(abc.ABC):
