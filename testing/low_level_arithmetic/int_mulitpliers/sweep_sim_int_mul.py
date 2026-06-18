@@ -4,14 +4,14 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from aigverse import aig_cut_rewriting, aig_resubstitution, sop_refactoring
 import numpy as np
-from testing.low_level_arithmetic.compressor_tree.compressor_tree_spire_hdl import gen_compressor_tree_graph_and_spirehdl_module
-from spirehdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag
-from spirehdl.helpers import optimize_aag, run_vectors
-from spirehdl.spirehdl import Bool, Concat, Const, Expr, Op2, SInt, UInt
-from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
-from spirehdl.spirehdl_module import IOCollector
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from testing.low_level_arithmetic.compressor_tree.compressor_tree_spire_hdl import gen_compressor_tree_graph_and_spire_module
+from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag
+from spire.helpers import optimize_aag, run_vectors
+from spire.expr import Bool, Concat, Const, Expr, Op2, SInt, UInt
+from spire.aiger import AigerExporter, AigerImporter
+from spire.component import IOCollector
+from spire.component import Module
+from spire.simulator import Simulator
 
 
 import matplotlib.pyplot as plt
@@ -98,7 +98,7 @@ def build_multiplier_from_compressor_tree(W: int = 8, tb_sigma: Optional[float] 
     #y = m.output(UInt(2*W), "y")
     #y <<= a * b
     #
-    g, m = gen_compressor_tree_graph_and_spirehdl_module(W, policy="wallace", name=f"Mul{W}_ct")
+    g, m = gen_compressor_tree_graph_and_spire_module(W, policy="wallace", name=f"Mul{W}_ct")
     vecs = []
     for _ in range(n_vecs):
         if tb_sigma is not None:
@@ -228,7 +228,7 @@ def main():
             aag = AigerExporter(m).get_aag()
             if optim:
                 aag = optimize_aag(aag, n_iter_optimizations=10)
-            m_aig = AigerImporter(aag).get_spirehdl_module()
+            m_aig = AigerImporter(aag).get_spire_module()
             IOCollector().group(m_aig, spec) # regroup I/Os to match original port widths
 
             # AIG network test sim

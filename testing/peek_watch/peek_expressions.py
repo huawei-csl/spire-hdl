@@ -1,6 +1,6 @@
-from spirehdl.spirehdl import  Bool
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator  # your simulator with peek/watch
+from spire.expr import  Bool
+from spire.component import Module
+from spire.simulator import Simulator  # your simulator with peek/watch
 
 
 m = Module("ExprDemo", with_clock=False, with_reset=False)

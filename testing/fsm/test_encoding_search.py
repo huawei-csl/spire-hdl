@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.optimize.fsm._emit import restore_encoding
-from spirehdl.optimize.fsm._encoding_search import search_encoding
-from spirehdl.spirehdl_state import Encoding, State, state
+from spire.optimize.fsm._emit import restore_encoding
+from spire.optimize.fsm._encoding_search import search_encoding
+from spire.state import Encoding, State, state
 
 
 class S4(State, encoding=Encoding.BINARY):

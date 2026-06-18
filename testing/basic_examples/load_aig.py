@@ -1,10 +1,10 @@
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, MultiplierTestVectorsExhaustive, to_encoding
-from spirehdl.helpers import get_aig_stats, get_yosys_metrics, run_vectors
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_module import ImportedComponent
-from spirehdl.io_record import IORecord, Input, Output
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import MultiplierTestVectors
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding, MultiplierTestVectorsExhaustive, to_encoding
+from spire.helpers import get_aig_stats, get_yosys_metrics, run_vectors
+from spire.expr import UInt
+from spire.component import ImportedComponent
+from spire.io_record import IORecord, Input, Output
+from spire.simulator import Simulator
+from spire.arithmetic.int_multipliers.eval.testvector_generation import MultiplierTestVectors
 
 # Import shell: logic is loaded from an AIG via from_aig_file() (no elaborate()).
 class Multiplier(ImportedComponent):

@@ -1,21 +1,21 @@
 import pytest
 from dataclasses import dataclass
 
-from spirehdl.arithmetic.int_arithmetic_config import (
+from spire.arithmetic.int_arithmetic_config import (
     ArithmeticAutoConfig,
     replace_arithmetic_ops,
 )
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import (
+from spire.arithmetic.int_multipliers.eval.testvector_generation import (
     AdderTestVectors,
     Encoding,
     MultiplierTestVectors,
     SubtractorTestVectors,
 )
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import StageBasedMultiplierIO
-from spirehdl.helpers import get_yosys_metrics, get_aig_stats, run_vectors_on_simulator
-from spirehdl.spirehdl import Signal, UInt, reset_shared_cache
-from spirehdl.spirehdl_module import Component
-from spirehdl.spirehdl_simulator import Simulator
+from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import StageBasedMultiplierIO
+from spire.helpers import get_yosys_metrics, get_aig_stats, run_vectors_on_simulator
+from spire.expr import Signal, UInt, reset_shared_cache
+from spire.component import Component
+from spire.simulator import Simulator
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +208,7 @@ def test_all_objectives(objective):
 
 def test_objectives_produce_different_configs():
     """Area vs delay objectives should potentially pick different configs for multipliers."""
-    from spirehdl.arithmetic.eval.auto_config import lookup_best_config
+    from spire.arithmetic.eval.auto_config import lookup_best_config
 
     # 16-bit unsigned multiplier has clear area vs delay tradeoff
     area_cfg, _ = lookup_best_config("*", 16, 16, signed=False, objective="area")
@@ -236,7 +236,7 @@ def test_swap_selection():
     tie-break may return configs whose light count differs by a couple transistors; that's an
     acceptable tie, not an asymmetry in what gets optimized.
     """
-    from spirehdl.arithmetic.eval.auto_config import lookup_best_config
+    from spire.arithmetic.eval.auto_config import lookup_best_config
 
     from itertools import product
 
@@ -467,7 +467,7 @@ def test_mac_depth_improvement():
     reset_shared_cache()
 
     comp_sep = _Mac(N_BITS)
-    from spirehdl.arithmetic.int_arithmetic_config import ArithmeticConfig
+    from spire.arithmetic.int_arithmetic_config import ArithmeticConfig
     replace_arithmetic_ops(comp_sep, ArithmeticConfig())
     mod_sep = comp_sep.to_module("MAC_sep")
     aig_sep = get_aig_stats(mod_sep)
@@ -564,7 +564,7 @@ def test_inner_product_depth():
     reset_shared_cache()
 
     comp_fixed = _Dot4(N_BITS)
-    from spirehdl.arithmetic.int_arithmetic_config import ArithmeticConfig
+    from spire.arithmetic.int_arithmetic_config import ArithmeticConfig
     replace_arithmetic_ops(comp_fixed, ArithmeticConfig())
     mod_fixed = comp_fixed.to_module("Dot4_fixed")
     aig_fixed = get_aig_stats(mod_fixed)

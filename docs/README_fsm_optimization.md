@@ -1,7 +1,7 @@
 # FSM and State-Encoding Optimization
 
 Two opt-in context managers in
-[`spirehdl/optimize/fsm/`](../src/spirehdl/optimize/fsm/) add automatic optimization passes on
+[`spire/optimize/fsm/`](../src/spire/optimize/fsm/) add automatic optimization passes on
 top of the basic [`State`](README_state_machines.md) API:
 
 | Wrapper | What it does | When to use it |
@@ -15,7 +15,7 @@ to the un-optimised version — same `switch_/case_/if_/else_` you already
 write. The optimization happens on `__exit__`.
 
 ```python
-from spirehdl.spirehdl_state import (
+from spire.state import (
     State, Encoding, state,
     optimized_fsm, optimized_encoding,
 )
@@ -52,10 +52,10 @@ every state in a class shares its representative's value, and runs
 ### Worked example — case10 (the canonical 7→4 case)
 
 ```python
-from spirehdl.spirehdl_state import State, Encoding, state, optimized_fsm
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_control_structures import case_, default, if_, else_, switch_
+from spire.state import State, Encoding, state, optimized_fsm
+from spire.expr import Bool, UInt
+from spire.component import Module
+from spire.control_structures import case_, default, if_, else_, switch_
 
 class S(State, encoding=Encoding.BINARY):
     S0 = state(); S1 = state(); S2 = state()
@@ -118,9 +118,9 @@ not just FSMs.
 ### Worked example — ALU opcode dispatch (no FSM)
 
 ```python
-from spirehdl.spirehdl_state import State, Encoding, state, optimized_encoding
-from spirehdl.spirehdl import UInt, mux
-from spirehdl.spirehdl_module import Module
+from spire.state import State, Encoding, state, optimized_encoding
+from spire.expr import UInt, mux
+from spire.component import Module
 
 class Op(State, encoding=Encoding.BINARY):
     ADD = state(); SUB = state(); AND = state(); OR = state(); XOR = state()
@@ -151,7 +151,7 @@ the design (and any subsequent uses).
 | `predefined` | `n ≤ 2` | Tries `BINARY` and `GRAY` codes (no widening). 2 cost-fn calls. |
 | `exhaustive` | `n! ≤ 5040` (so `n ≤ 7`) | All permutations of `n` codes from the universe of `2^width`. Up to ~5 040 cost-fn calls. |
 | `swap` | otherwise | Pair-swap accept-on-improvement, 4 random restarts × 200 iters. ~800 cost-fn calls. |
-| `adjacency` | never (opt-in) | Two-stage: synthesis-free weighted-Hamming screen over every encoding (sub-second), then verify the real `cost_fn` on the top `top_k` (default 64). Falls back to `swap` when nested `optimized_fsm` groups are present or the transition table can't be extracted. Faster than `exhaustive`; more robust than `swap` for noisy objectives (e.g. `adp_proxy`). See [`_adjacency.py`](../src/spirehdl/optimize/fsm/_adjacency.py). |
+| `adjacency` | never (opt-in) | Two-stage: synthesis-free weighted-Hamming screen over every encoding (sub-second), then verify the real `cost_fn` on the top `top_k` (default 64). Falls back to `swap` when nested `optimized_fsm` groups are present or the transition table can't be extracted. Faster than `exhaustive`; more robust than `swap` for noisy objectives (e.g. `adp_proxy`). See [`_adjacency.py`](../src/spire/optimize/fsm/_adjacency.py). |
 | `anneal` | never (future work) | Reserved name; currently raises `NotImplementedError`. |
 | `auto` | — | Meta-strategy: picks one of the above based on `n` (see column above). Default. |
 
@@ -328,7 +328,7 @@ DSL hooks.**
 is an `ExprVisitor[int]` that concretely evaluates an Expr DAG under a
 signal-binding environment. Used by `extract_transition_table` to
 enumerate `(state_value × input_combination) → (next_state, output)`
-tuples. The operator table mirrors `spirehdl_simplify._fold_op2` so
+tuples. The operator table mirrors `simplify._fold_op2` so
 symbolic eval never diverges from the peephole simplifier.
 
 **In-place State Const mutation.** `apply_encoding(state_cls, assignment)`

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.optimize.fsm._emit import restore_encoding
-from spirehdl.spirehdl import Bool, UInt, mux
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_state import (
+from spire.optimize.fsm._emit import restore_encoding
+from spire.expr import Bool, UInt, mux
+from spire.component import Module
+from spire.state import (
     Encoding, State, optimized_encoding, state,
 )
 

@@ -6,13 +6,13 @@ the common cases:
 
 | Primitive | Use for | Shape |
 |---|---|---|
-| [`MemoryPrimitive`](../src/spirehdl/primitives/primitive_memory.py) | scratchpad RAM, single-port BRAM | 1 write + 1 read (async or registered), optional reset arm / write mask |
-| [`RamPrimitive`](../src/spirehdl/primitives/primitive_ram.py) | multi-port RAM, true dual-port, register files | N write + N read + N read/write (`rw`) ports over one array |
-| [`RomPrimitive`](../src/spirehdl/primitives/primitive_rom.py) | read-only memory, lookup tables | init-backed, 1 read (async or registered), no write port |
-| [`FIFOPrimitive`](../src/spirehdl/primitives/primitive_fifo.py) | ready-made synchronous FIFO | push / pop / full / empty / count |
+| [`MemoryPrimitive`](../src/spire/primitives/primitive_memory.py) | scratchpad RAM, single-port BRAM | 1 write + 1 read (async or registered), optional reset arm / write mask |
+| [`RamPrimitive`](../src/spire/primitives/primitive_ram.py) | multi-port RAM, true dual-port, register files | N write + N read + N read/write (`rw`) ports over one array |
+| [`RomPrimitive`](../src/spire/primitives/primitive_rom.py) | read-only memory, lookup tables | init-backed, 1 read (async or registered), no write port |
+| [`FIFOPrimitive`](../src/spire/primitives/primitive_fifo.py) | ready-made synchronous FIFO | push / pop / full / empty / count |
 
 ```python
-from spirehdl.primitives import MemoryPrimitive, RamPrimitive, RomPrimitive, FIFOPrimitive
+from spire.primitives import MemoryPrimitive, RamPrimitive, RomPrimitive, FIFOPrimitive
 ```
 
 Each primitive emits its storage as a Verilog `reg [W-1:0] name[0:D-1];` array plus a
@@ -30,9 +30,9 @@ directly). The two paths describe the same hardware; the tests pin the equivalen
 
 ```python
 from dataclasses import dataclass
-from spirehdl.spirehdl import Bool, Signal, UInt
-from spirehdl.spirehdl_module import Component
-from spirehdl.primitives import MemoryPrimitive
+from spire.expr import Bool, Signal, UInt
+from spire.component import Component
+from spire.primitives import MemoryPrimitive
 
 
 class Scratch(Component):
@@ -226,7 +226,7 @@ data_out <<= out.data; valid_out <<= out.valid
 Primitives simulate with the built-in `Simulator` — no setup beyond building the module.
 
 ```python
-from spirehdl.spirehdl_simulator import Simulator
+from spire.simulator import Simulator
 
 sim = Simulator(module)
 sim.deassert_reset()
@@ -259,7 +259,7 @@ sim.get_mem("ram")     # → [0, 0, 0, 0xAB, …]   (length == depth, unsigned b
   drop-in variants whose sim model is an explicit register file (O(depth), no array
   inference) — kept for comparison/debug. The synthesised Verilog is the same array idiom.
 - **Internal store is not user-facing.** `_MemoryArray` (in
-  `src/spirehdl/spirehdl_memory.py`) is the sim backend the primitives wire up via a port
+  `src/spire/memory.py`) is the sim backend the primitives wire up via a port
   factory; designs always go through the primitives' `.io`.
 
 ## See also

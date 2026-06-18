@@ -1,6 +1,6 @@
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_simulator import Simulator
+from spire.component import Module
+from spire.expr import UInt
+from spire.simulator import Simulator
 
 
 m = Module("MulAddComb", with_clock=False, with_reset=False)

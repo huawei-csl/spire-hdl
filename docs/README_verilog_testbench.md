@@ -1,7 +1,7 @@
 # Verilog Testbench
 
 `TestbenchGenSimulator` is a drop-in replacement for the Python
-[`Simulator`](../src/spirehdl/spirehdl_simulator.py): it has the same
+[`Simulator`](../src/spire/simulator.py): it has the same
 `set` / `get` / `eval` / `step` / `reset` API, but while it runs it records the
 stimuli (and the outputs the Python simulator observed) and can then emit a
 **synthesizable Verilog testbench** that replays the exact same interactions
@@ -15,9 +15,9 @@ Verilator or Icarus.
 trace is complete, write out the DUT and a testbench that replays it:
 
 ```python
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_verilog_testbench import TestbenchGenSimulator
+from spire.component import Module
+from spire.expr import UInt
+from spire.verilog_testbench import TestbenchGenSimulator
 
 m = Module("Add8", with_clock=False, with_reset=False)
 a = m.input(UInt(8), "a")
@@ -52,7 +52,7 @@ mismatch — and those same expected-value checks are baked into the emitted
 testbench:
 
 ```python
-from spirehdl.helpers import run_vectors_on_simulator
+from spire.helpers import run_vectors_on_simulator
 
 vectors = [
     ("1+2",    {"a": 1,   "b": 2},  {"y": 3}),
@@ -68,7 +68,7 @@ tb.to_testbench_file("add8_tb.v", tb_module_name="Add8_tb")
 It works on any `SimulatorBase`: pass a plain `Simulator(m)` to just verify, or a
 `TestbenchGenSimulator(m)` (as here) to verify *and* record. The arithmetic
 generator relies on exactly this interchangeability — see `_apply_actions` in
-[`arithmetic_generator.py`](../src/spirehdl/arithmetic/arithmetic_generator.py),
+[`arithmetic_generator.py`](../src/spire/arithmetic/arithmetic_generator.py),
 which picks `TestbenchGenSimulator(module)` when a testbench output is requested
 and `Simulator(module)` otherwise, then runs the same `run_vectors_on_simulator`
 loop through whichever it chose.
@@ -103,7 +103,7 @@ by expected outputs — under a header naming the columns:
 Emit the data file and a testbench that reads it, either in two steps:
 
 ```python
-from spirehdl.spirehdl_verilog_testbench import write_vector_data_file
+from spire.verilog_testbench import write_vector_data_file
 
 write_vector_data_file(vectors, "add8_vectors.dat")
 tb.to_data_driver_testbench_file("add8_tb.v", data_file="add8_vectors.dat", with_clk=False)

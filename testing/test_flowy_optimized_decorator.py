@@ -16,11 +16,11 @@ import argparse
 import random
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-from spirehdl.spirehdl import Expr, HDLType, Signal, UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_aiger import AigerExporter
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.optimize import (
+from spire.expr import Expr, HDLType, Signal, UInt
+from spire.component import Module
+from spire.aiger import AigerExporter
+from spire.simulator import Simulator
+from spire.optimize import (
     flowy_optimized,
     clear_optimization_cache,
     _build_component,
@@ -255,7 +255,7 @@ def test_cache_keying() -> None:
     """Different arg types / non-logic values should produce different cache entries."""
     clear_optimization_cache()
 
-    from spirehdl.optimize import _cache
+    from spire.optimize import _cache
 
     # We don't have flowy, so we test the key computation logic directly
     # by verifying the wrapper detects different arg configurations.
@@ -293,7 +293,7 @@ def test_signed_types() -> None:
 def test_integration_flowy() -> None:
     """Full end-to-end: decorate a function, call with Expr args,
     compare original vs optimized circuit stats."""
-    from spirehdl.helpers import get_aig_stats
+    from spire.helpers import get_aig_stats
 
     print("\n--- Integration test: @flowy_optimized end-to-end ---")
 

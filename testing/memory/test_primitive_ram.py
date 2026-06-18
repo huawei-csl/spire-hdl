@@ -11,10 +11,10 @@ from dataclasses import make_dataclass
 
 import pytest
 
-from spirehdl.spirehdl import Bool, Signal, UInt, reset_shared_cache
-from spirehdl.spirehdl_module import Component
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.primitives import RamPrimitive
+from spire.expr import Bool, Signal, UInt, reset_shared_cache
+from spire.component import Component
+from spire.simulator import Simulator
+from spire.primitives import RamPrimitive
 
 
 def _wire(dst, src):

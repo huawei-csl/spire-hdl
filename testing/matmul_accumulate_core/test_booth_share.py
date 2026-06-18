@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption, PPAOption, PPGOption
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel
-from spirehdl.cores.matmul_accumulate.matmul_accumulate_core import MMAcDims, MMAcWidths, max_y_width_unsigned
-from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_fused_precomputed_b_stages import MMAcFusedCfg, MatmulAccumulateComponent, MultiplierConfig
-from spirehdl.helpers import get_yosys_metrics
-from spirehdl.spirehdl_analyzer import _Analyzer
-from spirehdl.spirehdl_simulator import Simulator
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption, PPAOption, PPGOption
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel
+from spire.cores.matmul_accumulate.matmul_accumulate_core import MMAcDims, MMAcWidths, max_y_width_unsigned
+from spire.cores.matmul_accumulate.matmul_accumulate_core_fused_precomputed_b_stages import MMAcFusedCfg, MatmulAccumulateComponent, MultiplierConfig
+from spire.helpers import get_yosys_metrics
+from spire.analyzer import _Analyzer
+from spire.simulator import Simulator
 
 
 def run_test(dim: int, share: bool, seed: int = 42):

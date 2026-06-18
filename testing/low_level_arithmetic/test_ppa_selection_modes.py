@@ -18,11 +18,11 @@ from typing import DefaultDict, Dict, List, Tuple, Type
 
 import pytest
 
-from spirehdl.spirehdl import (
+from spire.expr import (
     Bool, Concat, Const, Expr, Op1, Op2, Resize, Signal, SInt, Slice,
     Ternary, UInt, reset_shared_cache,
 )
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
+from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
     CompressorTreeAccumulator,
     PartialProductAccumulatorBase,
     SelectionMode,
@@ -30,7 +30,7 @@ from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core impor
     StageBasedMultiplierIO,
     StageMultiplierConfig,
 )
-from spirehdl.arithmetic.int_multipliers.stages.ppa_stages import (
+from spire.arithmetic.int_multipliers.stages.ppa_stages import (
     CarrySaveAccumulator,
     DaddaTreeAccumulator,
     FourTwoCompressorAccumulator,
@@ -38,7 +38,7 @@ from spirehdl.arithmetic.int_multipliers.stages.ppa_stages import (
     FiveTwoCompressorAccumulator,
     WallaceTreeAccumulator,
 )
-from spirehdl.arithmetic.int_multipliers.stages.ppg_and_stages import (
+from spire.arithmetic.int_multipliers.stages.ppg_and_stages import (
     AndPartialProductGenerator,
 )
 

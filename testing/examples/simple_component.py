@@ -7,7 +7,7 @@ This is the simplest possible example showing how to:
 3. Generate Verilog directly from the Component
 """
 
-from spirehdl import Component, IORecord, Input, Output, UInt
+from spire import Component, IORecord, Input, Output, UInt
 
 
 class SimpleAdder(Component):

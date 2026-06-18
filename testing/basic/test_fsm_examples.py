@@ -1,4 +1,4 @@
-"""Simulation-verified examples for `spirehdl.spirehdl_state`.
+"""Simulation-verified examples for `spire.state`.
 
 The existing ``test_state_machine.py`` covers the encoding-width contract and
 a 3-state demo. This file exercises richer FSM patterns end-to-end:
@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.spirehdl import Bool, UInt, mux
-from spirehdl.spirehdl_control_structures import case_, default, if_, else_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_state import Encoding, State, state
+from spire.expr import Bool, UInt, mux
+from spire.control_structures import case_, default, if_, else_, switch_
+from spire.component import Module
+from spire.simulator import Simulator
+from spire.state import Encoding, State, state
 
 
 # ---------------------------------------------------------------------------

@@ -40,9 +40,9 @@ The area objective achieves a **51% transistor reduction** over default synthesi
 
 ```python
 from dataclasses import dataclass
-from spirehdl.spirehdl import Signal, UInt
-from spirehdl.spirehdl_module import Component
-from spirehdl.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
+from spire.expr import Signal, UInt
+from spire.component import Component
+from spire.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
 
 @dataclass
 class ALUIO:
@@ -88,7 +88,7 @@ If you'd rather construct optimized arithmetic directly instead of writing Pytho
 - `adder_tree(values, cfg)` — reduces a sequence of expressions with a balanced binary tree of optimized adders.
 
 ```python
-from spirehdl.arithmetic.int_arithmetic_config import (
+from spire.arithmetic.int_arithmetic_config import (
     ArithmeticAutoConfig, build_adder, build_multiplier, adder_tree,
 )
 
@@ -128,10 +128,10 @@ A common DSP pattern where MAC fusion shines — each tap is `coeff[i] * x[i]` a
 
 ```python
 from dataclasses import dataclass
-from spirehdl.spirehdl import UInt, Signal
-from spirehdl.spirehdl_module import Component
-from spirehdl.composite.array import Array
-from spirehdl.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
+from spire.expr import UInt, Signal
+from spire.component import Component
+from spire.composite.array import Array
+from spire.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
 
 @dataclass
 class FIRIO:

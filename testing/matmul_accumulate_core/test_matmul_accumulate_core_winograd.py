@@ -5,21 +5,21 @@ from typing import Callable, Iterable, List, Literal, Sequence
 
 import numpy as np
 
-from spirehdl.composite.array import Array
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spire.composite.array import Array
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel, is_signed
-from spirehdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
-from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_winograd import AdderConfig, MMAcCfg, MMAcDims, MMAcWidths, MatmulAccumulateComponent, MultiplierConfig, build_matmul_accumulate, max_y_width_unsigned
-from spirehdl.helpers import get_yosys_metrics
-from spirehdl.spirehdl import Expr, SInt, Signal, UInt
-from spirehdl.spirehdl_module import Component, Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel, is_signed
+from spire.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
+from spire.cores.matmul_accumulate.matmul_accumulate_core_winograd import AdderConfig, MMAcCfg, MMAcDims, MMAcWidths, MatmulAccumulateComponent, MultiplierConfig, build_matmul_accumulate, max_y_width_unsigned
+from spire.helpers import get_yosys_metrics
+from spire.expr import Expr, SInt, Signal, UInt
+from spire.component import Component, Module
+from spire.simulator import Simulator
 
 
 def test_mmac_core_basic_simulation():

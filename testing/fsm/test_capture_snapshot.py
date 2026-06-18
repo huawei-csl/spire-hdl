@@ -1,9 +1,9 @@
 """SharedCacheSnapshot (Step 3 of the FSM-encoding-search plan)."""
 from __future__ import annotations
 
-from spirehdl.optimize.fsm._capture import SharedCacheSnapshot
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_module import Module
+from spire.optimize.fsm._capture import SharedCacheSnapshot
+from spire.expr import UInt
+from spire.component import Module
 
 
 def test_snapshot_records_no_wires_for_empty_block():
@@ -45,7 +45,7 @@ def test_snapshot_excludes_wires_added_before_with():
     # Only wires created inside the with-block should be in new_wires.
     # Check by object identity (Signal.__eq__ builds an Expr, so the usual
     # `in` / `.index()` operations don't work).
-    from spirehdl.spirehdl import _SharedCache
+    from spire.expr import _SharedCache
     new_ids = {id(w) for w in snap.new_wires}
     pre_ids = {id(w) for w in _SharedCache.wires[:snap._start_idx]}
     assert new_ids.isdisjoint(pre_ids)

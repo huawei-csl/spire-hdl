@@ -7,13 +7,13 @@ condition and lowered to a mux. When no branch matches, a combinational signal
 keeps its previous driver and a register holds its current value.
 
 > **Note:** this is a convenience layer. Everything here can also be written
-> directly with `mux` from SpireHDL's core ([`spirehdl/spirehdl.py`](../src/spirehdl/spirehdl.py));
+> directly with `mux` from SpireHDL's core ([`spire/expr.py`](../src/spire/expr.py));
 > the context managers lower to exactly those muxes.
 
-The constructs live in [`spirehdl/spirehdl_control_structures.py`](../src/spirehdl/spirehdl_control_structures.py).
+The constructs live in [`spire/control_structures.py`](../src/spire/control_structures.py).
 
 ```python
-from spirehdl.spirehdl_control_structures import if_, elif_, else_, switch_, case_, default
+from spire.control_structures import if_, elif_, else_, switch_, case_, default
 ```
 
 ## `if_` / `elif_` / `else_`
@@ -23,8 +23,8 @@ signal a default driver *before* the chain; a combinational signal that is only
 assigned inside conditional blocks has no fallback and raises `RuntimeError`.
 
 ```python
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_module import Module
+from spire.expr import Bool, UInt
+from spire.component import Module
 
 m = Module("Priority", with_clock=False, with_reset=False)
 sel_a = m.input(Bool(), "sel_a")
@@ -48,8 +48,8 @@ with else_():
 everything else.
 
 ```python
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_module import Module
+from spire.expr import UInt
+from spire.component import Module
 
 m = Module("Decode", with_clock=False, with_reset=False)
 op = m.input(UInt(2), "op")
@@ -77,9 +77,9 @@ under a condition holds its value when the condition is false — i.e. a clock
 enable.
 
 ```python
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.expr import Bool, UInt
+from spire.component import Module
+from spire.simulator import Simulator
 
 m = Module("EnReg", with_clock=True, with_reset=False)
 en = m.input(Bool(), "en")

@@ -2,9 +2,9 @@
 import random
 from math import ceil, log2
 from testing.roundtrip import roundtrip_and_group
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.expr import UInt
+from spire.component import Module
+from spire.simulator import Simulator
 
 
 def build_minus_probe(IW: int):

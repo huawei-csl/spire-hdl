@@ -14,11 +14,11 @@ from __future__ import annotations
 import random
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-from spirehdl.spirehdl import Expr, HDLType, Signal, UInt, reset_shared_cache
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_aiger import AigerExporter
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.optimize import abc_optimized, clear_optimization_cache
+from spire.expr import Expr, HDLType, Signal, UInt, reset_shared_cache
+from spire.component import Module
+from spire.aiger import AigerExporter
+from spire.simulator import Simulator
+from spire.optimize import abc_optimized, clear_optimization_cache
 
 
 # ---------------------------------------------------------------------------

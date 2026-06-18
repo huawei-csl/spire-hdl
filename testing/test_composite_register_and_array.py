@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from typing import List
-from spirehdl.composite.register import CompositeRegister
-from spirehdl.composite.base import HDLComposite
-from spirehdl.spirehdl import (
+from spire.composite.register import CompositeRegister
+from spire.composite.base import HDLComposite
+from spire.expr import (
     UInt,
     Wire,
     Expr,
@@ -11,9 +11,9 @@ from spirehdl.spirehdl import (
     as_expr,
     reset_shared_cache,
 )
-from spirehdl.composite.fixed_point import FixedPoint, FixedPointType
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator  # your HDLComposite fixed-point type
+from spire.composite.fixed_point import FixedPoint, FixedPointType
+from spire.component import Module
+from spire.simulator import Simulator  # your HDLComposite fixed-point type
 
 
 # -------------------------------------------------------------------

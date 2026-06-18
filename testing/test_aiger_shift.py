@@ -1,4 +1,4 @@
-"""Regression tests for the AIGER barrel shifter (``spirehdl_aiger``).
+"""Regression tests for the AIGER barrel shifter (``spire_aiger``).
 
 These tests were added after a subtle bug in ``bv_shift_left`` / ``bv_shift_right``:
 the mux-based barrel shifter iterated over the shift-amount bits and simply
@@ -25,10 +25,10 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.spirehdl_aiger import _AIG, lit_const0
-from spirehdl.spirehdl import UInt, Const, cat, reset_shared_cache
-from spirehdl.spirehdl_module import Module
-from spirehdl.helpers import refactor_module_to_aig, run_vectors
+from spire.aiger import _AIG, lit_const0
+from spire.expr import UInt, Const, cat, reset_shared_cache
+from spire.component import Module
+from spire.helpers import refactor_module_to_aig, run_vectors
 
 
 # ---------------------------------------------------------------------------

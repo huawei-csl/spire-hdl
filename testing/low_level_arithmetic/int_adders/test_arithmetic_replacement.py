@@ -1,18 +1,18 @@
 import pytest
 
-from spirehdl.arithmetic.int_arithmetic_config import ArithmeticConfig, replace_arithmetic_ops
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import (
+from spire.arithmetic.int_arithmetic_config import ArithmeticConfig, replace_arithmetic_ops
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption
+from spire.arithmetic.int_multipliers.eval.testvector_generation import (
     AdderTestVectors,
     Encoding,
     MultiplierTestVectors,
     SubtractorTestVectors,
 )
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import StageBasedMultiplierIO
-from spirehdl.helpers import run_vectors_on_simulator
-from spirehdl.spirehdl import Signal, UInt, reset_shared_cache
-from spirehdl.spirehdl_module import Component
-from spirehdl.spirehdl_simulator import Simulator
+from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import StageBasedMultiplierIO
+from spire.helpers import run_vectors_on_simulator
+from spire.expr import Signal, UInt, reset_shared_cache
+from spire.component import Component
+from spire.simulator import Simulator
 
 
 # ---------------------------------------------------------------------------

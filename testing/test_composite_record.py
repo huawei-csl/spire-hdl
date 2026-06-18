@@ -1,10 +1,10 @@
 
-from spirehdl.composite.record import CompositeRecord
-from spirehdl.composite.array import Array
-from spirehdl.spirehdl import SInt, UInt, Wire, Signal
+from spire.composite.record import CompositeRecord
+from spire.composite.array import Array
+from spire.expr import SInt, UInt, Wire, Signal
 
 
-from spirehdl.spirehdl import (
+from spire.expr import (
     UInt,
     Wire,
     Signal,
@@ -14,8 +14,8 @@ from spirehdl.spirehdl import (
     Slice,
     HDLType,
 )
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.component import Module
+from spire.simulator import Simulator
 
 
 def test_composite_record_basic():

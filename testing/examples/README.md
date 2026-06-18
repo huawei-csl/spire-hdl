@@ -72,7 +72,7 @@ IO ports are defined using Signal objects with specific attributes:
 Example:
 ```python
 from dataclasses import dataclass
-from spirehdl.spirehdl import Signal, UInt
+from spire.expr import Signal, UInt
 
 @dataclass
 class IO:

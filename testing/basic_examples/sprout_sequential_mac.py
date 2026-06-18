@@ -1,5 +1,5 @@
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl import Register, UInt
+from spire.component import Module
+from spire.expr import Register, UInt
 
 mac = Module("Mac32", with_clock=True, with_reset=True)
 a = mac.input(UInt(16), "a")

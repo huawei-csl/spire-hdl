@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from spirehdl.spirehdl import Bool, Const, Signal, UInt, reset_shared_cache
-from spirehdl.spirehdl_module import Component
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.primitives import MemoryPrimitive, RamPrimitive
+from spire.expr import Bool, Const, Signal, UInt, reset_shared_cache
+from spire.component import Component
+from spire.simulator import Simulator
+from spire.primitives import MemoryPrimitive, RamPrimitive
 
 
 # ---------------------------------------------------------------------------

@@ -5,17 +5,17 @@ more HDL `Expr` leaves and behave as a single, bit-packable value.  All composit
 `HDLComposite` and share a common API for flattening to bits, packed assignment (`<<=`), and
 element-wise assignment (`@=`).
 
-Source: [`src/spirehdl/composite/`](../src/spirehdl/composite).
+Source: [`src/spire/composite/`](../src/spire/composite).
 
 | Type | Purpose | Source |
 |---|---|---|
-| `HDLComposite` | Abstract base — `to_bits`, `assign`, `<<=`, `@=` (see [Common API](#common-api)) | [`base.py`](../src/spirehdl/composite/base.py) |
-| [`Array`](#array) | N-dimensional vector of `Expr` or nested composites | [`array.py`](../src/spirehdl/composite/array.py) |
-| [`CompositeRecord`](#compositerecord) | Declarative bundle with named fields (class attributes) | [`record.py`](../src/spirehdl/composite/record.py) |
-| [`CompositeRecordDynamic`](#compositerecorddynamic) | Bundle defined from instance attributes / `@dataclass` | [`record_dynamic.py`](../src/spirehdl/composite/record_dynamic.py) |
-| [`FixedPoint`](#fixedpoint) | Fixed-point view of a bitvector with arithmetic + quantization | [`fixed_point.py`](../src/spirehdl/composite/fixed_point.py) |
-| [`FloatingPoint`](#floatingpoint) | Floating-point view with `add` / `mul` helpers | [`floating_point.py`](../src/spirehdl/composite/floating_point.py) |
-| [`CompositeRegister`](#compositeregister) | Single register holding any packed composite | [`register.py`](../src/spirehdl/composite/register.py) |
+| `HDLComposite` | Abstract base — `to_bits`, `assign`, `<<=`, `@=` (see [Common API](#common-api)) | [`base.py`](../src/spire/composite/base.py) |
+| [`Array`](#array) | N-dimensional vector of `Expr` or nested composites | [`array.py`](../src/spire/composite/array.py) |
+| [`CompositeRecord`](#compositerecord) | Declarative bundle with named fields (class attributes) | [`record.py`](../src/spire/composite/record.py) |
+| [`CompositeRecordDynamic`](#compositerecorddynamic) | Bundle defined from instance attributes / `@dataclass` | [`record_dynamic.py`](../src/spire/composite/record_dynamic.py) |
+| [`FixedPoint`](#fixedpoint) | Fixed-point view of a bitvector with arithmetic + quantization | [`fixed_point.py`](../src/spire/composite/fixed_point.py) |
+| [`FloatingPoint`](#floatingpoint) | Floating-point view with `add` / `mul` helpers | [`floating_point.py`](../src/spire/composite/floating_point.py) |
+| [`CompositeRegister`](#compositeregister) | Single register holding any packed composite | [`register.py`](../src/spire/composite/register.py) |
 
 ## Common API
 
@@ -37,8 +37,8 @@ Every composite exposes:
 N-dimensional indexing with `tuple`/`slice` keys.
 
 ```python
-from spirehdl.composite.array import Array
-from spirehdl.spirehdl import UInt, Const, Wire
+from spire.composite.array import Array
+from spire.expr import UInt, Const, Wire
 
 # 1D vector of constants
 v = Array([Const(1, UInt(8)), Const(2, UInt(8)), Const(3, UInt(8))])
@@ -68,9 +68,9 @@ Declarative, class-based bundle.  Fields are declared as class attributes; each 
 its own freshly cloned wires (no sharing between instances).
 
 ```python
-from spirehdl.composite.record import CompositeRecord
-from spirehdl.composite.array import Array
-from spirehdl.spirehdl import UInt, SInt, Wire, Signal
+from spire.composite.record import CompositeRecord
+from spire.composite.array import Array
+from spire.expr import UInt, SInt, Wire, Signal
 
 class Packet(CompositeRecord):
     addr:    Signal = Wire(UInt(8))
@@ -97,9 +97,9 @@ example, when generating IO records for parameterized cores.
 
 ```python
 from dataclasses import dataclass
-from spirehdl.composite.array import Array
-from spirehdl.composite.record_dynamic import CompositeRecordDynamic
-from spirehdl.spirehdl import UInt, Wire
+from spire.composite.array import Array
+from spire.composite.record_dynamic import CompositeRecordDynamic
+from spire.expr import UInt, Wire
 
 @dataclass
 class MMAcIO(CompositeRecordDynamic):
@@ -127,10 +127,10 @@ Bitvector view with an explicit total width, fractional width, and sign.  Provid
 `add` / `sub` / `mul` with optional output type and quantization mode (`ARITHQuant`).
 
 ```python
-from spirehdl.composite.fixed_point import (
+from spire.composite.fixed_point import (
     ARITHQuant, FixedPoint, FixedPointType,
 )
-from spirehdl.spirehdl import Const
+from spire.expr import Const
 
 q8_8 = FixedPointType(width_total=16, width_frac=8, signed=True)
 
@@ -155,10 +155,10 @@ IEEE-style floating-point view (1 sign bit + exponent + fraction), parameterized
 selects a subnormal-aware multiplier.
 
 ```python
-from spirehdl.composite.floating_point import (
+from spire.composite.floating_point import (
     FloatingPoint, FloatingPointType,
 )
-from spirehdl.spirehdl import Const
+from spire.expr import Const
 
 # binary16 (half precision)
 ft = FloatingPointType(exponent_width=5, fraction_width=10)
@@ -187,10 +187,10 @@ structured `.value` view on top.  Use it when you want a register whose contents
 write as a structured composite, not raw bits.
 
 ```python
-from spirehdl.composite.register import CompositeRegister
-from spirehdl.composite.fixed_point import FixedPoint, FixedPointType
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl import UInt, as_expr
+from spire.composite.register import CompositeRegister
+from spire.composite.fixed_point import FixedPoint, FixedPointType
+from spire.component import Module
+from spire.expr import UInt, as_expr
 
 m = Module("AccDemo", with_clock=True, with_reset=False)
 x = m.input(UInt(8), "x")

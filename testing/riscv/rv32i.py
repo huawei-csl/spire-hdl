@@ -2,10 +2,10 @@
 
 from typing import List, Tuple, Dict
 
-from spirehdl.helpers import get_yosys_transistor_count
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl import UInt, Bool, Const, mux, cat, fit_width
-from spirehdl.spirehdl_simulator import Simulator
+from spire.helpers import get_yosys_transistor_count
+from spire.component import Module
+from spire.expr import UInt, Bool, Const, mux, cat, fit_width
+from spire.simulator import Simulator
 
 
 

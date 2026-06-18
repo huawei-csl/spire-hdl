@@ -26,12 +26,12 @@ from __future__ import annotations
 
 import time
 
-from spirehdl.helpers import get_yosys_metrics
-from spirehdl.optimize.fsm._emit import restore_encoding
-from spirehdl.spirehdl import Bool, UInt, mux
-from spirehdl.spirehdl_control_structures import case_, default, else_, if_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_state import (
+from spire.helpers import get_yosys_metrics
+from spire.optimize.fsm._emit import restore_encoding
+from spire.expr import Bool, UInt, mux
+from spire.control_structures import case_, default, else_, if_, switch_
+from spire.component import Module
+from spire.state import (
     Encoding, State, optimized_encoding, optimized_fsm, state,
 )
 

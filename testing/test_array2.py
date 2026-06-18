@@ -1,10 +1,10 @@
 from typing import Optional
 
 import numpy as np
-from spirehdl.composite.array import Array  # your renamed class
-from spirehdl.spirehdl import Expr, ExprLike, Const, UInt, Wire, fit_width, reset_shared_cache
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.composite.array import Array  # your renamed class
+from spire.expr import Expr, ExprLike, Const, UInt, Wire, fit_width, reset_shared_cache
+from spire.component import Module
+from spire.simulator import Simulator
 
 
 def inner_product(vec_a: Array, vec_b: Array) -> Expr:

@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.optimize.fsm._evaluator import eval_with
-from spirehdl.spirehdl import Bool, Const, UInt, cat, mux
-from spirehdl.spirehdl_module import Module
+from spire.optimize.fsm._evaluator import eval_with
+from spire.expr import Bool, Const, UInt, cat, mux
+from spire.component import Module
 
 
 def test_const_returns_value():
@@ -34,7 +34,7 @@ def test_op2_add_wraps_at_width():
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     expr = a + b
-    # 8-bit add wraps at 256... but spirehdl's `+` widens to 9 bits by default.
+    # 8-bit add wraps at 256... but spire's `+` widens to 9 bits by default.
     # Test the width-mask behaviour by binding values that don't wrap there.
     assert eval_with(expr, [(a, 200), (b, 100)]) == 300
 

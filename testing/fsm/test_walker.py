@@ -1,12 +1,12 @@
 """Walker (Step 4 of the FSM-encoding-search plan)."""
 from __future__ import annotations
 
-from spirehdl.optimize.fsm._walker import (
+from spire.optimize.fsm._walker import (
     find_input_signals, find_state_consts, is_state_const, walk,
 )
-from spirehdl.spirehdl import Bool, Const, UInt, cat, mux
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_state import Encoding, State, state
+from spire.expr import Bool, Const, UInt, cat, mux
+from spire.component import Module
+from spire.state import Encoding, State, state
 
 
 class S(State, encoding=Encoding.BINARY):

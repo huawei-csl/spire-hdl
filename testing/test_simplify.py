@@ -1,4 +1,4 @@
-"""Tests for ``spirehdl.spirehdl_simplify.apply_simplify`` — the opt_expr / opt_muxtree analogue.
+"""Tests for ``spire.simplify.apply_simplify`` — the opt_expr / opt_muxtree analogue.
 
 Each test builds a small module, runs the pass directly (rather than going through ``to_verilog_lines``, which would
 also run CSE), and checks the IR via either:
@@ -19,7 +19,7 @@ from typing import Set
 
 import pytest
 
-from spirehdl.spirehdl import (
+from spire.expr import (
     Concat,
     Const,
     Expr,
@@ -34,8 +34,8 @@ from spirehdl.spirehdl import (
     mux,
     reset_shared_cache,
 )
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simplify import apply_simplify
+from spire.component import Module
+from spire.simplify import apply_simplify
 
 
 @pytest.fixture(autouse=True)

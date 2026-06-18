@@ -5,23 +5,23 @@ from typing import Iterable, List, Literal, Sequence
 
 import numpy as np
 
-from spirehdl.composite.array import Array
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spire.composite.array import Array
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
-from spirehdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spire.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
+from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
     RippleCarryFinalAdder,
 )
-from spirehdl.helpers import get_yosys_metrics
-from spirehdl.spirehdl import Expr, UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.helpers import get_yosys_metrics
+from spire.expr import Expr, UInt
+from spire.component import Module
+from spire.simulator import Simulator
 
 
 @dataclass

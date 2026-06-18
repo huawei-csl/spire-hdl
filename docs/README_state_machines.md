@@ -5,14 +5,14 @@ SpireHDL ships with a small `State` base class plus an `Encoding` enum
 in a way that's IDE-friendly, type-checked, and composes with the existing
 `switch_`/`case_`/`if_` control-flow context managers.
 
-The pieces live in [`spirehdl/spirehdl_state.py`](../src/spirehdl/spirehdl_state.py).
+The pieces live in [`spire/state.py`](../src/spire/state.py).
 
 ## Quick start
 
 Declare a state set as a class:
 
 ```python
-from spirehdl.spirehdl_state import State, Encoding, state
+from spire.state import State, Encoding, state
 
 class TrafficFSM(State, encoding=Encoding.BINARY):
     RED    = state()
@@ -35,9 +35,9 @@ Build the machine by allocating a register of `TrafficFSM.typ`, then write
 transitions with the existing `switch_`/`case_`/`if_` blocks:
 
 ```python
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_control_structures import case_, default, if_, switch_
+from spire.expr import Bool, UInt
+from spire.component import Module
+from spire.control_structures import case_, default, if_, switch_
 
 m = Module("traffic", with_clock=True, with_reset=False)
 go    = m.input(Bool(), "go")
@@ -150,4 +150,4 @@ MyFSM._width # 1
   [`testing/basic/test_state_machine.py`](../testing/basic/test_state_machine.py)
   — covers the encoding-width contract and a 3-state demo.
 - For control-flow context managers, see
-  [`spirehdl_control_structures.py`](../src/spirehdl/spirehdl_control_structures.py).
+  [`control_structures.py`](../src/spire/control_structures.py).

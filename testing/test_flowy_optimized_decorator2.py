@@ -4,10 +4,10 @@
 Builds a 4-bit multiplier with and without the decorator, compares AIG stats.
 """
 
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl import UInt, Const, mux
-from spirehdl.spirehdl_aiger import AigerExporter
-from spirehdl.optimize import flowy_optimized
+from spire.component import Module
+from spire.expr import UInt, Const, mux
+from spire.aiger import AigerExporter
+from spire.optimize import flowy_optimized
 
 
 def aig_gate_count(m: Module) -> int:

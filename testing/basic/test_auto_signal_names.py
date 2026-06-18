@@ -1,5 +1,5 @@
-from spirehdl.spirehdl import Register, UInt, Wire
-from spirehdl.spirehdl_module import Module
+from spire.expr import Register, UInt, Wire
+from spire.component import Module
 
 
 def test_unnamed_wire_and_register_infer_python_variable_names():

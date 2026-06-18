@@ -5,14 +5,14 @@ from typing import List, Optional, Tuple
 from aigverse import DepthAig, DepthAig, aig_cut_rewriting, aig_resubstitution, balancing, sop_refactoring
 import numpy as np
 from tqdm import tqdm
-from spirehdl.aig.aig_aigerverse import conv_aag_into_aig, conv_aig_into_aag
+from spire.aig.aig_aigerverse import conv_aag_into_aig, conv_aig_into_aag
 from testing.low_level_arithmetic.compressor_tree.compressor_tree_multiplier import Graph, build_wallace_compressor_graph, get_node_kind_counts, random_compressor_tree
-from spirehdl.arithmetic.prefix_adders.prefix_adder_analysis import Vec
-from spirehdl.helpers import get_yosys_transistor_count
-from spirehdl.spirehdl import Bool, HDLType, Op2
-from spirehdl.spirehdl_aiger import AigerExporter
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.arithmetic.prefix_adders.prefix_adder_analysis import Vec
+from spire.helpers import get_yosys_transistor_count
+from spire.expr import Bool, HDLType, Op2
+from spire.aiger import AigerExporter
+from spire.component import Module
+from spire.simulator import Simulator
 
 
 def build_multiplier_from_compressor_graph(name: str, A, nodes):
@@ -37,8 +37,8 @@ def build_multiplier_from_compressor_graph(name: str, A, nodes):
     import numpy as np
     from collections import defaultdict
 
-    from spirehdl.spirehdl_module import Module
-    from spirehdl.spirehdl import UInt, cat
+    from spire.component import Module
+    from spire.expr import UInt, cat
 
     # --- helpers ---------------------------------------------------------------
     def infer_n():
@@ -214,7 +214,7 @@ def build_multiplier_from_compressor_graph(name: str, A, nodes):
     return m
 
 
-def gen_compressor_tree_graph_and_spirehdl_module(n_bits: int, policy: str = "dadda", name: Optional[str] = None) -> Tuple[Graph, Module]:
+def gen_compressor_tree_graph_and_spire_module(n_bits: int, policy: str = "dadda", name: Optional[str] = None) -> Tuple[Graph, Module]:
 
     """
     Convenience function to build a compressor-tree multiplier graph and
@@ -305,7 +305,7 @@ def main():
 
     n_bits = 4
 
-    g, m = gen_compressor_tree_graph_and_spirehdl_module(n_bits, policy="wallace")
+    g, m = gen_compressor_tree_graph_and_spire_module(n_bits, policy="wallace")
     run_vectors_local(m, build_mul_verctor_rand(n_bits), label="8x8 Wallace Multiplier")
     s, d = get_size_and_depth("8x8 Wallace Multiplier", m)
 
@@ -356,7 +356,7 @@ def main():
     # 14 HA + 38 FA = 14*14 + 38*28 -->  196 + 1064 = 1260 transistors
     # we get 1740
 
-    g, m = gen_compressor_tree_graph_and_spirehdl_module(n_bits, policy="random")
+    g, m = gen_compressor_tree_graph_and_spire_module(n_bits, policy="random")
     run_vectors_local(m, build_mul_verctor_rand(n_bits), label="8x8 Random Compressor Multiplier")
     s, d = get_size_and_depth("8x8 Random Compressor Multiplier", m)
 

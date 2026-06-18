@@ -1,8 +1,8 @@
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_state import Encoding, State, state
-from spirehdl.spirehdl_control_structures import case_, default, if_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator, _sid
+from spire.expr import Bool, UInt
+from spire.state import Encoding, State, state
+from spire.control_structures import case_, default, if_, switch_
+from spire.component import Module
+from spire.simulator import Simulator, _sid
 
 
 class BinaryFSM(State, encoding=Encoding.BINARY):

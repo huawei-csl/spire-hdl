@@ -4,11 +4,11 @@ Netlist with Component Example (power-user / IR level)
 Most designs only need `Component` (see simple_component.py / component_example.py).
 This example shows the lower-level IR, `Netlist` (the flat, lowered netlist that every
 backend consumes — formerly named `Module`), and how to inline `Component` logic into a
-hand-built netlist. `Netlist` lives in `spirehdl.ir`; the quick start never needs it.
+hand-built netlist. `Netlist` lives in `spire.ir`; the quick start never needs it.
 """
 
-from spirehdl import Component, IORecord, Input, Output, UInt
-from spirehdl.ir import Netlist
+from spire import Component, IORecord, Input, Output, UInt
+from spire.ir import Netlist
 
 
 # Define a reusable Adder Component

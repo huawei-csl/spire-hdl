@@ -9,27 +9,27 @@ repo_root = pathlib.Path(__file__).resolve().parents[1]
 sys.path.append(str(repo_root / "src"))
 sys.path.append(str(repo_root))
 
-from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
-from spirehdl.arithmetic.floating_point.fp_mul_testvectors import (
+from spire.arithmetic.floating_point.fp_encoding import fp_decode
+from spire.arithmetic.floating_point.fp_mul_testvectors import (
     build_f16_subnormal_vectors,
     build_f16_vectors,
 )
 
-from spirehdl.composite.floating_point import FloatingPoint, FloatingPointType
-from spirehdl.composite.register import CompositeRegister
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spire.composite.floating_point import FloatingPoint, FloatingPointType
+from spire.composite.register import CompositeRegister
+from spire.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
-from spirehdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
-from spirehdl.spirehdl import Const, Expr, UInt, as_expr, reset_shared_cache
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spire.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
+from spire.expr import Const, Expr, UInt, as_expr, reset_shared_cache
+from spire.component import Module
+from spire.simulator import Simulator
 
 
 def _eval_expr(e: Expr) -> int:

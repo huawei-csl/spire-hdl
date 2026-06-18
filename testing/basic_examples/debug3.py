@@ -2,12 +2,12 @@
 import random
 from math import ceil, log2
 
-from spirehdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig
-from spirehdl.spirehdl import UInt, mux, fit_width
-from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_module import IOCollector
+from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig
+from spire.expr import UInt, mux, fit_width
+from spire.aiger import AigerExporter, AigerImporter
+from spire.component import Module
+from spire.simulator import Simulator
+from spire.component import IOCollector
 
 def _eq_const_bits(x, k: int, w: int):
     xw = fit_width(x, UInt(w))

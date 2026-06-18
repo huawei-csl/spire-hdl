@@ -7,14 +7,14 @@ Yosys) and continue composing or simulating the result in Python. This is the
 same machinery the [`@abc_optimized` / `@flowy_optimized`](README_optimization_decorators.md)
 decorators use under the hood.
 
-The exporter/importer live in [`spirehdl/spirehdl_aiger.py`](../src/spirehdl/spirehdl_aiger.py);
+The exporter/importer live in [`spire/aiger.py`](../src/spire/aiger.py);
 the import entry points are `Component.from_aag_lines` / `Component.from_aig_file`
-in [`spirehdl/spirehdl_module.py`](../src/spirehdl/spirehdl_module.py).
+in [`spire/component.py`](../src/spire/component.py).
 
 ## Export
 
 ```python
-from spirehdl.spirehdl_aiger import AigerExporter
+from spire.aiger import AigerExporter
 
 aag_lines = AigerExporter(module).get_aag()   # list[str], e.g. starts with "aag 200 8 0 8 192"
 AigerExporter(module).write_aag("design.aag") # or write straight to a file
@@ -30,8 +30,8 @@ netlist into it and materialize a `Module`:
 
 ```python
 from dataclasses import dataclass
-from spirehdl.spirehdl import UInt, Signal
-from spirehdl.spirehdl_module import Component
+from spire.expr import UInt, Signal
+from spire.component import Component
 
 @dataclass
 class IO:
@@ -62,7 +62,7 @@ and converts it via Yosys; pass `map_file=` when the tool emitted a name map.
 Export and re-import are equivalence-preserving — a quick check:
 
 ```python
-from spirehdl.spirehdl_simulator import Simulator
+from spire.simulator import Simulator
 
 for av, bv in [(3, 5), (15, 15), (7, 9)]:
     a_out = Simulator(module).set("a", av).set("b", bv); a_out.eval()
@@ -70,7 +70,7 @@ for av, bv in [(3, 5), (15, 15), (7, 9)]:
 ```
 
 For an optimize-through-AIG flow, `refactor_module_to_aig(module, optimize=True)`
-and `get_aig_stats(module)` in [`spirehdl/helpers.py`](../src/spirehdl/helpers.py)
+and `get_aig_stats(module)` in [`spire/helpers.py`](../src/spire/helpers.py)
 export, optimize with aigverse, and re-import (regrouping IO) in one call.
 
 ## Examples

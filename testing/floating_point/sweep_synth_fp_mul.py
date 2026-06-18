@@ -1,16 +1,16 @@
-from spirehdl.spirehdl import reset_shared_cache
+from spire.expr import reset_shared_cache
 from testing.floating_point.synthesise_fp2 import flowy_optimize
 from aigverse import Aig, DepthAig
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul, build_fp_mul
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
-from spirehdl.arithmetic.floating_point.spire_hdl_hif8 import build_hif8_mul_logic
-from spirehdl.helpers import get_yosys_transistor_count
-from spirehdl.spirehdl_aiger import AigerExporter, export_module_to_aiger
-from spirehdl.aig.aig_aigerverse import conv_aag_into_aig, read_aag_into_aig
+from spire.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul, build_fp_mul
+from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spire.arithmetic.floating_point.spire_hdl_hif8 import build_hif8_mul_logic
+from spire.helpers import get_yosys_transistor_count
+from spire.aiger import AigerExporter, export_module_to_aiger
+from spire.aig.aig_aigerverse import conv_aag_into_aig, read_aag_into_aig
 
 from aigverse import aig_resubstitution, sop_refactoring, aig_cut_rewriting, balancing
 
-from spirehdl.spirehdl_module import Module
+from spire.component import Module
 
 
 def get_result(m: Module, optim_steps = 200) -> tuple:

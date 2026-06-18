@@ -65,9 +65,9 @@ Beyond the automatic passes above, the unified arithmetic generator lets you han
 
 In its simplest form, SpireHDL only needs these core files. This is intentional — the HDL is kept to a minimal, self-contained core, and higher-level features are layered on top:
 
-- **[`spirehdl/spirehdl.py`](src/spirehdl/spirehdl.py)** – the expression DSL. It provides bit-precise types such as `Bool`, `UInt`, and `SInt`, shared-expression caching, and the overloaded arithmetic / bitwise operators that make the Python syntax feel like an HDL.
-- **[`spirehdl/spirehdl_module.py`](src/spirehdl/spirehdl_module.py)** – the `Component` base class: author reusable designs, declare IO with `IORecord`/`Input`/`Output`, emit Verilog/AIG, analyze, and import/inline sub-designs. The flat netlist IR it lowers to lives in **[`spirehdl/ir.py`](src/spirehdl/ir.py)** (`Netlist`, formerly `Module`).
-- **[`spirehdl/spirehdl_simulator.py`](src/spirehdl/spirehdl_simulator.py)** – a lightweight simulator that can drive inputs, tick clocks, inspect outputs or internal expressions, and capture probes for debugging—all without leaving Python.
+- **[`spire/expr.py`](src/spire/expr.py)** – the expression DSL. It provides bit-precise types such as `Bool`, `UInt`, and `SInt`, shared-expression caching, and the overloaded arithmetic / bitwise operators that make the Python syntax feel like an HDL.
+- **[`spire/component.py`](src/spire/component.py)** – the `Component` base class: author reusable designs, declare IO with `IORecord`/`Input`/`Output`, emit Verilog/AIG, analyze, and import/inline sub-designs. The flat netlist IR it lowers to lives in **[`spire/ir.py`](src/spire/ir.py)** (`Netlist`, formerly `Module`).
+- **[`spire/simulator.py`](src/spire/simulator.py)** – a lightweight simulator that can drive inputs, tick clocks, inspect outputs or internal expressions, and capture probes for debugging—all without leaving Python.
 
 ### 📚 Further reading
 
@@ -112,8 +112,8 @@ A `Component` is the one abstraction you author. Declare its IO once with `IORec
 `elaborate()`, and emit Verilog directly — without ever touching the IR:
 
 ```python
-from spirehdl import Component, IORecord, Input, Output, Bool, UInt
-from spirehdl.spirehdl import mux, cat
+from spire import Component, IORecord, Input, Output, Bool, UInt
+from spire.expr import mux, cat
 
 class LogicDemo(Component):
     def __init__(self):
@@ -137,13 +137,13 @@ demo = LogicDemo()
 print(demo.to_verilog(name="LogicDemo"))
 ```
 
-`to_verilog()` checks that every output has a driver (and every register a next-state assignment) before emitting Verilog (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
+`to_verilog()` checks that every output has a driver (and every register a next-state assignment) before emitting Verilog (see [`component.py`](src/spire/component.py)).
 
 **Registers** are created via the standalone `Register` class, which takes a `typ` and an optional reset value via the `init=` keyword (note: the keyword is `init`, not `reset_value` / `reset`). Assign the next-state expression with `<<=`, and pass `with_clock`/`with_reset` when emitting a sequential component:
 
 ```python
-from spirehdl import Component, IORecord, Output
-from spirehdl.spirehdl import Register, UInt
+from spire import Component, IORecord, Output
+from spire.expr import Register, UInt
 
 class Counter(Component):
     def __init__(self):
@@ -161,7 +161,7 @@ print(Counter().to_verilog(name="Counter", with_clock=True, with_reset=True))
 ### 2. Simulate the design
 
 ```python
-from spirehdl import Simulator
+from spire import Simulator
 
 sim = Simulator(demo)       # Simulator lowers the Component internally
 sim.set("a", 0xC3)
@@ -171,22 +171,22 @@ sim.eval()                  # recompute combinational logic
 print(sim.peek_outputs())   # {'sum': 0x15c, 'mask': 0x3, 'out': 0x81}
 ```
 
-The simulator keeps track of inputs, wires, outputs, and registers, supports `eval()` for combinational updates, `step()` for clocked designs, and exposes helpers such as `peek`, `peek_next`, and signal watching for deeper inspection ([`spirehdl_simulator.py`](src/spirehdl/spirehdl_simulator.py)).
+The simulator keeps track of inputs, wires, outputs, and registers, supports `eval()` for combinational updates, `step()` for clocked designs, and exposes helpers such as `peek`, `peek_next`, and signal watching for deeper inspection ([`simulator.py`](src/spire/simulator.py)).
 
 ### 3. Integrate with external tooling
 
-Modules can be exported to Verilog or AIG for downstream synthesis, equivalence checking, or integration into larger verification environments. Import helpers then let you bring optimized or third-party netlists back into SpireHDL for continued composition and simulation (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py) and [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
+Modules can be exported to Verilog or AIG for downstream synthesis, equivalence checking, or integration into larger verification environments. Import helpers then let you bring optimized or third-party netlists back into SpireHDL for continued composition and simulation (see [`component.py`](src/spire/component.py) and [`multipliers_ext_optimized.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
 
 ## Components and the netlist IR
 
-- `Component` is the one abstraction you author. It builds Verilog/AIG directly (`to_verilog`, `to_aag`), analyzes timing (`analyze`), imports designs from Verilog or AIG formats (`from_verilog`, `from_aag_lines`, `from_netlist`), and inlines reusable sub-designs into the surrounding logic (`inline`). Components expose `get_ios()` / `get_spec()` as the single IO normalization point — also what drives port regrouping when you import flattened designs (see [`spirehdl_module.py`](src/spirehdl/spirehdl_module.py)).
-- `Netlist` (in [`spirehdl.ir`](src/spirehdl/ir.py)) is the flat, lowered netlist that every backend consumes — SpireHDL's internal IR (formerly named `Module`, still importable under that alias). Power users can build one directly: it offers constructors for inputs, outputs, wires, and registers; signal enumeration; Verilog emission with automatic width fitting; and an `analyze()` routine reporting combinational depth and node counts. The quick start never needs it.
+- `Component` is the one abstraction you author. It builds Verilog/AIG directly (`to_verilog`, `to_aag`), analyzes timing (`analyze`), imports designs from Verilog or AIG formats (`from_verilog`, `from_aag_lines`, `from_netlist`), and inlines reusable sub-designs into the surrounding logic (`inline`). Components expose `get_ios()` / `get_spec()` as the single IO normalization point — also what drives port regrouping when you import flattened designs (see [`component.py`](src/spire/component.py)).
+- `Netlist` (in [`spire.ir`](src/spire/ir.py)) is the flat, lowered netlist that every backend consumes — SpireHDL's internal IR (formerly named `Module`, still importable under that alias). Power users can build one directly: it offers constructors for inputs, outputs, wires, and registers; signal enumeration; Verilog emission with automatic width fitting; and an `analyze()` routine reporting combinational depth and node counts. The quick start never needs it.
 - Minimal end-to-end component example: [`testing/examples/simple_component.py`](testing/examples/simple_component.py).
 
 Short component + hierarchy usage example:
 
 ```python
-from spirehdl import Component, IORecord, Input, Output, UInt
+from spire import Component, IORecord, Input, Output, UInt
 
 class SimpleAdder(Component):
     def __init__(self, width=8):
@@ -225,28 +225,28 @@ print(Sum3Hierarchical().to_verilog(name="Sum3Hier"))  # one flat module, built 
 
 ### Hierarchical design with components
 
-Components are how to build hierarchy: instantiate one inside another, adapt its IO, or drop in a pre-synthesized netlist — all without leaving Python. A common pattern wraps a reusable SpireHDL block (see [`multipliers_ext.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext.py)). It is also possible to import an external AIG module, turn it into a `Component`, and call `from_module(..., make_internal=True)` so it behaves like a native SpireHDL block inside a larger generator (see [`multipliers_ext_optimized.py`](src/spirehdl/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)). The same approach covers Verilog imports, so SpireHDL code and external IP mix freely.
+Components are how to build hierarchy: instantiate one inside another, adapt its IO, or drop in a pre-synthesized netlist — all without leaving Python. A common pattern wraps a reusable SpireHDL block (see [`multipliers_ext.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext.py)). It is also possible to import an external AIG module, turn it into a `Component`, and call `from_module(..., make_internal=True)` so it behaves like a native SpireHDL block inside a larger generator (see [`multipliers_ext_optimized.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)). The same approach covers Verilog imports, so SpireHDL code and external IP mix freely.
 
 ## Composite data types
 
-SpireHDL includes structured, bit-packable composites for cleaner interfaces and bulk assignments ([`composite/`](src/spirehdl/composite)). See [`README_composite_types.md`](docs/README_composite_types.md) for the full reference with an example for every type:
+SpireHDL includes structured, bit-packable composites for cleaner interfaces and bulk assignments ([`composite/`](src/spire/composite)). See [`README_composite_types.md`](docs/README_composite_types.md) for the full reference with an example for every type:
 
-- `HDLComposite` defines the base "pack to bits" API that powers all composites ([`base.py`](src/spirehdl/composite/base.py)).
-- `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or composites ([`array.py`](src/spirehdl/composite/array.py)).
-- `CompositeRecord` lets you declare bundle-like classes with named fields that remain packable to a flat bitvector ([`record.py`](src/spirehdl/composite/record.py)).
-- `CompositeRecordDynamic` is the dataclass-friendly variant whose fields are defined per-instance, ideal for parameterized IO records ([`record_dynamic.py`](src/spirehdl/composite/record_dynamic.py)).
-- `FixedPoint` wraps a `Wire` or view with explicit total/frac widths and quantization helpers, keeping arithmetic readable while staying hardware-friendly ([`fixed_point.py`](src/spirehdl/composite/fixed_point.py)).
-- `FloatingPoint` provides an IEEE-style view with `add`/`mul` helpers parameterized by exponent / fraction widths ([`floating_point.py`](src/spirehdl/composite/floating_point.py)).
-- `CompositeRegister` stores any composite in a single register while preserving a structured view via `.value`/`.Q` ([`register.py`](src/spirehdl/composite/register.py)).
+- `HDLComposite` defines the base "pack to bits" API that powers all composites ([`base.py`](src/spire/composite/base.py)).
+- `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or composites ([`array.py`](src/spire/composite/array.py)).
+- `CompositeRecord` lets you declare bundle-like classes with named fields that remain packable to a flat bitvector ([`record.py`](src/spire/composite/record.py)).
+- `CompositeRecordDynamic` is the dataclass-friendly variant whose fields are defined per-instance, ideal for parameterized IO records ([`record_dynamic.py`](src/spire/composite/record_dynamic.py)).
+- `FixedPoint` wraps a `Wire` or view with explicit total/frac widths and quantization helpers, keeping arithmetic readable while staying hardware-friendly ([`fixed_point.py`](src/spire/composite/fixed_point.py)).
+- `FloatingPoint` provides an IEEE-style view with `add`/`mul` helpers parameterized by exponent / fraction widths ([`floating_point.py`](src/spire/composite/floating_point.py)).
+- `CompositeRegister` stores any composite in a single register while preserving a structured view via `.value`/`.Q` ([`register.py`](src/spire/composite/register.py)).
 
 Example:
 
 ```python
-from spirehdl.composite.array import Array
-from spirehdl.composite.record import CompositeRecord
-from spirehdl.composite.fixed_point import FixedPoint, FixedPointType
-from spirehdl.composite.register import CompositeRegister
-from spirehdl.spirehdl import UInt, Wire
+from spire.composite.array import Array
+from spire.composite.record import CompositeRecord
+from spire.composite.fixed_point import FixedPoint, FixedPointType
+from spire.composite.register import CompositeRegister
+from spire.expr import UInt, Wire
 
 class Bus(CompositeRecord):
     data = Wire(UInt(8))
@@ -272,7 +272,7 @@ The simulator supports both combinational and sequential designs:
 For waveforms, set `sim.trace_enabled = True` before driving the design, then dump the captured trace to a VCD file:
 
 ```python
-from spirehdl.various.vcd_writer import write_vcd
+from spire.various.vcd_writer import write_vcd
 
 sim.trace_enabled = True
 sim.eval()

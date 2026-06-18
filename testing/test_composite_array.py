@@ -1,5 +1,5 @@
-from spirehdl.composite.base import HDLComposite
-from spirehdl.spirehdl import (
+from spire.composite.base import HDLComposite
+from spire.expr import (
     UInt,
     Wire,
     Expr,
@@ -7,10 +7,10 @@ from spirehdl.spirehdl import (
     as_expr,
     reset_shared_cache,
 )
-from spirehdl.composite.array import Array
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.composite.array import Array
+from spire.expr import UInt
+from spire.component import Module
+from spire.simulator import Simulator
 from testing.test_composite_register_and_array import DummyAgg
 
 

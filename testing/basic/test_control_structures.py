@@ -1,9 +1,9 @@
 import pytest
 
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_control_structures import case_, default, else_, elif_, if_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator, _sid
+from spire.expr import Bool, UInt
+from spire.control_structures import case_, default, else_, elif_, if_, switch_
+from spire.component import Module
+from spire.simulator import Simulator, _sid
 
 
 def simulate_outputs(module: Module, vectors: list[tuple[dict[str, int], dict[str, int]]]) -> None:

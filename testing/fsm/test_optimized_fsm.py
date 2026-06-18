@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.optimize.fsm._emit import restore_encoding
-from spirehdl.optimize.fsm._hopcroft import equivalence_classes
-from spirehdl.optimize.fsm._table import extract_transition_table
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_control_structures import case_, default, if_, else_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_state import (
+from spire.optimize.fsm._emit import restore_encoding
+from spire.optimize.fsm._hopcroft import equivalence_classes
+from spire.optimize.fsm._table import extract_transition_table
+from spire.expr import Bool, UInt
+from spire.control_structures import case_, default, if_, else_, switch_
+from spire.component import Module
+from spire.simulator import Simulator
+from spire.state import (
     Encoding, State, optimized_fsm, state,
 )
 

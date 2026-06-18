@@ -11,11 +11,11 @@ from dataclasses import make_dataclass
 
 import pytest
 
-from spirehdl.spirehdl import Bool, Signal, UInt, Wire, reset_shared_cache
-from spirehdl.spirehdl_module import Component
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.primitives import RomPrimitive
-from spirehdl.composite.record import CompositeRecord
+from spire.expr import Bool, Signal, UInt, Wire, reset_shared_cache
+from spire.component import Component
+from spire.simulator import Simulator
+from spire.primitives import RomPrimitive
+from spire.composite.record import CompositeRecord
 
 
 def _build_rom(init, *, depth, width, registered=False, name="rom"):

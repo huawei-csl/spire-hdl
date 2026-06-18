@@ -14,8 +14,8 @@ supported:
   outputs to 0. Useful for vendor IP, opaque macros (PLLs, SerDes, RAM
   macros), or any block where a Python model isn't practical.
 
-The mechanism lives in [`spirehdl/spirehdl_module.py`](../src/spirehdl/spirehdl_module.py)
-(Component-side tagging) and [`spirehdl/spirehdl_simulator.py`](../src/spirehdl/spirehdl_simulator.py)
+The mechanism lives in [`spire/component.py`](../src/spire/component.py)
+(Component-side tagging) and [`spire/simulator.py`](../src/spire/simulator.py)
 (sim stub for blackboxes).
 
 ## Quick start — Component with both sim model and custom Verilog
@@ -26,8 +26,8 @@ a hand-written Verilog block (used by `to_verilog`).
 
 ```python
 from dataclasses import dataclass
-from spirehdl.spirehdl import Bool, Signal, UInt, Wire
-from spirehdl.spirehdl_module import Component
+from spire.expr import Bool, Signal, UInt, Wire
+from spire.component import Component
 
 
 class CustomAdder(Component):
@@ -64,7 +64,7 @@ class CustomAdder(Component):
 Compile and simulate:
 
 ```python
-from spirehdl.spirehdl_simulator import Simulator
+from spire.simulator import Simulator
 
 comp = CustomAdder()
 m    = comp.to_module(name="CustomAdder", with_clock=False, with_reset=False)
@@ -247,16 +247,16 @@ simulation, regardless of inputs."
 
 ## Real-world examples: the primitives library
 
-The `src/spirehdl/primitives/` package contains production-style uses of
+The `src/spire/primitives/` package contains production-style uses of
 the custom-with-sim pattern — both with non-trivial `elaborate()` reference
 models and Yosys-friendly `custom_verilog()` outputs:
 
-- [`MemoryPrimitive`](../src/spirehdl/primitives/primitive_memory.py) —
+- [`MemoryPrimitive`](../src/spire/primitives/primitive_memory.py) —
   array-of-registers RAM with optional registered read, reset arm, and
   init values. Supports composite element types via user-side
   `to_bits`/`from_bits` at the port boundary. Emits the standard Yosys-
   inferable `reg [W-1:0] mem[0:D-1];` idiom in `custom_verilog()`.
-- [`FIFOPrimitive`](../src/spirehdl/primitives/primitive_fifo.py) — standard
+- [`FIFOPrimitive`](../src/spire/primitives/primitive_fifo.py) — standard
   synchronous FIFO (push/pop/full/empty/count, registered head). Inlines
   its storage and pointer/count logic in a single `custom_verilog()`
   block.

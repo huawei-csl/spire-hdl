@@ -5,11 +5,11 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.optimize.fsm._cost_oracle import make_cost_fn, make_yosys_cost_fn
-from spirehdl.optimize.fsm._emit import restore_encoding
-from spirehdl.spirehdl import UInt, mux
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_state import Encoding, State, state
+from spire.optimize.fsm._cost_oracle import make_cost_fn, make_yosys_cost_fn
+from spire.optimize.fsm._emit import restore_encoding
+from spire.expr import UInt, mux
+from spire.component import Module
+from spire.state import Encoding, State, state
 
 
 class Op(State, encoding=Encoding.BINARY):

@@ -6,17 +6,17 @@ from typing import Callable, Dict, List, Tuple
 
 # --- your libs (adjust paths as needed) ---
 from aigverse import equivalence_checking, simulate, write_aiger
-from spirehdl.aig.aig_aigerverse import _get_aag_sym, file_to_lines, read_aag_into_aig, conv_aag_into_aig
-from spirehdl.helpers import run_vectors
-from spirehdl.spirehdl import UInt, Bool, reset_shared_cache
-from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_module import IOCollector
-from spirehdl.aig.aig_yosys import verilog_to_aag_via_yosys
-from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
-from spirehdl.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors  # generic EW,FW vectors/decoder
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spire.aig.aig_aigerverse import _get_aag_sym, file_to_lines, read_aag_into_aig, conv_aag_into_aig
+from spire.helpers import run_vectors
+from spire.expr import UInt, Bool, reset_shared_cache
+from spire.aiger import AigerExporter, AigerImporter
+from spire.component import Module
+from spire.simulator import Simulator
+from spire.component import IOCollector
+from spire.aig.aig_yosys import verilog_to_aag_via_yosys
+from spire.arithmetic.floating_point.fp_encoding import fp_decode
+from spire.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors  # generic EW,FW vectors/decoder
+from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
 
 # Pyosys
 
@@ -39,7 +39,7 @@ def write_temp_verilog(m: Module, top_name: str | None = None) -> str:
     return path
 
 
-def spirehdl_to_aig_via_exporter(m: Module):
+def spire_to_aig_via_exporter(m: Module):
     """SpireHDL → AAGER lines (ASCII) and AIG object (via read_aag_into_aig)."""
     aag_lines = AigerExporter(m).get_aag()
     # If you want an AIG object as well:
@@ -51,12 +51,12 @@ def spirehdl_to_aig_via_exporter(m: Module):
     return aag_lines, aig
 
 
-def roundtrip_aiger_back_to_spirehdl(aag_lines: List[str], *, name="Imported") -> Module:
+def roundtrip_aiger_back_to_spire(aag_lines: List[str], *, name="Imported") -> Module:
     """Import AAG (with symbols kept) back into SpireHDL."""
     # Keep symbol table (last lines); leave as-is if already present
     aag_sym = _get_aag_sym(aag_lines)
     aag_for_import = aag_lines[:-2] + aag_sym if aag_sym else aag_lines
-    return AigerImporter(aag_for_import).get_spirehdl_module(name)
+    return AigerImporter(aag_for_import).get_spire_module(name)
 
 
 # -----------------------------
@@ -272,10 +272,10 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
     run_vectors(m, vectors, decoder=decoder)
 
     # 2) SpireHDL → AIGER (exporter) → AIG
-    aag_lines, aig_exp = spirehdl_to_aig_via_exporter(m)
+    aag_lines, aig_exp = spire_to_aig_via_exporter(m)
 
     # optional agi to SpireHDL module
-    # m2 = roundtrip_aiger_back_to_spirehdl(aag_lines, name=m.name+"_exp")
+    # m2 = roundtrip_aiger_back_to_spire(aag_lines, name=m.name+"_exp")
 
     # 3) Verilog → Pyosys → AIGER → AIG
     vpath = write_temp_verilog(m, top_name=m.name)
@@ -289,9 +289,9 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
 
     # after you produced aag_path with yosys:
     aag_back_lines = file_to_lines(aag_path)
-    m_back_raw = AigerImporter(aag_back_lines).get_spirehdl_module("BackRaw")
+    m_back_raw = AigerImporter(aag_back_lines).get_spire_module("BackRaw")
     # exporter AIG from the raw imported module (no IOCollector yet)
-    aag_from_raw, aig_from_raw = spirehdl_to_aig_via_exporter(m_back_raw)
+    aag_from_raw, aig_from_raw = spire_to_aig_via_exporter(m_back_raw)
     # yosys AIG
     aig_yosys = read_aag_into_aig(aag_path)
 
@@ -315,8 +315,8 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
 
     # 5) AAG (with symbols) → SpireHDL
     aag_back = file_to_lines(aag_path)
-    m_back = AigerImporter(aag_back).get_spirehdl_module(m.name + "_back")
-    # m_back = roundtrip_aiger_back_to_spirehdl(aag_back, name=m.name + "_back")
+    m_back = AigerImporter(aag_back).get_spire_module(m.name + "_back")
+    # m_back = roundtrip_aiger_back_to_spire(aag_back, name=m.name + "_back")
 
     # 6) Regroup I/Os to match original port widths
     IOCollector().group(m_back, spec)

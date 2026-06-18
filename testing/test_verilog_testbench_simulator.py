@@ -2,9 +2,9 @@ import os
 from pathlib import Path
 import pytest
 
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_verilog_testbench import TestbenchGenSimulator
+from spire.expr import UInt
+from spire.component import Module
+from spire.verilog_testbench import TestbenchGenSimulator
 
 
 def build_accumulator():

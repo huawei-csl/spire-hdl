@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from spirehdl.spirehdl import (
+from spire.expr import (
     Bool,
     Register,
     Signal,
@@ -24,8 +24,8 @@ from spirehdl.spirehdl import (
     Wire,
     reset_shared_cache,
 )
-from spirehdl.spirehdl_module import Component, Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.component import Component, Module
+from spire.simulator import Simulator
 
 
 # ---------------------------------------------------------------------------

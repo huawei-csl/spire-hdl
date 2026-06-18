@@ -4,10 +4,10 @@ from dataclasses import dataclass
 import random
 from typing import Dict, Literal, Optional, Tuple, List
 import numpy as np
-from spirehdl.helpers import get_yosys_transistor_count, run_vectors
-from spirehdl.spirehdl_module import gen_spec
-from spirehdl.spirehdl import Bool, Concat, Const, Expr, SInt, Signal, UInt, mux, mux_if
-from spirehdl.spirehdl_module import Module
+from spire.helpers import get_yosys_transistor_count, run_vectors
+from spire.component import gen_spec
+from spire.expr import Bool, Concat, Const, Expr, SInt, Signal, UInt, mux, mux_if
+from spire.component import Module
 
 # abstract Component Class
 class Component(abc.ABC):
@@ -295,7 +295,7 @@ class MultiplierTestVectors:
         return spec, vecs, None
 
 
-def gen_spirehdl_module(class_instance: MultiplierCompressorTree) -> Module:
+def gen_spire_module(class_instance: MultiplierCompressorTree) -> Module:
     m = Module(f"Mul{class_instance.n_bits}_ct", with_clock=False, with_reset=False)
     for sig in class_instance.io.__dict__.values():
         if sig.kind == "input":
@@ -310,7 +310,7 @@ def main():
     n_bits = 16
     signed = False
     mult = MultiplierCompressorTree(a_w=n_bits, b_w=n_bits, signed_a=signed, signed_b=signed)
-    m = gen_spirehdl_module(mult)
+    m = gen_spire_module(mult)
     # get size in # t transistors
     print(m.to_verilog())
     

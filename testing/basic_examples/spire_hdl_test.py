@@ -1,5 +1,5 @@
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl import UInt
+from spire.component import Module
+from spire.expr import UInt
 
 m = Module("MulAddComb", with_clock=False, with_reset=False)
 a = m.input(UInt(16), "a")

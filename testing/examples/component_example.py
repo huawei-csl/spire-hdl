@@ -8,7 +8,7 @@ This example demonstrates:
 4. How to generate Verilog and simulate directly from a Component
 """
 
-from spirehdl import Component, IORecord, Input, Output, Bool, UInt, Simulator
+from spire import Component, IORecord, Input, Output, Bool, UInt, Simulator
 
 
 # Example 1: Simple Adder Component

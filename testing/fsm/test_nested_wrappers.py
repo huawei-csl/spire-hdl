@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.optimize.fsm._emit import restore_encoding
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_control_structures import case_, default, if_, else_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_state import (
+from spire.optimize.fsm._emit import restore_encoding
+from spire.expr import Bool, UInt
+from spire.control_structures import case_, default, if_, else_, switch_
+from spire.component import Module
+from spire.state import (
     Encoding, State, optimized_encoding, optimized_fsm, state,
 )
 
@@ -113,7 +113,7 @@ def test_nested_wrappers_case10_real_synth():
     on a specific cell count — just that the nested wrappers produce a valid
     synthesisable module and don't regress on the original. Cells after the
     pipeline must be <= cells before (i.e. optimisation is non-negative)."""
-    from spirehdl.optimize.fsm._cost_oracle import _measure
+    from spire.optimize.fsm._cost_oracle import _measure
 
     # Baseline: build without wrappers, synth, record cells.
     m_base = Module("case10_base", with_clock=True, with_reset=False)

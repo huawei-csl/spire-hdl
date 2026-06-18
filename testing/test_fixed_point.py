@@ -1,18 +1,18 @@
 from __future__ import annotations
-from spirehdl.composite.register import CompositeRegister
-from spirehdl.composite.fixed_point import ARITHQuant, FixedPoint, FixedPointType
-from spirehdl.spirehdl import HDLType, UInt, as_expr, fit_width
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.composite.register import CompositeRegister
+from spire.composite.fixed_point import ARITHQuant, FixedPoint, FixedPointType
+from spire.expr import HDLType, UInt, as_expr, fit_width
+from spire.component import Module
+from spire.simulator import Simulator
 
 
-from spirehdl.spirehdl import (
+from spire.expr import (
     Expr,
     Const,
     reset_shared_cache,
 )
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.component import Module
+from spire.simulator import Simulator
 
 
 def test_sim_composite_register():

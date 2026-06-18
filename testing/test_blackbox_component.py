@@ -11,14 +11,14 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from spirehdl.spirehdl import (
+from spire.expr import (
     Signal,
     UInt,
     Wire,
     reset_shared_cache,
 )
-from spirehdl.spirehdl_module import Component
-from spirehdl.spirehdl_simulator import Simulator
+from spire.component import Component
+from spire.simulator import Simulator
 
 
 # ---------------------------------------------------------------------------

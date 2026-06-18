@@ -3,14 +3,14 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.optimize.fsm._emit import restore_encoding
-from spirehdl.optimize.fsm._table import (
+from spire.optimize.fsm._emit import restore_encoding
+from spire.optimize.fsm._table import (
     MAX_INPUT_COMBINATIONS, TooLargeForExhaustiveExtraction, extract_transition_table,
 )
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_control_structures import case_, default, if_, else_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_state import Encoding, State, state
+from spire.expr import Bool, UInt
+from spire.control_structures import case_, default, if_, else_, switch_
+from spire.component import Module
+from spire.state import Encoding, State, state
 
 
 # ---------------------------------------------------------------------------

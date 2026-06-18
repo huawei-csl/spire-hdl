@@ -1,6 +1,6 @@
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.expr import UInt
+from spire.component import Module
+from spire.simulator import Simulator
 
 # 4-bit accumulator: acc <<= acc + din
 m = Module("Accu", with_clock=True, with_reset=True)

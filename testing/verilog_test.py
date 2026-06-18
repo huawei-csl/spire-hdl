@@ -1,19 +1,19 @@
 import tempfile
 
 from aigverse import equivalence_checking, read_verilog_into_aig
-from spirehdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag, file_to_lines, read_aag_into_aig
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import run_vectors_aby
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
-from spirehdl.spirehdl_module import IOCollector
+from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag, file_to_lines, read_aag_into_aig
+from spire.expr import UInt
+from spire.aiger import AigerExporter, AigerImporter
+from spire.arithmetic.floating_point.spire_hdl_float_mult import run_vectors_aby
+from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spire.component import IOCollector
 
 # import pyosys as ys, tempfile, os
 import os
 from pyosys import libyosys as ys
 
-from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
-from spirehdl.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors
+from spire.arithmetic.floating_point.fp_encoding import fp_decode
+from spire.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors
 
 
 
@@ -45,7 +45,7 @@ def main():
         aig = conv_aag_into_aig(aag)
 
         aag_sym = _get_aag_sym(aag)
-        m2 = AigerImporter(aag[:-2]+aag_sym).get_spirehdl_module()
+        m2 = AigerImporter(aag[:-2]+aag_sym).get_spire_module()
 
         aag2 = AigerExporter(m2).get_aag()
         aig2 = conv_aag_into_aig(aag2)
@@ -186,9 +186,9 @@ def main():
     aag_back = file_to_lines(aag_path)
     aig_back = read_aag_into_aig(aag_path)
 
-    m_back = AigerImporter(aag_back).get_spirehdl_module()
+    m_back = AigerImporter(aag_back).get_spire_module()
     collector = IOCollector()
-    spirehdl_collected = collector.group(
+    spire_collected = collector.group(
         m_back,
         {
             "a": UInt(bits_tot),

@@ -15,17 +15,17 @@ from dataclasses import dataclass
 
 import pytest
 
-from spirehdl.spirehdl import (
+from spire.expr import (
     Bool,
     Signal,
     UInt,
     Wire,
     reset_shared_cache,
 )
-from spirehdl.spirehdl_module import Component
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.primitives import FIFOPrimitive
-from spirehdl.composite.record import CompositeRecord
+from spire.component import Component
+from spire.simulator import Simulator
+from spire.primitives import FIFOPrimitive
+from spire.composite.record import CompositeRecord
 
 
 # ---------------------------------------------------------------------------

@@ -1,10 +1,10 @@
 from collections import defaultdict
 from typing import DefaultDict, List
 
-from spirehdl.helpers import get_yosys_transistor_count, run_vectors
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, MultiplierTestVectorsInt, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO
-from spirehdl.spirehdl import Bool, Const, Expr, SInt, fit_type
-from spirehdl.spirehdl_module import Module
+from spire.helpers import get_yosys_transistor_count, run_vectors
+from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, MultiplierTestVectorsInt, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO
+from spire.expr import Bool, Const, Expr, SInt, fit_type
+from spire.component import Module
 
 class BoothOptimizedPartialProductGenerator(PartialProductGeneratorBase):
     supported_signatures = (
@@ -165,7 +165,7 @@ class ConfiguredMultiplier(StageBasedMultiplierBasic):
         )
 
 
-def gen_spirehdl_module(mult: ConfiguredMultiplier) -> Module:
+def gen_spire_module(mult: ConfiguredMultiplier) -> Module:
     return mult.to_module(f"Mul{mult.config.a_width}_ct_booth_opt")
 
 
@@ -182,7 +182,7 @@ def main() -> None:
         optim_type="area",
     )
 
-    module = gen_spirehdl_module(mult)
+    module = gen_spire_module(mult)
     transistor_count = get_yosys_transistor_count(module, n_iter_optimizations=10)
     print(f"Yosys-reported transistor count: {transistor_count}")
 

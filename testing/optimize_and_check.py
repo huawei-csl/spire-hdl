@@ -1,15 +1,15 @@
 from aigverse import Aig, DepthAig
-from spirehdl.spirehdl import UInt
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul, build_fp_mul, run_vectors_aby
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
-from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter, export_module_to_aiger
-from spirehdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag, read_aag_into_aig
+from spire.expr import UInt
+from spire.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul, build_fp_mul, run_vectors_aby
+from spire.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spire.aiger import AigerExporter, AigerImporter, export_module_to_aiger
+from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag, read_aag_into_aig
 
 from aigverse import aig_resubstitution, sop_refactoring, aig_cut_rewriting, balancing
 
-from spirehdl.spirehdl_module import IOCollector
-from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
-from spirehdl.arithmetic.floating_point.fp_mul_testvectors import build_f16_subnormal_ext_vectors, build_f16_subnormal_vectors, build_f16_vectors
+from spire.component import IOCollector
+from spire.arithmetic.floating_point.fp_encoding import fp_decode
+from spire.arithmetic.floating_point.fp_mul_testvectors import build_f16_subnormal_ext_vectors, build_f16_subnormal_vectors, build_f16_vectors
 
 
 def get_size_mult(ew: int, subnormals=False) -> int:
@@ -22,10 +22,10 @@ def get_size_mult(ew: int, subnormals=False) -> int:
 
     aag = AigerExporter(m).get_aag()
     aag_sym = _get_aag_sym(aag)
-    m_right_back = AigerImporter(aag[:-2]+aag_sym).get_spirehdl_module()
+    m_right_back = AigerImporter(aag[:-2]+aag_sym).get_spire_module()
 
     collector = IOCollector()
-    spirehdl_collected = collector.group(
+    spire_collected = collector.group(
         m_right_back,
         {
             "a": UInt(16),
@@ -61,16 +61,16 @@ def get_size_mult(ew: int, subnormals=False) -> int:
 
     aag = conv_aig_into_aag(aig)
 
-    spirehdl = AigerImporter(aag[:-2]+aag_sym).get_spirehdl_module()
+    spire = AigerImporter(aag[:-2]+aag_sym).get_spire_module()
 
     collector = IOCollector()
-    spirehdl_collected = collector.group(spirehdl, {
+    spire_collected = collector.group(spire, {
         "a": UInt(16),
         "b": UInt(16),
         "y": UInt(16),
     })
 
-    aag2 = AigerExporter(spirehdl).get_aag()
+    aag2 = AigerExporter(spire).get_aag()
     aig2 = conv_aag_into_aig(aag2, Aig())
 
     from aigverse import equivalence_checking
@@ -79,9 +79,9 @@ def get_size_mult(ew: int, subnormals=False) -> int:
     run_vectors_aby(m, build_f16_vectors(), label="float16 default cases", decoder=lambda b: fp_decode(b, ew, fw))
     run_vectors_aby(m, build_f16_subnormal_vectors(), label="float16 subnormal cases", decoder=lambda b: fp_decode(b, ew, fw))
 
-    run_vectors_aby(spirehdl, build_f16_vectors(), label="float16 default cases", decoder=lambda b: fp_decode(b, ew, fw))
-    run_vectors_aby(spirehdl, build_f16_subnormal_vectors(), label="float16 subnormal cases", decoder=lambda b: fp_decode(b, ew, fw))
-    run_vectors_aby(spirehdl, build_f16_subnormal_ext_vectors(), label="float16 subnormal ext cases", decoder=lambda b: fp_decode(b, ew, fw))
+    run_vectors_aby(spire, build_f16_vectors(), label="float16 default cases", decoder=lambda b: fp_decode(b, ew, fw))
+    run_vectors_aby(spire, build_f16_subnormal_vectors(), label="float16 subnormal cases", decoder=lambda b: fp_decode(b, ew, fw))
+    run_vectors_aby(spire, build_f16_subnormal_ext_vectors(), label="float16 subnormal ext cases", decoder=lambda b: fp_decode(b, ew, fw))
 
     return aig.size(), DepthAig(aig).num_levels()
 

@@ -1,7 +1,7 @@
 """Round-trip tests for ``build_adder`` / ``build_multiplier`` through the
 AIG bit-level simulator.
 
-These tests were added after a bug where ``spirehdl_aiger.visit_op2`` did
+These tests were added after a bug where ``spire_aiger.visit_op2`` did
 not sign-extend operands for ``+``/``-`` when the result width exceeded
 the operand widths. The existing adder/multiplier tests exercised only the
 SpireHDL ``Simulator`` (which carries HDLType metadata through the graph),
@@ -23,26 +23,26 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.arithmetic.int_arithmetic_config import (
+from spire.arithmetic.int_arithmetic_config import (
     AdderConfig,
     MultiplierConfig,
     build_adder,
     build_multiplier,
 )
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     PPAOption,
     PPGOption,
     MultiplierOption,
     TwoInputAritEncodings,
 )
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
     StageBasedMultiplierIO,
 )
-from spirehdl.helpers import refactor_module_to_aig, run_vectors
-from spirehdl.spirehdl import Signal, SInt, UInt, reset_shared_cache
-from spirehdl.spirehdl_module import Component
+from spire.helpers import refactor_module_to_aig, run_vectors
+from spire.expr import Signal, SInt, UInt, reset_shared_cache
+from spire.component import Component
 
 
 N_BITS = 8
@@ -242,7 +242,7 @@ def _mult_cfg(use_operator: bool, enc: Encoding) -> MultiplierConfig:
 
 @pytest.mark.parametrize("use_operator", USE_OPERATOR, ids=lambda v: "operator" if v else "structural")
 @pytest.mark.parametrize("enc", ENCODINGS, ids=lambda e: e.name)
-def test_build_adder_spirehdl_and_aig(use_operator: bool, enc: Encoding):
+def test_build_adder_spire_and_aig(use_operator: bool, enc: Encoding):
     """``build_adder`` must produce correct bits in both SpireHDL and AIG sims."""
     reset_shared_cache()
     signed = enc == Encoding.twos_complement
@@ -265,7 +265,7 @@ def test_build_adder_spirehdl_and_aig(use_operator: bool, enc: Encoding):
 
 @pytest.mark.parametrize("use_operator", USE_OPERATOR, ids=lambda v: "operator" if v else "structural")
 @pytest.mark.parametrize("enc", ENCODINGS, ids=lambda e: e.name)
-def test_build_multiplier_spirehdl_and_aig(use_operator: bool, enc: Encoding):
+def test_build_multiplier_spire_and_aig(use_operator: bool, enc: Encoding):
     """``build_multiplier`` must produce correct bits in both sim paths."""
     reset_shared_cache()
     signed = enc == Encoding.twos_complement
