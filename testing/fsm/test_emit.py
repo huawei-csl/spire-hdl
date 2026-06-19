@@ -5,7 +5,7 @@ import pytest
 
 from spire.optimize.fsm._emit import apply_encoding, restore_encoding, snapshot_encoding
 from spire.expr import Bool, mux
-from spire.component import Module
+from spire.component import Netlist
 from spire.state import Encoding, State, state
 
 
@@ -42,7 +42,7 @@ def test_apply_encoding_updates_state_class_values_dict():
 def test_apply_encoding_propagates_to_existing_expression_tree():
     """The mutation should be visible to Exprs that referenced the Const
     objects *before* apply_encoding was called."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     sel = m.input(Bool(), "sel")
     out = m.output(S.typ, "out")
     # Capture the Expr now; verify post-apply that the Const values changed.

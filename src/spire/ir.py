@@ -1,10 +1,10 @@
 """Spire internal IR.
 
-`Netlist` (formerly `Module`) is the flat, lowered netlist that every backend consumes —
+`Netlist` is the flat, lowered netlist that every backend consumes —
 the post-elaboration port+signal list. It is one layer below `Component` (the user-facing
-authoring abstraction in spire_module): the dependency is strictly one-way,
+authoring abstraction in component): the dependency is strictly one-way,
 `component -> ir -> spire`. Power users may import `Netlist` from here; the docs do not
-lead with it. `Module` / `IOCollector` remain available as deprecated aliases.
+lead with it. `IOCollector` remains available as a deprecated alias.
 """
 from __future__ import annotations
 
@@ -339,13 +339,13 @@ class Netlist:
 
 
 class _SignalCollector(ExprVisitor[None]):
-    """Walk a design and rebuild `Module._signals`.
+    """Walk a design and rebuild `Netlist._signals`.
 
     Side-effects only: each visited Signal is uniquified and appended to `_signals` (once). Traversal goes through
     `expr_children`, which knows about Memory port-wires and the port-wire back-edge to its parent.
     """
 
-    def __init__(self, module: "Module") -> None:
+    def __init__(self, module: "Netlist") -> None:
         super().__init__()
         self.m = module
         self.port_ids = {id(p) for p in module._ports}
@@ -450,15 +450,15 @@ class _PortGrouper:
     Group scattered 1-bit ports like a[0], a[1], ..., a[N-1] into a wide UInt port 'a' of width N.
     Mutates the module in-place:
       - The old bit-ports are converted to internal 'wire's.
-      - New composited ports are created and connected.
+      - New aggregated ports are created and connected.
     API:
         IOCollector().group(m, {"a": UInt(16), "b": UInt(16), "y": UInt(16)})
     """
 
-    def group(self, m: Module, spec: Dict[str, Any]) -> Dict[str, Any]:
+    def group(self, m: Netlist, spec: Dict[str, Any]) -> Dict[str, Any]:
         """
         spec: { base_name -> Spire type (e.g., UInt(16)) }
-        Returns a mapping { base_name -> composited Signal } for convenience.
+        Returns a mapping { base_name -> aggregated Signal } for convenience.
         """
         out: Dict[str, Any] = {}
         for base, typ in spec.items():
@@ -487,7 +487,7 @@ class _PortGrouper:
 
     # ---------------- internals ----------------
 
-    def _find_bit_ports(self, m: Module, base: str, width: int):
+    def _find_bit_ports(self, m: Netlist, base: str, width: int):
         """Return ports [bit0, bit1, ..., bit{width-1}] by exact bracketed name."""
         # Build precise name map: "a[0]" -> Signal
         name_to_sig = {p.name: p for p in m._ports}
@@ -508,7 +508,7 @@ class _PortGrouper:
             bits.append(s)
         return bits
 
-    def _demote_port_to_wire(self, m: Module, s):
+    def _demote_port_to_wire(self, m: Netlist, s):
         """Turn an input/output port into an internal wire (keeps drivers/uses intact)."""
         # if s in m._ports:
         #     m._ports.remove(s)
@@ -516,7 +516,7 @@ class _PortGrouper:
         m._ports[:] = [p for p in m._ports if p is not s]
         s.kind = "wire"
 
-    def _create_agg_input_and_wire_bits(self, m: Module, base: str, typ: Any, bits: List[Any]):
+    def _create_agg_input_and_wire_bits(self, m: Netlist, base: str, typ: Any, bits: List[Any]):
         """Create 'input <typ> base' and drive each former port-bit (now wire) from base[i]."""
         # Name clash?
         if any(p.name == base for p in m._ports):
@@ -528,7 +528,7 @@ class _PortGrouper:
             b <<= agg[i]  # drive internal bit-wire from wide input
         return agg
 
-    def _create_agg_output_from_bits(self, m: Module, base: str, typ: Any, bits: List[Any]):
+    def _create_agg_output_from_bits(self, m: Netlist, base: str, typ: Any, bits: List[Any]):
         """Create 'output <typ> base' as concat of LSB..MSB of the (now internal) bit signals."""
         if any(p.name == base for p in m._ports):
             raise ValueError(f"Port '{base}' already exists.")
@@ -550,6 +550,5 @@ class _PortGrouper:
 # ---------------------------------------------------------------------------
 # Deprecated aliases (kept for one release; migrate to the new names).
 # ---------------------------------------------------------------------------
-Module = Netlist            # `Module` was renamed to `Netlist`
 IOCollector = _PortGrouper  # `IOCollector` was renamed to `_PortGrouper`
 Netlist.module_analyze = Netlist.analyze  # `module_analyze` was renamed to `analyze`

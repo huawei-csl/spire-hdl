@@ -115,13 +115,13 @@ multiplier and the adder).
 
 ### Lower-level function
 
-`abc_optimize(module, abc_script=..., prep_script=...)` takes a `Module` or `Component`
+`abc_optimize(design, abc_script=..., prep_script=...)` takes a `Component` or `Netlist`
 and returns optimized AAG lines directly, without the decorator/caching machinery.
 
 ```python
 from spire.optimize import abc_optimize, ABC_RECIPES
 
-aag_lines = abc_optimize(my_module, abc_script=ABC_RECIPES["area"])
+aag_lines = abc_optimize(my_component, abc_script=ABC_RECIPES["area"])
 ```
 
 ### Iterative optimization (nested + cached)
@@ -217,21 +217,23 @@ Reads and writes are independently gated by `cache_read` and `cache_write`.  Eac
 For local reuse of a small arithmetic block, the `@arithmetic_optimized` decorator offers the same one-liner ergonomics as `@abc_optimized` but without going through an external synthesizer — the body of the decorated function is wrapped into a `Component`, `replace_arithmetic_ops` is run on it, and the optimized sub-graph is spliced back into the caller's design:
 
 ```python
-from spire.expr import UInt
-from spire.component import Module
+from spire import Component, IORecord, Input, Output, UInt
 from spire.optimize import arithmetic_optimized
 
 @arithmetic_optimized(objective="adp")
 def opt_mac(a, b, c):
     return a * b + c
 
-m = Module("Top", with_clock=False, with_reset=False)
-a = m.input(UInt(8), "a")
-b = m.input(UInt(8), "b")
-c = m.input(UInt(16), "c")
-y = m.output(UInt(17), "y")
-y <<= opt_mac(a, b, c)    # MAC fusion happens inside the decorator
-print(m.to_verilog())
+class Top(Component):
+    def __init__(self):
+        self.io = IORecord(a=Input(UInt(8)), b=Input(UInt(8)), c=Input(UInt(16)), y=Output(UInt(17)))
+        self.elaborate()
+
+    def elaborate(self):
+        io = self.io
+        io.y <<= opt_mac(io.a, io.b, io.c)    # MAC fusion happens inside the decorator
+
+print(Top().to_verilog(name="Top"))
 ```
 
 MAC / inner-product fusion, bit-width-aware configuration lookup, and `==`/`!=` lowering all work the same as with `replace_arithmetic_ops` on a hand-built component, because the decorator just calls `replace_arithmetic_ops` under the hood.

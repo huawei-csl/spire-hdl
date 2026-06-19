@@ -23,7 +23,7 @@ from spire.expr import (
     fit_width,
     mux,
 )
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 from spire.io_record import IORecord, Input, Output
 
 from spire.arithmetic.floating_point.float_mult import build_fp_mul
@@ -338,8 +338,8 @@ class HiF8MulViaFP8(Component):
         self.io.y <<= dec_y
 
 
-def build_hif8_mul_via_fp8_module(name: str = "HiF8MulViaFP8") -> Module:
-    """Return a Module wrapper around :class:`HiF8MulViaFP8`."""
+def build_hif8_mul_via_fp8_module(name: str = "HiF8MulViaFP8") -> Netlist:
+    """Return a Netlist wrapper around :class:`HiF8MulViaFP8`."""
 
     comp = HiF8MulViaFP8()
     return comp.to_module(name)

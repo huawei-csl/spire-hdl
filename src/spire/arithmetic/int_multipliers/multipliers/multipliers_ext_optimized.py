@@ -23,7 +23,7 @@ from spire.aiger import AigerImporter
 from spire.component import Component, ImportedComponent
 from spire.io_record import IORecord, Input, Output
 from spire.expr import Bool, Concat, Const, Expr, Signal, SInt, UInt, mux, mux_if
-from spire.component import Module
+from spire.component import Netlist
 
 from spire.aig.aig_to_aag import aig_file_to_aag_lines
 from spire.aig.aig_yosys import verilog_to_aag_lines_via_yosys, verilog_to_aag_via_yosys

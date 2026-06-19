@@ -8,7 +8,7 @@ import pytest
 from spire.optimize.fsm._cost_oracle import make_cost_fn, make_yosys_cost_fn
 from spire.optimize.fsm._emit import restore_encoding
 from spire.expr import UInt, mux
-from spire.component import Module
+from spire.component import Netlist
 from spire.state import Encoding, State, state
 
 
@@ -22,8 +22,8 @@ def _restore_op():
     restore_encoding(Op, {"ADD": 0, "SUB": 1, "AND": 2, "OR": 3})
 
 
-def _build_alu_module() -> Module:
-    m = Module("alu_op", with_clock=False, with_reset=False)
+def _build_alu_module() -> Netlist:
+    m = Netlist("alu_op", with_clock=False, with_reset=False)
     op = m.input(Op.typ, "op")
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")

@@ -5,7 +5,7 @@ import pytest
 
 from spire.optimize.fsm._evaluator import eval_with
 from spire.expr import Bool, Const, UInt, cat, mux
-from spire.component import Module
+from spire.component import Netlist
 
 
 def test_const_returns_value():
@@ -22,7 +22,7 @@ def test_const_width_masked():
 
 
 def test_op2_add_with_signal_binding():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     expr = a + b
@@ -30,7 +30,7 @@ def test_op2_add_with_signal_binding():
 
 
 def test_op2_add_wraps_at_width():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     expr = a + b
@@ -40,7 +40,7 @@ def test_op2_add_wraps_at_width():
 
 
 def test_op2_logical_ops():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(4), "a")
     b = m.input(UInt(4), "b")
     assert eval_with(a & b, [(a, 0b1100), (b, 0b1010)]) == 0b1000
@@ -49,7 +49,7 @@ def test_op2_logical_ops():
 
 
 def test_op2_compare():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     assert eval_with(a == b, [(a, 5), (b, 5)]) == 1
@@ -59,7 +59,7 @@ def test_op2_compare():
 
 
 def test_ternary_picks_branch():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     sel = m.input(Bool(), "sel")
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
@@ -70,7 +70,7 @@ def test_ternary_picks_branch():
 
 def test_signal_with_driver_is_followed():
     """If a Signal isn't in env but has a driver, the evaluator follows it."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     w = m.wire(UInt(8), "w")
     w <<= a + 1
@@ -79,7 +79,7 @@ def test_signal_with_driver_is_followed():
 
 
 def test_unbound_signal_raises():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     with pytest.raises(ValueError, match="no value in env"):
         eval_with(a, [])
@@ -87,7 +87,7 @@ def test_unbound_signal_raises():
 
 def test_nested_mux_chain():
     """A switch_/case_-style nested mux over a 4-state selector."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     sel = m.input(UInt(2), "sel")
     expr = mux(sel == 0, 10,
            mux(sel == 1, 20,
@@ -100,7 +100,7 @@ def test_nested_mux_chain():
 
 def test_concat_lsb_first():
     """cat(a, b) places a in lower bits, b in upper."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(2), "a")
     b = m.input(UInt(2), "b")
     expr = cat(a, b)                          # 4-bit, a is low

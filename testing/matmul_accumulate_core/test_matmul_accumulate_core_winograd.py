@@ -18,7 +18,7 @@ from spire.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
 from spire.cores.matmul_accumulate.matmul_accumulate_core_winograd import AdderConfig, MMAcCfg, MMAcDims, MMAcWidths, MatmulAccumulateComponent, MultiplierConfig, build_matmul_accumulate, max_y_width_unsigned
 from spire.helpers import get_yosys_metrics
 from spire.expr import Expr, SInt, Signal, UInt
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 from spire.simulator import Simulator
 
 

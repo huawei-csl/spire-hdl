@@ -8,11 +8,11 @@ from spire.expr import Const, UInt, mux
 
 from spire.aiger import AigerExporter, AigerImporter
 from spire.simulator import Simulator
-from spire.component import Module
+from spire.component import Netlist
 from spire.component import IOCollector
 
 
-def build_round_probe(FW: int) -> Module:
+def build_round_probe(FW: int) -> Netlist:
     """
     Build a tiny module that computes:
       sig_shiftN = sig_pre >> shift_amt
@@ -30,7 +30,7 @@ def build_round_probe(FW: int) -> Module:
     W = FW + 1
     SAW = max(1, ceil(log2(FW + 2)))  # need to represent 0..FW+1
 
-    m = Module(f"RoundProbe_F{FW}", with_clock=False, with_reset=False)
+    m = Netlist(f"RoundProbe_F{FW}", with_clock=False, with_reset=False)
     sig_pre = m.input(UInt(W), "sig_pre")
     sh = m.input(UInt(SAW), "sh")
 

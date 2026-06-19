@@ -1,27 +1,21 @@
-from spire.component import Module
-from spire.expr import Bool, UInt, SInt, mux, cat
+from spire import Component, IORecord, Input, Output, Bool, UInt, SInt
+from spire.expr import mux, cat
 
-# declare Moudule
-m = Module("LogicDemo", with_clock=False, with_reset=False)
 
-# declare inputs
-x = m.input(UInt(8), "x")
-y = m.input(UInt(8), "y")
-sg = m.input(SInt(8), "sg")
+class LogicDemo(Component):
+    def __init__(self):
+        self.io = IORecord(
+            x=Input(UInt(8)), y=Input(UInt(8)), sg=Input(SInt(8)), f=Input(Bool()),
+            z=Output(UInt(9)), eq=Output(Bool()), hi=Output(UInt(4)), w=Output(UInt(8)),
+        )
+        self.elaborate()
 
-# declare outputs
-f = m.input(Bool(), "f")
-z = m.output(UInt(9), "z")  # 8+8 -> 9 bits
-eq = m.output(Bool(), "eq")
-hi = m.output(UInt(4), "hi")
+    def elaborate(self):
+        io = self.io
+        io.z  <<= io.x + io.y                 # 8+8 -> 9 bits, auto-fit/truncate handled
+        io.eq <<= io.x == io.y                # Bool
+        io.hi <<= cat(io.y[6:8], io.x[6:8])   # concat 2+2 = 4 bits
+        io.w  <<= mux(io.f, io.x & io.y, io.x | io.y)   # mux on Bool
 
-sum_ = x + y  # sum is 9-bit
-z <<= sum_  # auto-fit/truncate handled
-eq <<= x == y  # Bool
-hi <<= cat(y[6:8], x[6:8])  # concat 2+2 = 4 bits
 
-# Mux on Bool
-w = m.output(UInt(8), "w")
-w <<= mux(f, x & y, x | y)
-
-print(m.to_verilog())
+print(LogicDemo().to_verilog(name="LogicDemo"))

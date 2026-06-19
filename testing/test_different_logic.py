@@ -10,7 +10,7 @@ from spire.aig.aig_aigerverse import _get_aag_sym, file_to_lines, read_aag_into_
 from spire.helpers import run_vectors
 from spire.expr import UInt, Bool, reset_shared_cache
 from spire.aiger import AigerExporter, AigerImporter
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 from spire.component import IOCollector
 from spire.aig.aig_yosys import verilog_to_aag_via_yosys
@@ -25,7 +25,7 @@ from spire.arithmetic.floating_point.float_mult_sn import build_fp_mul_sn
 # -----------------------------
 
 
-def write_temp_verilog(m: Module, top_name: str | None = None) -> str:
+def write_temp_verilog(m: Netlist, top_name: str | None = None) -> str:
     """Write module Verilog to a temporary file and return the path."""
     if top_name and m.name != top_name:
         # rename for convenience
@@ -39,7 +39,7 @@ def write_temp_verilog(m: Module, top_name: str | None = None) -> str:
     return path
 
 
-def spire_to_aig_via_exporter(m: Module):
+def spire_to_aig_via_exporter(m: Netlist):
     """Spire → AAGER lines (ASCII) and AIG object (via read_aag_into_aig)."""
     aag_lines = AigerExporter(m).get_aag()
     # If you want an AIG object as well:
@@ -51,7 +51,7 @@ def spire_to_aig_via_exporter(m: Module):
     return aag_lines, aig
 
 
-def roundtrip_aiger_back_to_spire(aag_lines: List[str], *, name="Imported") -> Module:
+def roundtrip_aiger_back_to_spire(aag_lines: List[str], *, name="Imported") -> Netlist:
     """Import AAG (with symbols kept) back into Spire."""
     # Keep symbol table (last lines); leave as-is if already present
     aag_sym = _get_aag_sym(aag_lines)
@@ -64,9 +64,9 @@ def roundtrip_aiger_back_to_spire(aag_lines: List[str], *, name="Imported") -> M
 # -----------------------------
 
 
-def build_logic3() -> Tuple[Module, Dict[str, UInt]]:
+def build_logic3() -> Tuple[Netlist, Dict[str, UInt]]:
     """y = x0 & (x1 | x2)"""
-    m = Module("Logic3", with_clock=False, with_reset=False)
+    m = Netlist("Logic3", with_clock=False, with_reset=False)
     x0 = m.input(Bool(), "x0")
     x1 = m.input(Bool(), "x1")
     x2 = m.input(Bool(), "x2")
@@ -82,8 +82,8 @@ def build_logic3() -> Tuple[Module, Dict[str, UInt]]:
     return m, spec, vecs
 
 
-def build_adder(W: int = 8) -> Tuple[Module, Dict[str, UInt], List]:
-    m = Module(f"Add{W}", with_clock=False, with_reset=False)
+def build_adder(W: int = 8) -> Tuple[Netlist, Dict[str, UInt], List]:
+    m = Netlist(f"Add{W}", with_clock=False, with_reset=False)
     a = m.input(UInt(W), "a")
     b = m.input(UInt(W), "b")
     y = m.output(UInt(W + 1), "y")
@@ -264,7 +264,7 @@ def permute_aag_lines_by_pi_order(
 # -----------------------------
 
 
-def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=None, equivalence_check=True) -> None:
+def run_test_one_module(m: Netlist, spec: Dict[str, UInt], vectors, *, decoder=None, equivalence_check=True) -> None:
     print(f"\n=== {m.name} ===")
 
     # 1) Original sim
@@ -326,7 +326,7 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
     run_vectors(m_back, vectors, decoder=decoder)
 
 
-def gen_m_case(i: int) -> Tuple[Module, Dict[str, UInt], List, Callable | None]:
+def gen_m_case(i: int) -> Tuple[Netlist, Dict[str, UInt], List, Callable | None]:
     reset_shared_cache()
     if i == 0:
         return build_logic3() + (None,)

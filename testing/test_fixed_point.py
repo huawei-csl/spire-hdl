@@ -2,7 +2,7 @@ from __future__ import annotations
 from spire.composite.register import CompositeRegister
 from spire.composite.fixed_point import ARITHQuant, FixedPoint, FixedPointType
 from spire.expr import HDLType, UInt, as_expr, fit_width
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 
 
@@ -11,7 +11,7 @@ from spire.expr import (
     Const,
     reset_shared_cache,
 )
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 
 
@@ -19,7 +19,7 @@ def test_sim_composite_register():
     # ---------------------------------------------
     # Build module
     # ---------------------------------------------
-    m = Module("AggRegDemo", with_clock=True, with_reset=False)
+    m = Netlist("AggRegDemo", with_clock=True, with_reset=False)
 
     # Integer input (8-bit unsigned)
     x = m.input(UInt(8), "x")
@@ -36,7 +36,7 @@ def test_sim_composite_register():
     )
 
     # Ensure the underlying reg is visible to the module/simulator
-    # (until CompositeRegister integrates with Module more tightly)
+    # (until CompositeRegister integrates with Netlist more tightly)
     m._signals.append(acc.bits)
 
     # Structured view of accumulator register
@@ -103,7 +103,7 @@ def test_sim_composite_register():
 
 # Small helper: evaluate an Expr to an integer using the simulator
 def _eval_expr(e: Expr) -> int:
-    m = Module("FPTest", with_clock=False, with_reset=False)
+    m = Netlist("FPTest", with_clock=False, with_reset=False)
     sim = Simulator(m)
     return sim.peek(e)
 

@@ -15,29 +15,31 @@ Verilator or Icarus.
 trace is complete, write out the DUT and a testbench that replays it:
 
 ```python
-from spire.component import Module
-from spire.expr import UInt
+from spire import Component, IORecord, Input, Output, UInt
 from spire.verilog_testbench import TestbenchGenSimulator
 
-m = Module("Add8", with_clock=False, with_reset=False)
-a = m.input(UInt(8), "a")
-b = m.input(UInt(8), "b")
-y = m.output(UInt(9), "y")
-y <<= a + b
+class Add8(Component):
+    def __init__(self):
+        self.io = IORecord(a=Input(UInt(8)), b=Input(UInt(8)), y=Output(UInt(9)))
+        self.elaborate()
 
-tb = TestbenchGenSimulator(m)
+    def elaborate(self):
+        self.io.y <<= self.io.a + self.io.b
+
+dut = Add8()
+tb = TestbenchGenSimulator(dut)              # accepts a Component, just like Simulator
 for av, bv in [(1, 2), (100, 50), (255, 1)]:
     tb.set("a", av).set("b", bv).eval()      # same calls as Simulator
     print(tb.get("y"))                        # 3, 150, 256 — live simulation output
 
-m.to_verilog_file("add8.v")                  # the DUT
+dut.to_verilog_file("add8.v")                # the DUT
 tb.to_testbench_file("add8_tb.v", tb_module_name="Add8_tb")
 ```
 
 Evaluation is delegated to a real Python `Simulator`, so the `tb` object is also a
 live simulator — `tb.get(...)` / `tb.peek_outputs()` return current values as you
 drive it. One object both exercises the design and emits the testbench; you don't
-need a separate `Simulator(m)`.
+need a separate `Simulator(dut)`.
 
 The emitted `add8_tb.v` instantiates the DUT, applies each recorded stimulus, and
 checks the outputs the Python simulator produced, finishing with `$finish`. For
@@ -60,13 +62,13 @@ vectors = [
     ("255+1",  {"a": 255, "b": 1},  {"y": 256}),
 ]
 
-tb = TestbenchGenSimulator(m)
+tb = TestbenchGenSimulator(dut)
 run_vectors_on_simulator(tb, vectors, test_name="Add8")   # drives + checks, and records
 tb.to_testbench_file("add8_tb.v", tb_module_name="Add8_tb")
 ```
 
-It works on any `SimulatorBase`: pass a plain `Simulator(m)` to just verify, or a
-`TestbenchGenSimulator(m)` (as here) to verify *and* record. The arithmetic
+It works on any `SimulatorBase`: pass a plain `Simulator(dut)` to just verify, or a
+`TestbenchGenSimulator(dut)` (as here) to verify *and* record. The arithmetic
 generator relies on exactly this interchangeability — see `_apply_actions` in
 [`arithmetic_generator.py`](../src/spire/arithmetic/arithmetic_generator.py),
 which picks `TestbenchGenSimulator(module)` when a testbench output is requested

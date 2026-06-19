@@ -1,10 +1,10 @@
 """Cost oracle for encoding-search candidates.
 
-Given a Module, a State subclass, and an objective metric, returns a callable ``cost_fn(assignment)`` that:
+Given a Netlist, a State subclass, and an objective metric, returns a callable ``cost_fn(assignment)`` that:
 
 1. snapshots the current State encoding,
 2. applies ``assignment`` via ``apply_encoding``,
-3. measures the chosen objective on the in-memory ``Module`` via in-process pyosys (cells/wires/transistors) or
+3. measures the chosen objective on the in-memory ``Netlist`` via in-process pyosys (cells/wires/transistors) or
    aigverse (aig_gates/aig_depth),
 4. restores the original encoding,
 5. returns the cost as a ``float`` (``inf`` on any failure so the search rejects).
@@ -23,7 +23,7 @@ from spire.optimize.fsm._emit import apply_encoding, restore_encoding, snapshot_
 from spire.helpers import get_aig_stats, get_yosys_metrics
 
 if TYPE_CHECKING:
-    from spire.component import Module
+    from spire.component import Netlist
     from spire.state import State
 
 
@@ -39,7 +39,7 @@ Objective = Literal[
 _AIG_OBJECTIVES = {"aig_gates", "aig_depth", "adp_proxy"}
 
 
-def _measure(module: "Module", objective: Objective) -> float:
+def _measure(module: "Netlist", objective: Objective) -> float:
     """Compute one synthesis metric on `module` in-process.
 
     ``via_aig=False`` keeps the yosys flow on the direct read-Verilog path — no aigverse-side rewriting before the
@@ -67,7 +67,7 @@ def _measure(module: "Module", objective: Objective) -> float:
 
 
 def make_cost_fn(
-    module: "Module",
+    module: "Netlist",
     state_cls: "type[State]",
     objective: Objective = "cells",
     *,

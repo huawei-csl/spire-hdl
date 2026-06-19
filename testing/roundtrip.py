@@ -7,7 +7,7 @@ from spire.aiger import AigerExporter, AigerImporter
 from spire.component import IOCollector
 
 # If these live elsewhere, fix the imports:
-# from spire import UInt, Bool, Module
+# from spire import UInt, Bool, Netlist
 # from your_aiger_bindings import AigerExporter, AigerImporter
 # from your_aag_helpers import conv_aag_into_aig, _get_aag_sym
 # from your_collectors import IOCollector

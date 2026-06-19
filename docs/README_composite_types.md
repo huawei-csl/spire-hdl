@@ -187,26 +187,25 @@ structured `.value` view on top.  Use it when you want a register whose contents
 write as a structured composite, not raw bits.
 
 ```python
+from spire import Component, IORecord, Input, Output, UInt
 from spire.composite.register import CompositeRegister
 from spire.composite.fixed_point import FixedPoint, FixedPointType
-from spire.component import Module
-from spire.expr import UInt, as_expr
-
-m = Module("AccDemo", with_clock=True, with_reset=False)
-x = m.input(UInt(8), "x")
+from spire.expr import as_expr
 
 q8_8 = FixedPointType(width_total=16, width_frac=8, signed=False)
 
-acc = CompositeRegister(FixedPoint, q8_8, name="acc_reg", init=0)
-m._signals.append(acc.bits)   # expose the underlying reg signal
+class AccDemo(Component):
+    def __init__(self):
+        self.io = IORecord(x=Input(UInt(8)), y=Output(UInt(q8_8.width_total)))
+        self.elaborate()
 
-acc_val = acc.value           # FixedPoint view on the register
-x_q     = FixedPoint(q8_8, bits=as_expr(x) << q8_8.width_frac)
+    def elaborate(self):
+        acc = CompositeRegister(FixedPoint, q8_8, name="acc_reg", init=0)
+        acc_val = acc.value           # FixedPoint view on the register
+        x_q     = FixedPoint(q8_8, bits=as_expr(self.io.x) << q8_8.width_frac)
 
-acc <<= acc_val.add(x_q, out_type=q8_8)   # next-state assignment
-
-y = m.output(UInt(q8_8.width_total), "y")
-y <<= acc.bits
+        acc <<= acc_val.add(x_q, out_type=q8_8)   # next-state assignment
+        self.io.y <<= acc.bits        # driving an output collects the register automatically
 ```
 
 Working tests demonstrate the full simulation flow:

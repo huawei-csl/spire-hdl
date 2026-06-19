@@ -23,7 +23,7 @@ def _wire(dst, src):
 
 
 def _top_from(ram_factory, io_fields, wiring):
-    """Build a parent Component that exposes a RamPrimitive's ports and returns its Module."""
+    """Build a parent Component that exposes a RamPrimitive's ports and returns its Netlist."""
     class Top(Component):
         def __init__(self):
             IO = make_dataclass("TopIO", [(n, Signal) for n, _ in io_fields])

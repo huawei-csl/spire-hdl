@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from spire.optimize.fsm._capture import SharedCacheSnapshot
 from spire.expr import UInt
-from spire.component import Module
+from spire.component import Netlist
 
 
 def test_snapshot_records_no_wires_for_empty_block():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     snap = SharedCacheSnapshot()
     with snap:
         pass
@@ -15,7 +15,7 @@ def test_snapshot_records_no_wires_for_empty_block():
 
 
 def test_snapshot_captures_wires_added_inside_with():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     snap = SharedCacheSnapshot()
@@ -30,7 +30,7 @@ def test_snapshot_captures_wires_added_inside_with():
 
 
 def test_snapshot_excludes_wires_added_before_with():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
 
@@ -52,7 +52,7 @@ def test_snapshot_excludes_wires_added_before_with():
 
 
 def test_two_consecutive_snapshots_dont_overlap():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
 
     snap1 = SharedCacheSnapshot()
@@ -75,7 +75,7 @@ def test_two_consecutive_snapshots_dont_overlap():
 
 
 def test_nested_snapshots():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     outer = SharedCacheSnapshot()
     inner = SharedCacheSnapshot()
@@ -92,7 +92,7 @@ def test_nested_snapshots():
 
 
 def test_new_wires_live_query_during_block():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     snap = SharedCacheSnapshot()
     with snap:

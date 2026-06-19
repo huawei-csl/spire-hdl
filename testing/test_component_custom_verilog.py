@@ -24,7 +24,7 @@ from spire.expr import (
     Wire,
     reset_shared_cache,
 )
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 from spire.simulator import Simulator
 
 

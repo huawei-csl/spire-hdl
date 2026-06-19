@@ -30,7 +30,7 @@ from spire.cores.matmul_accumulate.matmul_accumulate_core import (
     MMAcWidths,
 )
 from spire.expr import Expr, SInt, Signal, UInt
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 
 
 @dataclass
@@ -180,7 +180,7 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
 @dataclass
 class MatmulAccumulateBuildOut:
     component: MatmulAccumulateComponent
-    module: Module
+    module: Netlist
     A: Array
     B: Array
     C: Array

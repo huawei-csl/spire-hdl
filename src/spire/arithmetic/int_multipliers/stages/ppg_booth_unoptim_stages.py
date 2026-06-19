@@ -5,7 +5,7 @@ from spire.arithmetic.int_multipliers.eval.testvector_generation import to_encod
 from spire.helpers import get_yosys_transistor_count, run_vectors
 from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO
 from spire.expr import Bool, Const, Expr
-from spire.component import Module
+from spire.component import Netlist
 
 
 class BoothUnoptimizedPartialProductGenerator(PartialProductGeneratorBase):

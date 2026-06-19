@@ -1,9 +1,9 @@
 from spire.expr import  Bool
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator  # your simulator with peek/watch
 
 
-m = Module("ExprDemo", with_clock=False, with_reset=False)
+m = Netlist("ExprDemo", with_clock=False, with_reset=False)
 a = m.input(Bool(), "a")
 b = m.input(Bool(), "b")
 c = m.input(Bool(), "c")

@@ -32,7 +32,7 @@ from spire.optimize.fsm._walker import find_state_consts
 
 if TYPE_CHECKING:
     from spire.expr import Signal
-    from spire.component import Module
+    from spire.component import Netlist
     from spire.state import State
 
 
@@ -82,9 +82,9 @@ class optimized_fsm:
     Parameters
     ----------
     reg : Signal
-        The FSM state register (a `Module.reg(...)` instance).
-    module : Module
-        The Module containing ``reg``. Required so ``apply_simplify`` can run afterwards to collapse the mux
+        The FSM state register (a `Netlist.reg(...)` instance).
+    module : Netlist
+        The Netlist containing ``reg``. Required so ``apply_simplify`` can run afterwards to collapse the mux
         branches that become redundant once equivalent states share a value.
     minimize : bool
         Master switch. When False the wrapper is a no-op (just a marker).
@@ -99,7 +99,7 @@ class optimized_fsm:
     def __init__(
         self,
         reg: "Signal",
-        module: "Module",
+        module: "Netlist",
         *,
         minimize: bool = True,
         outputs: Sequence["Signal"] = (),
@@ -147,7 +147,7 @@ class optimized_fsm:
         assignment = {name: canon[state_cls._values[name]] for name in state_cls.names}
         apply_encoding(state_cls, assignment)
 
-        # Fold the now-redundant mux branches. apply_simplify is in-place on the Module's signals + their drivers.
+        # Fold the now-redundant mux branches. apply_simplify is in-place on the Netlist's signals + their drivers.
         from spire.simplify import apply_simplify
         apply_simplify(self.module)
         return False

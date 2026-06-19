@@ -1,18 +1,18 @@
-from spire.component import Module
-from spire.expr import UInt
-from spire.simulator import Simulator
+from spire import Component, IORecord, Input, Output, UInt, Simulator
+from spire.expr import Wire
 
 
-m = Module("MulAddComb", with_clock=False, with_reset=False)
-a = m.input(UInt(16), "a")
-b = m.input(UInt(16), "b")
-c = m.input(UInt(32), "c")
-y = m.output(UInt(32), "y")
+class MulAddComb(Component):
+    def __init__(self):
+        self.io = IORecord(a=Input(UInt(16)), b=Input(UInt(16)), c=Input(UInt(32)), y=Output(UInt(32)))
+        self.elaborate()
 
-prod = m.wire(UInt(32), "prod")
-prod <<= a * b
-y <<= prod + c  # (32+32)->33, output truncates to 32
+    def elaborate(self):
+        prod = Wire(UInt(32))
+        prod <<= self.io.a * self.io.b
+        self.io.y <<= prod + self.io.c   # (32+32)->33, output truncates to 32
 
-sim = Simulator(m)
+
+sim = Simulator(MulAddComb())
 sim.set("a", 3).set("b", 5).set("c", 7).eval()
 print("y =", sim.get("y"))  # y = 22 (3*5 + 7)

@@ -3,12 +3,12 @@ from pathlib import Path
 import pytest
 
 from spire.expr import UInt
-from spire.component import Module
+from spire.component import Netlist
 from spire.verilog_testbench import TestbenchGenSimulator
 
 
 def build_accumulator():
-    m = Module("Mac32", with_clock=True, with_reset=True)
+    m = Netlist("Mac32", with_clock=True, with_reset=True)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     acc = m.reg(UInt(8), "acc", init=0)
@@ -54,7 +54,7 @@ def test_verilog_testbench_basic_sequence(tmp_path: Path):
     verilog_path.write_text(str_m)
 
 def test_verilog_testbench_requires_events(tmp_path):
-    m = Module("Comb", with_clock=False, with_reset=False)
+    m = Netlist("Comb", with_clock=False, with_reset=False)
     a = m.input(UInt(4), "a")
     y = m.output(UInt(4), "y")
     y <<= a

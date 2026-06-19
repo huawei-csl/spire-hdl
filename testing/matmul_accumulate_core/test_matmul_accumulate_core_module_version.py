@@ -20,7 +20,7 @@ from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
 )
 from spire.helpers import get_yosys_metrics
 from spire.expr import Expr, UInt
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 
 
@@ -112,7 +112,7 @@ def inner_product(
 
 @dataclass
 class MatmulAccumulateCore:
-    module: Module
+    module: Netlist
     A: Array
     B: Array
     C: Array
@@ -130,7 +130,7 @@ def build_matmul_accumulate_core(
     if dim <= 0 or dim & (dim - 1) != 0:
         raise ValueError("Matrix dimension must be a power of two")
 
-    m = Module("matmul_accumulate_core")
+    m = Netlist("matmul_accumulate_core")
 
     # not for now, but in the future we would like a module, e.g. with IOs. But to convert to a module we need basic hdl types (signals with kind input and output)
     # maybe have an inner componenet with arrays as input and output (need input output kind for composite hdl type?), 

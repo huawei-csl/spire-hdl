@@ -10,10 +10,10 @@ from spire.aig.aig_aigerverse import conv_aag_into_aig, read_aag_into_aig
 
 from aigverse import aig_resubstitution, sop_refactoring, aig_cut_rewriting, balancing
 
-from spire.component import Module
+from spire.component import Netlist
 
 
-def get_result(m: Module, optim_steps = 200) -> tuple:
+def get_result(m: Netlist, optim_steps = 200) -> tuple:
     agg_lines = AigerExporter(m).get_aag()
     aig = conv_aag_into_aig(agg_lines)
     print("nodes:", aig.size(), "PIs:", aig.num_pis(), "POs:", aig.num_pos())
@@ -35,7 +35,7 @@ def get_result(m: Module, optim_steps = 200) -> tuple:
 
     return aig.size(), DepthAig(aig).num_levels(), nb_transistors
 
-def optimize_m(m: Module) -> Module:
+def optimize_m(m: Netlist) -> Netlist:
     #return m
     return flowy_optimize(m)
 

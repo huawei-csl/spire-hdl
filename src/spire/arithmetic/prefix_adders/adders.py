@@ -10,7 +10,7 @@ from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding
 from spire.component import Component
 from spire.io_record import Input, Output
 from spire.expr import Bool, Concat, Const, Expr, Signal, SInt, UInt, mux, mux_if
-from spire.component import Module
+from spire.component import Netlist
 
 
 @dataclass(frozen=True)

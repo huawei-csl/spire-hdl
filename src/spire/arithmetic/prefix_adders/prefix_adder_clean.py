@@ -12,7 +12,7 @@ import random
 from typing import Dict, List, Optional, Set, Tuple
 
 from spire.expr import Bool, Const, Expr, UInt, cat
-from spire.component import Module
+from spire.component import Netlist
 
 Pair = Tuple[int, int]
 PrefixNodes = Set[Pair]
@@ -168,7 +168,7 @@ def build_prefix_adder_from_matrix(
     with_cin: bool = False,
     with_cout: bool = True,
     depth_optimize: bool = True,
-) -> Module:
+) -> Netlist:
     """
     Build an n-bit Spire adder using a prefix tree specified by P.
 
@@ -194,7 +194,7 @@ def build_prefix_adder_from_matrix(
         _, best_k, _, _ = analyze_prefix_matrix(n, nodes)
 
     # Build combinational adder module and declare ports.
-    m = Module(name, with_clock=False, with_reset=False)
+    m = Netlist(name, with_clock=False, with_reset=False)
     a = m.input(UInt(n), "a")
     b = m.input(UInt(n), "b")
     cin: Expr = m.input(UInt(1), "cin") if with_cin else Const(False, Bool())
@@ -297,7 +297,7 @@ def build_ripple_carry_adder(
     *,
     with_cin: bool = False,
     with_cout: bool = True,
-) -> Module:
+) -> Netlist:
     return build_prefix_adder_from_matrix(
         name, n, P_ripple_carry(n), with_cin=with_cin, with_cout=with_cout, depth_optimize=False
     )
@@ -309,7 +309,7 @@ def build_kogge_stone_adder(
     *,
     with_cin: bool = False,
     with_cout: bool = True,
-) -> Module:
+) -> Netlist:
     return build_prefix_adder_from_matrix(
         name, n, P_kogge_stone(n), with_cin=with_cin, with_cout=with_cout, depth_optimize=True
     )
@@ -321,7 +321,7 @@ def build_sklansky_adder(
     *,
     with_cin: bool = False,
     with_cout: bool = True,
-) -> Module:
+) -> Netlist:
     return build_prefix_adder_from_matrix(
         name, n, P_sklansky(n), with_cin=with_cin, with_cout=with_cout, depth_optimize=True
     )

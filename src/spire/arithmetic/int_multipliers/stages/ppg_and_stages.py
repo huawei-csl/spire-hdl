@@ -4,7 +4,7 @@ from typing import DefaultDict, List
 from spire.helpers import get_yosys_transistor_count, run_vectors
 from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator, FinalStageAdderBase, MultiplierTestVectorsInt, PartialProductAccumulatorBase, PartialProductGeneratorBase, RippleCarryFinalAdder, StageBasedMultiplierBasic, StageBasedMultiplierIO
 from spire.expr import Concat, Expr
-from spire.component import Module
+from spire.component import Netlist
 
 
 # AND partial product generator (schoolbook method)

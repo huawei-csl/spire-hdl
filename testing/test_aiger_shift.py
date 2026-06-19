@@ -27,7 +27,7 @@ import pytest
 
 from spire.aiger import _AIG, lit_const0
 from spire.expr import UInt, Const, cat, reset_shared_cache
-from spire.component import Module
+from spire.component import Netlist
 from spire.helpers import refactor_module_to_aig, run_vectors
 
 
@@ -227,7 +227,7 @@ def test_shift_module_end_to_end():
     ``reg [31:0] shl; shl <= src << tgt;`` -- in Spire the source must be
     widened explicitly first via ``cat`` before the variable shift."""
     reset_shared_cache()
-    m = Module("ShiftAlu", with_clock=False, with_reset=False)
+    m = Netlist("ShiftAlu", with_clock=False, with_reset=False)
     src = m.input(UInt(16), "src")
     tgt = m.input(UInt(16), "tgt")
     shl16 = m.output(UInt(16), "shl16")   # truncating 16-bit left shift

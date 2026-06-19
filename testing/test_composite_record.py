@@ -14,7 +14,7 @@ from spire.expr import (
     Slice,
     HDLType,
 )
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 
 
@@ -233,7 +233,7 @@ def test_compositerecord_with_nested_array_assign_from_bits():
         
 # Small helper: evaluate an Expr to an integer using the simulator
 def _eval_expr(e: Expr) -> int:
-    m = Module("FPTest", with_clock=False, with_reset=False)
+    m = Netlist("FPTest", with_clock=False, with_reset=False)
     sim = Simulator(m)
     return sim.peek(e)
 

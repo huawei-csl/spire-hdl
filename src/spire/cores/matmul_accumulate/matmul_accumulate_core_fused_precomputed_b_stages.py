@@ -16,7 +16,7 @@ from spire.arithmetic.int_multipliers.stages.ppg_booth_precomputed_b_stages impo
 )
 from spire.cores.matmul_accumulate.matmul_accumulate_core import MatmulAccumulateCore, MatmulAccumulateIO, MMAcDims, MMAcWidths
 from spire.expr import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, fit_type, fit_width, s_ext
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 
 
 @dataclass
@@ -206,7 +206,7 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
 @dataclass
 class MatmulAccumulateBuildOut:
     component: MatmulAccumulateComponent
-    module: Module
+    module: Netlist
     A: Array
     B: Array
     C: Array

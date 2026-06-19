@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from spire.expr import Expr, HDLType, Signal
-from spire.component import Component, ImportedComponent, Module
+from spire.component import Component, ImportedComponent, Netlist
 from spire.io_record import IORecord, Input, Output
 
 
@@ -221,7 +221,7 @@ def _read_cache_entry(
 # flowy_optimize  (moved from synthesise_fp2.py)
 # ---------------------------------------------------------------------------
 
-def flowy_optimize(m: Module | Component,
+def flowy_optimize(m: Netlist | Component,
                    nb_runs: int = 1,
                    nb_workers: int = 10,
                    iterations: int = 1,
@@ -232,8 +232,8 @@ def flowy_optimize(m: Module | Component,
                    verbose: bool = False,
                    direct: bool = False,
                    visualize: bool = False,
-                   pareto_point: int | None = None) -> Module | Component:
-    """Run Flowy optimization on a Module or Component and return the optimized design.
+                   pareto_point: int | None = None) -> Netlist | Component:
+    """Run Flowy optimization on a Netlist or Component and return the optimized design.
 
     Parameters
     ----------
@@ -398,9 +398,9 @@ def flowy_optimize(m: Module | Component,
     c_out: Component = Component.from_netlist(m).from_aig_file(
         aig_file_path, aiger_map_file_path, make_internal=False
     )
-    module: Module = c_out.to_module("optimized_design")
+    module: Netlist = c_out.to_module("optimized_design")
 
-    if isinstance(m, Module):
+    if isinstance(m, Netlist):
         return module
     else:
         return c_out
@@ -622,7 +622,7 @@ def _optimize_and_cache(
     from spire.aiger import AigerExporter
 
     comp, output_names = _build_component(fn, logic_args, other_args)
-    module: Module = comp.to_module("mydesign_comb")
+    module: Netlist = comp.to_module("mydesign_comb")
 
     merged_kwargs = {**_DEFAULT_OPTIMIZE_KWARGS, **optimize_kwargs}
     # nb_workers is pure parallelism — doesn't affect the result, exclude from cache key
@@ -654,13 +654,13 @@ def _optimize_and_cache(
     # Cache miss — run optimization
     # Pop nb_runs before passing merged_kwargs since it's passed explicitly
     merged_kwargs.pop("nb_runs", None)
-    optimized: Module | Component = flowy_optimize(
+    optimized: Netlist | Component = flowy_optimize(
         module, nb_runs=nb_runs, nb_workers=nb_workers,
         pareto_point=pareto_point, **merged_kwargs,
     )
 
     # Get AAG from the optimized module
-    optimized_module: Module
+    optimized_module: Netlist
     if isinstance(optimized, Component):
         optimized_module = optimized.to_module("optimized_comb")
     else:
@@ -912,7 +912,7 @@ def _abc_optimize_via_pyosys(
 
 
 def abc_optimize(
-    m: Module | Component,
+    m: Netlist | Component,
     abc_script: str = _DEFAULT_ABC_SCRIPT,
     prep_script: str = _DEFAULT_PREP_SCRIPT,
     suppress_stderr: bool = True,
@@ -933,7 +933,7 @@ def abc_optimize(
 
     Parameters
     ----------
-    m : Module or Component
+    m : Netlist or Component
         The design to optimize.
     abc_script : str
         ABC commands run on the gate-level AIG. Pass a raw string, or reference a
@@ -1108,7 +1108,7 @@ def abc_optimized(
 
             # Build component and module
             comp, output_names = _build_component(fn, logic_args, other_args)
-            module: Module = comp.to_module("mydesign_comb")
+            module: Netlist = comp.to_module("mydesign_comb")
             original_spec: Dict[str, HDLType] = module.get_spec()
 
             read_mem, read_disk, write_mem, write_disk = _resolve_rw_flags(
@@ -1140,7 +1140,7 @@ def abc_optimized(
             )
 
             # Regroup bit-blasted ports to match original widths
-            opt_module: Module = AigerImporter(raw_aag).get_spire_module()
+            opt_module: Netlist = AigerImporter(raw_aag).get_spire_module()
             IOCollector().group(opt_module, original_spec)
             aag_lines: List[str] = AigerExporter(opt_module).get_aag()
             spec: Dict[str, HDLType] = opt_module.get_spec()

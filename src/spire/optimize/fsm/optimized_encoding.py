@@ -30,7 +30,7 @@ from spire.optimize.fsm._encoding_search import search_encoding
 from spire.optimize.fsm._walker import find_state_consts
 
 if TYPE_CHECKING:
-    from spire.component import Module
+    from spire.component import Netlist
     from spire.state import State
 
 
@@ -45,8 +45,8 @@ class optimized_encoding:
     ----------
     state_cls : subclass of State
         The state set whose encoding is being optimised.
-    module : Module
-        The Module the user populates inside the ``with`` block. Required so
+    module : Netlist
+        The Netlist the user populates inside the ``with`` block. Required so
         the cost oracle can synthesise candidate encodings.
     objective : "cells" | "wires" | "transistors" | "aig_gates" | "aig_depth" | "adp_proxy"
         Synthesis metric to minimise. ``adp_proxy`` = ``aig_gates × aig_depth``,
@@ -85,7 +85,7 @@ class optimized_encoding:
     def __init__(
         self,
         state_cls: "type[State]",
-        module: "Module",
+        module: "Netlist",
         *,
         objective: Objective = "cells",
         search: Strategy = "auto",
@@ -121,7 +121,7 @@ class optimized_encoding:
 
         # Verify the State class was referenced inside the with-block. We walk:
         #   - every wire added to _SharedCache during the block (covers non-trivial Exprs the user built);
-        #   - every Module signal's _driver (covers register / output assignments to bare state Consts that bypass
+        #   - every Netlist signal's _driver (covers register / output assignments to bare state Consts that bypass
         #     _maybe_share).
         # If none of those reference the State class, there's nothing to do.
         roots = list(self._snap.new_wires) + [s._driver for s in self.module._signals if s._driver is not None]

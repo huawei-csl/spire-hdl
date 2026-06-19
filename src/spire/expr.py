@@ -327,7 +327,7 @@ class Const(Expr):
 
 
 class Signal(Expr):
-    def __init__(self, typ: Optional[HDLType] = None, kind: Optional[str] = None, name: Optional[str] = None): #, module: "Module"):
+    def __init__(self, typ: Optional[HDLType] = None, kind: Optional[str] = None, name: Optional[str] = None): #, module: "Netlist"):
         if isinstance(typ, str):
             # Guard against the old argument order Signal(name, typ, kind) — `name` is now last.
             raise TypeError("Signal(typ, kind, name=None): argument order changed — 'name' is now last (pass name= or reorder).")

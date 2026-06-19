@@ -12,7 +12,7 @@ from spire.expr import (
     reset_shared_cache,
 )
 from spire.composite.fixed_point import FixedPoint, FixedPointType
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator  # your HDLComposite fixed-point type
 
 
@@ -235,7 +235,7 @@ def sim_test_composite_register():
     # ---------------------------------------------
     # Build module
     # ---------------------------------------------
-    m = Module("AggRegDemo", with_clock=True, with_reset=False)
+    m = Netlist("AggRegDemo", with_clock=True, with_reset=False)
 
     x = m.input(UInt(8), "x")  # 8-bit unsigned input
 

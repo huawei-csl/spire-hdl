@@ -1,9 +1,9 @@
 from spire.expr import UInt
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 
 # 4-bit accumulator: acc <<= acc + din
-m = Module("Accu", with_clock=True, with_reset=True)
+m = Netlist("Accu", with_clock=True, with_reset=True)
 din = m.input(UInt(4), "din")
 acc = m.reg(UInt(4), "acc", init=0)
 y = m.output(UInt(4), "y")

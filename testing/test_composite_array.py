@@ -9,7 +9,7 @@ from spire.expr import (
 )
 from spire.composite.array import Array
 from spire.expr import UInt
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 from testing.test_composite_register_and_array import DummyAgg
 
@@ -212,7 +212,7 @@ def sim_test_composite_array():
     # ---------------------------------------------
     # Build module
     # ---------------------------------------------
-    m = Module("AggArrayDemo", with_clock=False, with_reset=False)
+    m = Netlist("AggArrayDemo", with_clock=False, with_reset=False)
 
     a0 = m.input(UInt(4), "a0")
     a1 = m.input(UInt(4), "a1")

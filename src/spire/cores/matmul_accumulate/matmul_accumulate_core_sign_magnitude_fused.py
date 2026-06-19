@@ -12,7 +12,7 @@ from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import S
 
 from spire.cores.matmul_accumulate.matmul_accumulate_core_sign_magnitude import SignMagnitudeEncoderConfig
 from spire.expr import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 from spire.arithmetic.int_arithmetic_config import (
     AdderConfig,
     MultiplierConfig as BaseMultiplierConfig,
@@ -206,7 +206,7 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
 @dataclass
 class MatmulAccumulateBuildOut:
     component: MatmulAccumulateComponent
-    module: Module
+    module: Netlist
     A: Array
     B: Array
     C: Array

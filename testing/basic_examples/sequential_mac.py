@@ -1,11 +1,16 @@
-from spire.component import Module
-from spire.expr import Register, UInt
+from spire import Component, IORecord, Input, Output, UInt
+from spire.expr import Register
 
-mac = Module("Mac32", with_clock=True, with_reset=True)
-a = mac.input(UInt(16), "a")
-b = mac.input(UInt(16), "b")
-acc_out = mac.output(UInt(32), "acc_out")
-acc = Register(UInt(32))  # or acc = mac.reg(UInt(32), "acc", init=0)
-acc <<= acc + (a * b)
-acc_out <<= acc
-print(mac.to_verilog())
+
+class Mac32(Component):
+    def __init__(self):
+        self.io = IORecord(a=Input(UInt(16)), b=Input(UInt(16)), acc_out=Output(UInt(32)))
+        self.elaborate()
+
+    def elaborate(self):
+        acc = Register(UInt(32), init=0, name="acc")
+        acc <<= acc + (self.io.a * self.io.b)
+        self.io.acc_out <<= acc
+
+
+print(Mac32().to_verilog(name="Mac32", with_clock=True, with_reset=True))

@@ -4,10 +4,10 @@
 from dataclasses import dataclass
 from typing import Dict, Set, Tuple, Iterable
 
-# from spire.component import Module
+# from spire.component import Netlist
 from spire.expr import Concat, Const, Expr, Op1, Op2, Resize, Signal, Slice, Ternary
 from spire.visitor import expr_children
-# from spire.component import Module
+# from spire.component import Netlist
 
 @dataclass
 class GraphReport:
@@ -118,7 +118,7 @@ class _Analyzer:
         return d
 
     # ---- public entry ----
-    def run(self, m: "Module") -> GraphReport:
+    def run(self, m: "Netlist") -> GraphReport:
         # Roots: all outputs with drivers; optionally register driver cones
         out_depth: Dict[str, int] = {}
         for s in m._ports_of("output"):

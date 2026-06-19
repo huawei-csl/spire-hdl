@@ -10,10 +10,10 @@ its current value (for registers).
 Usage example::
 
     from spire.expr import Bool, UInt
-    from spire.component import Module
+    from spire.component import Netlist
     from spire.control_structures import case_, default, if_, elif_, else_, switch_
 
-    m = Module("Example", with_clock=False, with_reset=False)
+    m = Netlist("Example", with_clock=False, with_reset=False)
     sel = m.input(Bool(), "sel")
     y = m.output(UInt(8), "y")
 

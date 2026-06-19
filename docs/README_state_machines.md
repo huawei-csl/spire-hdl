@@ -35,34 +35,38 @@ Build the machine by allocating a register of `TrafficFSM.typ`, then write
 transitions with the existing `switch_`/`case_`/`if_` blocks:
 
 ```python
-from spire.expr import Bool, UInt
-from spire.component import Module
+from spire import Component, IORecord, Input, Output, Bool
+from spire.expr import Register
 from spire.control_structures import case_, default, if_, switch_
 
-m = Module("traffic", with_clock=True, with_reset=False)
-go    = m.input(Bool(), "go")
-light = m.output(UInt(2), "light")
-state_reg = m.reg(TrafficFSM.typ, "state", init=TrafficFSM.RED)
+class Traffic(Component):
+    def __init__(self):
+        self.io = IORecord(go=Input(Bool()), light=Output(TrafficFSM.typ))
+        self.elaborate()
 
-light <<= state_reg   # output = current state (Moore)
+    def elaborate(self):
+        go, light = self.io.go, self.io.light
+        state_reg = Register(TrafficFSM.typ, init=TrafficFSM.RED, name="state")
 
-with switch_(state_reg):
-    with case_(TrafficFSM.RED):
-        with if_(go):
-            state_reg <<= TrafficFSM.GREEN
-    with case_(TrafficFSM.GREEN):
-        state_reg <<= TrafficFSM.YELLOW
-    with case_(TrafficFSM.YELLOW):
-        state_reg <<= TrafficFSM.RED
-    with default():
-        state_reg <<= TrafficFSM.RED
+        light <<= state_reg   # output = current state (Moore)
 
-print(m.to_verilog())
+        with switch_(state_reg):
+            with case_(TrafficFSM.RED):
+                with if_(go):
+                    state_reg <<= TrafficFSM.GREEN
+            with case_(TrafficFSM.GREEN):
+                state_reg <<= TrafficFSM.YELLOW
+            with case_(TrafficFSM.YELLOW):
+                state_reg <<= TrafficFSM.RED
+            with default():
+                state_reg <<= TrafficFSM.RED
+
+print(Traffic().to_verilog(name="traffic", with_clock=True, with_reset=False))
 ```
 
-The emitted Verilog uses `case` over the 2-bit register and assigns the next
-state on each branch. The `init=TrafficFSM.RED` argument to `m.reg(...)`
-becomes the register's reset / initial value.
+The emitted Verilog selects the next state on each branch from the 2-bit
+register. The `init=TrafficFSM.RED` argument to `Register(...)` becomes the
+register's reset / initial value.
 
 ## Encoding choices
 
@@ -109,10 +113,11 @@ with switch_(state_reg):
 
 ## Reset / initial value
 
-`m.reg(typ, name, init=expr)` declares the register's reset value. With
-`Module(with_reset=True)`, the implicit `rst` input drives an async reset;
-with `with_reset=False`, the `init=` value is just the initial state at
-$t=0$ in simulation (synth tools may treat it as a power-on default).
+`Register(typ, init=expr, name=...)` declares the register's reset value.
+Emitting with `with_reset=True` (e.g. `to_verilog(..., with_reset=True)`) wires
+the implicit `rst` input to an async reset; with `with_reset=False`, the `init=`
+value is just the initial state at $t=0$ in simulation (synth tools may treat it
+as a power-on default).
 
 For an explicit synchronous reset, mux it into the next-state expression:
 

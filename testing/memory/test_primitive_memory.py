@@ -19,7 +19,7 @@ from spire.expr import (
     Wire,
     reset_shared_cache,
 )
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 from spire.simulator import Simulator
 from spire.primitives import MemoryPrimitive
 from spire.composite.record import CompositeRecord
@@ -32,7 +32,7 @@ from spire.composite.record import CompositeRecord
 def _build_fifo16(*, registered_read: bool = False, with_reset_arm: bool = True, init=None):
     """Reset-armed, async-read RAM, depth=16, width=9.
 
-    Returns the constructed ``Module`` and the inner ``MemoryPrimitive`` instance
+    Returns the constructed ``Netlist`` and the inner ``MemoryPrimitive`` instance
     name (always ``"fifo"``).
     """
 

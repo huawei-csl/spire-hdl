@@ -60,12 +60,12 @@ def _find_base_cache_key(cache_dir: Path) -> Optional[str]:
 def _aig_to_aag_via_module(
     aig_path: str, map_path: str, spec: Dict[str, HDLType]
 ) -> tuple[List[str], Dict[str, HDLType]]:
-    """Convert AIG to AAG via Component/Module pipeline (same as flowy_optimize).
+    """Convert AIG to AAG via Component/Netlist pipeline (same as flowy_optimize).
 
     Returns (aag_lines, output_spec).
     """
     from spire.expr import Signal
-    from spire.component import Component, ImportedComponent, Module
+    from spire.component import Component, ImportedComponent, Netlist
     from spire.aiger import AigerExporter
     from spire.io_record import IORecord
 

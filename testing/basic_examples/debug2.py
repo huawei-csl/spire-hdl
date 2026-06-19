@@ -5,7 +5,7 @@ from math import ceil, log2
 from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig
 from spire.expr import UInt, mux, fit_width
 from spire.aiger import AigerExporter, AigerImporter
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 from spire.component import IOCollector
 
@@ -46,7 +46,7 @@ def build_pick_probe(W: int):
       robust_idx, robust_idxm1, robust_idxm2
     """
     IW = max(1, ceil(log2(W + 2)))  # enough to represent 0..W+1 safely
-    m = Module(f"PickProbe_W{W}", with_clock=False, with_reset=False)
+    m = Netlist(f"PickProbe_W{W}", with_clock=False, with_reset=False)
 
     vec = m.input(UInt(W), "vec")
     idx = m.input(UInt(IW), "idx")

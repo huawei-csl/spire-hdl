@@ -1,6 +1,6 @@
-# SpireHDL Examples
+# Spire Examples
 
-This directory contains examples demonstrating various features of SpireHDL.
+This directory contains examples demonstrating various features of Spire.
 
 ## Basic Examples
 
@@ -11,7 +11,7 @@ A comprehensive guide showing how to:
 - Instantiate components
 - Connect IO ports between components  
 - Create hierarchical designs by instantiating sub-components
-- Convert components to modules and generate Verilog
+- Lower components to a netlist and generate Verilog
 - Simulate component behavior
 
 Run the example:
@@ -24,7 +24,7 @@ python examples/component_example.py
 A minimal example showing the essential steps for creating and using a component:
 - Defining a component with IO ports
 - Implementing the elaborate() method
-- Converting to a module
+- Lowering to a netlist
 - Generating Verilog
 
 Run the example:
@@ -32,16 +32,17 @@ Run the example:
 python examples/simple_component.py
 ```
 
-### module_with_component.py
+### composing_components.py
 
-Shows how to integrate Components within a Module-based design:
-- Using components inside modules with `make_internal()`
-- Converting components to separate module definitions
-- Understanding the difference between flat and hierarchical designs
+Shows how to compose a larger Component from smaller ones — all in the
+Component world, never touching the IR:
+- Instantiating sub-Components and flattening them with `.inline()`
+- Building hierarchy without leaving Python
+- One flat design emitted from several reusable blocks
 
 Run the example:
 ```bash
-python examples/module_with_component.py
+python examples/composing_components.py
 ```
 
 ### direct_expression_basics.py
@@ -64,26 +65,18 @@ PYTHONPATH=src python testing/examples/direct_expression_basics.py
 
 ### Defining IO Ports
 
-IO ports are defined using Signal objects with specific attributes:
-- `name`: The signal name
-- `typ`: The type (UInt, SInt, Bool, etc.)
-- `kind`: One of "input", "output", "wire", or "reg"
+Declare IO with `IORecord` plus `Input`/`Output`: the field names become the
+signal names, and `Input`/`Output` set the direction and bit-precise type
+(`UInt`, `SInt`, `Bool`, …).
 
 Example:
 ```python
-from dataclasses import dataclass
-from spire.expr import Signal, UInt
+from spire import IORecord, Input, Output, UInt
 
-@dataclass
-class IO:
-    a: Signal
-    b: Signal
-    sum: Signal
-
-self.io = IO(
-    a=Signal(typ=UInt(8), kind="input"),
-    b=Signal(typ=UInt(8), kind="input"),
-    sum=Signal(typ=UInt(9), kind="output"),
+self.io = IORecord(
+    a=Input(UInt(8)),
+    b=Input(UInt(8)),
+    sum=Output(UInt(9)),
 )
 ```
 
@@ -98,22 +91,20 @@ self.io.sum <<= self.io.a + self.io.b
 
 To use a component as an internal building block:
 1. Instantiate the sub-component
-2. Call `.make_internal()` to convert its IO ports to internal wires
+2. Call `.inline()` to flatten its logic into the surrounding design
 3. Connect the sub-component's IO to your component's signals
 
 Example:
 ```python
-sub_component = MyComponent(width=8).make_internal()
+sub_component = MyComponent(width=8).inline()
 sub_component.io.input <<= self.io.my_input
 self.io.my_output <<= sub_component.io.output
 ```
 
 ### Generating Verilog
 
-Convert a component to a module and generate Verilog:
+Generate Verilog straight from a component:
 ```python
 component = MyComponent()
-module = component.to_module(name="MyModule")
-verilog_code = module.to_verilog()
-print(verilog_code)
+print(component.to_verilog(name="MyModule"))
 ```

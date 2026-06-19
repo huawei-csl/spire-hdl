@@ -1,11 +1,11 @@
-# Export a Spire Module to an AIG in AIGER ASCII (.aag) format
+# Export a Spire Netlist to an AIG in AIGER ASCII (.aag) format
 # Works with your 'spire.expr' DSL (duck-typing; no hard import required).
 # Tested conceptually with arithmetic & logic-heavy designs (incl. float16/bfloat16 MACs).
 from __future__ import annotations
 from typing import Dict, List, Tuple, Optional, Any, Iterable
 
 
-from spire.component import Module
+from spire.component import Netlist
 from spire.aig.aig_aigerverse import AbstractAdapter, conv_aag_into_graph
 from spire.expr import Concat, Resize, SInt, Signal, Ternary, UInt, Bool, Const, Op1, Op2, cat, mux, Slice
 from spire.visitor import ExprVisitor
@@ -525,12 +525,12 @@ class _AigerExprEval(ExprVisitor[List[int]]):
         return self._exp._fit_bits(a, e.to_width, signed=getattr(e.a.typ, "signed", False))
 
 
-# ---- Exporter: Spire Module -> AIGER -------------------------------------
+# ---- Exporter: Spire Netlist -> AIGER -------------------------------------
 
 
 class AigerExporter:
     """
-    Bit-blasts a Spire Module into an AIG, then writes AIGER ASCII (.aag).
+    Bit-blasts a Spire Netlist into an AIG, then writes AIGER ASCII (.aag).
     - Supports: Const, Signal (input/output/wire/reg), Op1(~), Op2(& | ^ + - * << >> == != < <= > >=),
                 Ternary (mux), Concat, Slice, Resize.
     - Registers become AIGER latches; async reset is encoded in next-state as ITE(rst, init, next).
@@ -588,7 +588,7 @@ class AigerExporter:
         # 3) compute next-state for latches
         rst_lit = None
         if getattr(self.m, "with_reset", False):
-            # 'rst' is a Bool input in Module constructor if with_reset=True
+            # 'rst' is a Bool input in Netlist constructor if with_reset=True
             rst_bits = self._bits_of_signal(self.m.rst)
             rst_lit = rst_bits[0]
 
@@ -716,13 +716,13 @@ def export_module_to_aiger(module: Any, file_path: str) -> None:
 # ---------- Spire adapter ----------
 class SpireAdapter(AbstractAdapter):
     """
-    Build a Spire Module from an AAG.
-    - graph must be a Module instance.
+    Build a Spire Netlist from an AAG.
+    - graph must be a Netlist instance.
     - nodes are Spire expressions (Signal or Expr); we don’t force wires for every AND.
     """
-    def __init__(self, module: Module):
+    def __init__(self, module: Netlist):
         super().__init__(module)
-        self.m: Module = module
+        self.m: Netlist = module
         self._pi_count = 0
         self._po_count = 0
 
@@ -763,11 +763,11 @@ class AigerImporter:
     def __init__(self, lines: List[str]):
         self.lines = lines 
 
-    def get_spire_module(self, name: str | None = None) -> Module:
+    def get_spire_module(self, name: str | None = None) -> Netlist:
         if name is None:
             name = "ImportedModule"
         m = conv_aag_into_graph(self.lines,
-                                Module(name, with_clock=False, with_reset=False),
+                                Netlist(name, with_clock=False, with_reset=False),
                                 adapter=SpireAdapter)
         #   # sanitized names: for all m._ports replace [ and ] with _ in their names
         for p in m._ports:
@@ -777,7 +777,7 @@ class AigerImporter:
 
 def main_small_tst():
 
-    m = Module("LogicDemo", with_clock=False, with_reset=False)
+    m = Netlist("LogicDemo", with_clock=False, with_reset=False)
     x0 = m.input(Bool(), "x0")
     x1 = m.input(Bool(), "x1")
     x2 = m.input(Bool(), "x2")
@@ -791,14 +791,14 @@ def main_small_tst():
     exporter = AigerExporter(m)
     aag_lines = exporter.get_aag()
 
-    # import back to Spire Module
+    # import back to Spire Netlist
     importer = AigerImporter(aag_lines)
     spire_module = importer.get_spire_module()
 
     # print hdl
-    print("Original Module Verilog:")
+    print("Original Netlist Verilog:")
     print(m.to_verilog())
-    print("\nImported Module Verilog:")
+    print("\nImported Netlist Verilog:")
     print(spire_module.to_verilog())
 
 

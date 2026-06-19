@@ -37,7 +37,7 @@ MAC patterns (`a*b + c`) are fused into single column-reduction units, eliminati
 
 ### 🧩 ABC + mockturtle decorators: `@abc_optimized` / `@flowy_optimized`
 
-One decorator stacks modern AIG synthesis (`resyn2`, `&deepsyn`, mockturtle) onto any `Module` or `Component`, with a content-addressed cache for instant re-runs:
+One decorator stacks modern AIG synthesis (`resyn2`, `&deepsyn`, mockturtle) onto any `Component` or `Netlist`, with a content-addressed cache for instant re-runs:
 
 - **−69% AIG gates** on an 8-bit multiplier (`resyn2`)
 - **−83%** on a 16-bit multiplier
@@ -66,7 +66,7 @@ Beyond the automatic passes above, the unified arithmetic generator lets you han
 In its simplest form, Spire only needs these core files. This is intentional — the HDL is kept to a minimal, self-contained core, and higher-level features are layered on top:
 
 - **[`spire/expr.py`](src/spire/expr.py)** – the expression DSL. It provides bit-precise types such as `Bool`, `UInt`, and `SInt`, shared-expression caching, and the overloaded arithmetic / bitwise operators that make the Python syntax feel like an HDL.
-- **[`spire/component.py`](src/spire/component.py)** – the `Component` base class: author reusable designs, declare IO with `IORecord`/`Input`/`Output`, emit Verilog/AIG, analyze, and import/inline sub-designs. The flat netlist IR it lowers to lives in **[`spire/ir.py`](src/spire/ir.py)** (`Netlist`, formerly `Module`).
+- **[`spire/component.py`](src/spire/component.py)** – the `Component` base class: author reusable designs, declare IO with `IORecord`/`Input`/`Output`, emit Verilog/AIG, analyze, and import/inline sub-designs. The flat netlist IR it lowers to lives in **[`spire/ir.py`](src/spire/ir.py)** (`Netlist`).
 - **[`spire/simulator.py`](src/spire/simulator.py)** – a lightweight simulator that can drive inputs, tick clocks, inspect outputs or internal expressions, and capture probes for debugging—all without leaving Python.
 
 ### 📚 Further reading
@@ -81,7 +81,7 @@ Deeper guides for specific features:
 - **[FSM optimization](docs/README_fsm_optimization.md)** — `optimized_fsm` and `optimized_encoding` (state minimisation + encoding search)
 - **[Arithmetic generators](docs/README_arithmetic_generator.md)** — evaluation scripts and extra tooling notes
 - **[Custom Verilog](docs/README_custom_verilog.md)** — emit a raw Verilog block from a `Component`, with or without a Python sim model (blackbox)
-- **[AIG / AAG export & import](docs/README_aig_export.md)** — lower a `Module` to an AIGER netlist and read AIG/AAG back in as a `Component`
+- **[AIG / AAG export & import](docs/README_aig_export.md)** — lower a `Component` to an AIGER netlist and read AIG/AAG back in as a `Component`
 - **[Verilog testbench](docs/README_verilog_testbench.md)** — turn a `Simulator` run into a self-checking, synthesizable Verilog testbench
 - **[Examples](testing/examples/README.md)** — example designs exercising Spire features
 
@@ -175,12 +175,12 @@ The simulator keeps track of inputs, wires, outputs, and registers, supports `ev
 
 ### 3. Integrate with external tooling
 
-Modules can be exported to Verilog or AIG for downstream synthesis, equivalence checking, or integration into larger verification environments. Import helpers then let you bring optimized or third-party netlists back into Spire for continued composition and simulation (see [`component.py`](src/spire/component.py) and [`multipliers_ext_optimized.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
+Designs can be exported to Verilog or AIG for downstream synthesis, equivalence checking, or integration into larger verification environments. Import helpers then let you bring optimized or third-party netlists back into Spire for continued composition and simulation (see [`component.py`](src/spire/component.py) and [`multipliers_ext_optimized.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
 
 ## Components and the netlist IR
 
 - `Component` is the one abstraction you author. It builds Verilog/AIG directly (`to_verilog`, `to_aag`), analyzes timing (`analyze`), imports designs from Verilog or AIG formats (`from_verilog`, `from_aag_lines`, `from_netlist`), and inlines reusable sub-designs into the surrounding logic (`inline`). Components expose `get_ios()` / `get_spec()` as the single IO normalization point — also what drives port regrouping when you import flattened designs (see [`component.py`](src/spire/component.py)).
-- `Netlist` (in [`spire.ir`](src/spire/ir.py)) is the flat, lowered netlist that every backend consumes — Spire's internal IR (formerly named `Module`, still importable under that alias). Power users can build one directly: it offers constructors for inputs, outputs, wires, and registers; signal enumeration; Verilog emission with automatic width fitting; and an `analyze()` routine reporting combinational depth and node counts. The quick start never needs it.
+- `Netlist` (in [`spire.ir`](src/spire/ir.py)) is the flat, lowered netlist that every backend consumes — Spire's internal IR. Power users can build one directly: it offers constructors for inputs, outputs, wires, and registers; signal enumeration; Verilog emission with automatic width fitting; and an `analyze()` routine reporting combinational depth and node counts. The quick start never needs it.
 - Minimal end-to-end component example: [`testing/examples/simple_component.py`](testing/examples/simple_component.py).
 
 Short component + hierarchy usage example:
@@ -290,7 +290,7 @@ Check out the `testing/examples/` directory for practical examples:
 
 - **[`simple_component.py`](testing/examples/simple_component.py)** – A minimal example showing how to define a Component with IO ports and generate Verilog
 - **[`component_example.py`](testing/examples/component_example.py)** – Comprehensive examples including hierarchical design and simulation
-- **[`module_with_component.py`](testing/examples/module_with_component.py)** – Shows how to integrate Components within Module-based designs
+- **[`composing_components.py`](testing/examples/composing_components.py)** – Shows how to compose a larger `Component` from smaller ones with `inline()`
 - **[`direct_expression_basics.py`](testing/examples/direct_expression_basics.py)** – Minimal direct expression examples (`y = a + b`) plus `+`, `-`, unary `-`, `Const(..., Int(...))`, typed/plain `False`, and a recursive Horner polynomial builder
 - **[`testing/riscv/rv32i.py`](testing/riscv/rv32i.py)** – Minimal RV32I core example; see [`testing/riscv/test_rv32i.py`](testing/riscv/test_rv32i.py) for simulation-based checks.
 

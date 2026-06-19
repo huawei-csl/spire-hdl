@@ -1,7 +1,7 @@
 # Memories
 
 Memory in Spire is provided by **Component primitives** — you instantiate one,
-wire its `.io` ports, and embed it with `.make_internal()`. Four primitives cover
+wire its `.io` ports, and embed it with `.inline()`. Four primitives cover
 the common cases:
 
 | Primitive | Use for | Shape |
@@ -50,14 +50,14 @@ class Scratch(Component):
         self.elaborate()
 
     def elaborate(self):
-        mem = MemoryPrimitive(UInt(9), depth=16, name="ram").make_internal()
+        mem = MemoryPrimitive(UInt(9), depth=16, name="ram").inline()
         mem.io.write_addr   <<= self.io.aw
         mem.io.write_data   <<= self.io.din
         mem.io.write_enable <<= self.io.we
         mem.io.read_addr    <<= self.io.ar
         self.io.dout        <<= mem.io.read_data
 
-module = Scratch().to_module(name="scratch", with_clock=True, with_reset=True)
+module = Scratch().to_netlist(name="scratch", with_clock=True, with_reset=True)
 ```
 
 ### Constructor
@@ -94,7 +94,7 @@ MemoryPrimitive(elem_type, depth, *,
 ```python
 rom = MemoryPrimitive(UInt(8), depth=8, registered_read=True,
                       init=[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80],
-                      name="rom").make_internal()
+                      name="rom").inline()
 rom.io.read_addr   <<= self.io.addr
 rom.io.read_enable <<= self.io.re      # hold the registered output when low
 self.io.dout       <<= rom.io.read_data
@@ -113,7 +113,7 @@ gives one cycle of read latency; `read_enable` low holds the previous output.
 (read-modify-write — unmasked chunks keep their old value).
 
 ```python
-mem = MemoryPrimitive(UInt(16), depth=4, mask_chunks=2, name="mr").make_internal()
+mem = MemoryPrimitive(UInt(16), depth=4, mask_chunks=2, name="mr").inline()
 mem.io.write_mask <<= self.io.byte_en   # 2-bit: bit0=low byte, bit1=high byte
 ```
 
@@ -150,14 +150,14 @@ resolve last-write-wins (registration order), matching Verilog NBA.
 
 ```python
 # Simple dual-port: 1 write + 2 independent reads
-ram = RamPrimitive(UInt(8), depth=4, num_write_ports=1, num_read_ports=2).make_internal()
+ram = RamPrimitive(UInt(8), depth=4, num_write_ports=1, num_read_ports=2).inline()
 ram.io.w0_addr <<= wa; ram.io.w0_data <<= wd; ram.io.w0_en <<= we
 ram.io.r0_addr <<= ra0; d0 <<= ram.io.r0_data
 ram.io.r1_addr <<= ra1; d1 <<= ram.io.r1_data
 
 # True dual-port (2RW): two ports that each read or write per cycle
 dp = RamPrimitive(UInt(8), depth=4, rw_ports=2,
-                  num_read_ports=0, num_write_ports=0).make_internal()
+                  num_read_ports=0, num_write_ports=0).inline()
 for p, (addr, din, wr, en, dout) in (("rw0", a_sigs), ("rw1", b_sigs)):
     addr_p = getattr(dp.io, f"{p}_addr");  addr_p <<= addr   # bind first; `getattr(...) <<= x` is a syntax error
     din_p  = getattr(dp.io, f"{p}_din");   din_p  <<= din
@@ -177,7 +177,7 @@ RomPrimitive(elem_type, depth, init, *, registered_read=False, name=None)
 # ports: read_addr, read_data (+ read_enable if registered_read)
 
 rom = RomPrimitive(UInt(8), depth=8,
-                   init=[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80]).make_internal()
+                   init=[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80]).inline()
 rom.io.read_addr <<= self.io.addr
 self.io.dout     <<= rom.io.read_data        # async: combinational lookup, no step() needed
 ```
@@ -191,7 +191,7 @@ A complete sync FIFO (pointers + count + flags), one-cycle registered read laten
 must be a power of two ≥ 2.
 
 ```python
-fifo = FIFOPrimitive(UInt(8), depth=4, name="fifo").make_internal()
+fifo = FIFOPrimitive(UInt(8), depth=4, name="fifo").inline()
 fifo.io.push <<= self.io.push
 fifo.io.pop  <<= self.io.pop
 fifo.io.din  <<= self.io.din
@@ -214,7 +214,7 @@ class Bus(CompositeRecord):
     data  = Wire(UInt(8))
     valid = Wire(UInt(1))
 
-mem = MemoryPrimitive(Bus, depth=16).make_internal()      # 9-bit storage
+mem = MemoryPrimitive(Bus, depth=16).inline()      # 9-bit storage
 bus_in = Bus(); bus_in.data <<= d; bus_in.valid <<= v
 mem.io.write_data <<= bus_in.to_bits()
 out = Bus(); out <<= mem.io.read_data                     # from_bits view

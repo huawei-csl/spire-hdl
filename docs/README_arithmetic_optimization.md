@@ -73,7 +73,7 @@ alu = ALU(w=8)
 # Replace all +, -, * operators with optimized hardware — one line
 replace_arithmetic_ops(alu, ArithmeticAutoConfig(objective="adp"))
 
-module = alu.to_module("OptimizedALU")
+module = alu.to_netlist("OptimizedALU")
 print(module.to_verilog())
 ```
 
@@ -159,7 +159,7 @@ class FIR(Component):
 
 fir = FIR(n_taps=4, w=8)
 replace_arithmetic_ops(fir, ArithmeticAutoConfig(objective="adp"))
-module = fir.to_module("FIR4_optimized")
+module = fir.to_netlist("FIR4_optimized")
 print(module.to_verilog())
 ```
 

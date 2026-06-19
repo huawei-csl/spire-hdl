@@ -4,14 +4,14 @@ from abc import ABC, abstractmethod
 from typing import Dict, Iterable, List, Optional, Union
 
 from spire.expr import Expr, Signal
-from spire.component import Module
+from spire.component import Netlist
 
 
 class SimulatorBase(ABC):
     """Shared public API for simulator-like backends."""
 
     @abstractmethod
-    def __init__(self, module: Module):
+    def __init__(self, module: Netlist):
         self.m = module
 
     @abstractmethod

@@ -14,7 +14,7 @@ from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib imp
 from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel, TestVectors
 from spire.helpers import refactor_module_to_aig, run_vectors_on_simulator, sim_and_switch_count
 from spire.expr import Op2
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 from spire.verilog_testbench import TestbenchGenSimulator, write_vector_data_file
 from spire.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig

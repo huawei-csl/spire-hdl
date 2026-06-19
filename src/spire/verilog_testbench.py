@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Union
 
 from spire import VERILOG_BANNER
 from spire.expr import Expr, Signal
-from spire.component import Module
+from spire.component import Component, Netlist
 from spire.simulator_base import SimulatorBase
 from spire.simulator import Simulator as PythonSimulator
 
@@ -56,11 +56,15 @@ class TestbenchGenSimulator(SimulatorBase):
 
     def __init__(
         self,
-        module: Module,
+        module: "Netlist | Component",
         *,
         clock_period: float = 10.0,
         eval_delay: float = 1.0,
     ) -> None:
+        # Accept a Component directly and lower it to its netlist IR (same as Simulator), so this
+        # stays a true drop-in replacement.
+        if isinstance(module, Component):
+            module = module.to_netlist()
         self.m = module
         self._sim = PythonSimulator(module)
         self.clock_period = clock_period

@@ -611,7 +611,7 @@ def scaling_plot(
             continue
 
         color = cmap.get(str(cat_value))
-        # Plot composited points/lines
+        # Plot aggregated points/lines
         ax.plot(x, y, marker="o", markersize=4, linewidth=1.4, alpha=0.95, label=str(cat_value), color=color)
 
         # Optional power-law fit

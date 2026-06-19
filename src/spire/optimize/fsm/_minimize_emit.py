@@ -46,7 +46,7 @@ from spire.optimize.fsm._walker import find_state_consts
 
 if TYPE_CHECKING:
     from spire.expr import Expr, Signal
-    from spire.component import Module
+    from spire.component import Netlist
     from spire.state import State
 
 
@@ -66,7 +66,7 @@ def _require_sympy():
 # ---------------------------------------------------------------------------
 # Discovery: state register + FSM outputs
 # ---------------------------------------------------------------------------
-def find_state_register(module: "Module", state_cls: "type[State]") -> "Signal":
+def find_state_register(module: "Netlist", state_cls: "type[State]") -> "Signal":
     """Return the single ``reg`` whose value holds ``state_cls`` states.
 
     A register qualifies if its ``_init`` is a Const of this state class, or its
@@ -100,9 +100,9 @@ def find_state_register(module: "Module", state_cls: "type[State]") -> "Signal":
 
 
 def find_fsm_outputs(
-    module: "Module", state_reg: "Signal", state_cls: "type[State]",
+    module: "Netlist", state_reg: "Signal", state_cls: "type[State]",
 ) -> List["Signal"]:
-    """Module outputs whose driver depends on ``state_reg`` (and only on the
+    """Netlist outputs whose driver depends on ``state_reg`` (and only on the
     state register + module inputs). Outputs that depend on *other* registers
     are skipped — we only rewrite logic we can fully recover from the
     (state × input) enumeration.
@@ -234,7 +234,7 @@ class MinimizedFSM:
 
 
 def minimize_fsm_logic(
-    module: "Module",
+    module: "Netlist",
     state_cls: "type[State]",
     *,
     state_reg: Optional["Signal"] = None,
@@ -311,7 +311,7 @@ def _concat_bits(bit_exprs: List["Expr"]) -> "Expr":
 
 
 def minimize_and_rewrite(
-    module: "Module",
+    module: "Netlist",
     state_cls: "type[State]",
     *,
     state_reg: Optional["Signal"] = None,
@@ -355,23 +355,23 @@ def minimize_and_rewrite(
 # Combinational cone (for the PDK-free adp_proxy cost objective)
 # ---------------------------------------------------------------------------
 def build_comb_cone(
-    module: "Module",
+    module: "Netlist",
     state_cls: "type[State]",
     *,
     dont_cares: bool = False,
-) -> "Module":
-    """Build a fresh **combinational** Module: the FSM's next-state + output
+) -> "Netlist":
+    """Build a fresh **combinational** Netlist: the FSM's next-state + output
     logic with the state register turned into an input port. This is exactly
     the logic the encoding affects, and being combinational it can be measured
     by aigverse (the sequential design cannot — the AIG reader rejects latches).
     """
     from spire.expr import UInt, flat_emit
-    from spire.component import Module
+    from spire.component import Netlist
 
     mf = minimize_fsm_logic(module, state_cls, dont_cares=dont_cares)
     w = mf.state_reg.typ.width
 
-    cone = Module(f"{module.name}__cone", with_clock=False, with_reset=False)
+    cone = Netlist(f"{module.name}__cone", with_clock=False, with_reset=False)
     state_in = cone.input(UInt(w), "state")
     in_ports = [cone.input(s.typ, s.name) for s in mf.input_signals]
 

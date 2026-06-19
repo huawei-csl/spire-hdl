@@ -16,7 +16,7 @@ from spire.arithmetic.int_multipliers.eval.testvector_generation import TestVect
 from spire.expr import Expr, Op2
 from spire.aiger import AigerExporter, AigerImporter
 from spire.component import IOCollector
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 
 
@@ -138,7 +138,7 @@ def optimize_aag(aag_lines: List[str], n_iter_optimizations: Optional[int] = Non
     return aag_optimized
 
 
-def refactor_module_to_aig(module: Module, optimize=True, n_iter_optimizations: Optional[int] = None) -> Module:
+def refactor_module_to_aig(module: Netlist, optimize=True, n_iter_optimizations: Optional[int] = None) -> Netlist:
     # get AIG
     aag = AigerExporter(module).get_aag()
     if optimize:
@@ -152,7 +152,7 @@ def refactor_module_to_aig(module: Module, optimize=True, n_iter_optimizations: 
     return m_aig
 
 
-def get_aig_stats(m: Module, n_iter_optimizations: Optional[int] = None, simple=False) -> dict:
+def get_aig_stats(m: Netlist, n_iter_optimizations: Optional[int] = None, simple=False) -> dict:
     aag_lines = AigerExporter(m).get_aag()
     aig = conv_aag_into_aig(aag_lines)
 
@@ -176,7 +176,7 @@ def get_aig_stats(m: Module, n_iter_optimizations: Optional[int] = None, simple=
 # -- sim
 
 def run_vectors(
-    m: Module, vectors: TestVectors, 
+    m: Netlist, vectors: TestVectors, 
     decoder: Callable[[int], float] | None = None, exprs: Optional[List[Expr]] = None,
     use_signed: bool = False,
     raise_on_fail: bool = True,
@@ -265,7 +265,7 @@ def get_switch_count(states_list) -> float:
     return total_switches / len(states_list)  # average per vector
 
 
-def sim_and_switch_count(module: Module, vectors: TestVectors) -> Module:
+def sim_and_switch_count(module: Netlist, vectors: TestVectors) -> Netlist:
 
     m_aig = refactor_module_to_aig(module)
 
@@ -407,7 +407,7 @@ def extract_yosys_heavy_metrics_from_verilog(verilog_lines: list[str]) -> dict:
         os.remove(verilog_tmp_file)
 
 
-def get_yosys_metrics(m: Module, n_iter_optimizations: Optional[int] = None, deepsyn=False, suppress_stderr: bool = True, via_aig=True) -> int:
+def get_yosys_metrics(m: Netlist, n_iter_optimizations: Optional[int] = None, deepsyn=False, suppress_stderr: bool = True, via_aig=True) -> int:
     if via_aig:
         with _suppress_output(stderr=suppress_stderr):
             print("Exporting AAG...")
@@ -427,6 +427,6 @@ def get_yosys_metrics(m: Module, n_iter_optimizations: Optional[int] = None, dee
 def get_transistor_count_from_stats(stats: dict) -> int:
     return stats["estimated_num_transistors"]
 
-def get_yosys_transistor_count(m: Module, n_iter_optimizations: Optional[int] = None, deepsyn=False, via_aig=True) -> int:
+def get_yosys_transistor_count(m: Netlist, n_iter_optimizations: Optional[int] = None, deepsyn=False, via_aig=True) -> int:
     stats = get_yosys_metrics(m, n_iter_optimizations=n_iter_optimizations, deepsyn=deepsyn, via_aig=via_aig)
     return get_transistor_count_from_stats(stats)

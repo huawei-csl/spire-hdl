@@ -16,7 +16,7 @@ from spire.arithmetic.int_arithmetic_config import (
 )
 from spire.arithmetic.int_multipliers.eval.testvector_generation import is_signed
 from spire.expr import Expr, SInt, Signal, UInt
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 
 
 def inner_product(
@@ -112,7 +112,7 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
 @dataclass
 class MatmulAccumulateBuildOut:
     component: MatmulAccumulateComponent
-    module: Module
+    module: Netlist
     A: Array
     B: Array
     C: Array

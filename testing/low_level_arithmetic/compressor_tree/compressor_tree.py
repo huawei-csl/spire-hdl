@@ -11,7 +11,7 @@ from spire.arithmetic.prefix_adders.prefix_adder_analysis import Vec
 from spire.helpers import get_yosys_transistor_count
 from spire.expr import Bool, HDLType, Op2
 from spire.aiger import AigerExporter
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 
 
@@ -30,14 +30,14 @@ def build_multiplier_from_compressor_graph(name: str, A, nodes):
         or implicitly as signals with no outgoing edge to adders.
 
     Returns:
-      - spire.component.Module with ports:
+      - spire.component.Netlist with ports:
           a: UInt(n), b: UInt(n), y: UInt(2*n)
     """
     import re
     import numpy as np
     from collections import defaultdict
 
-    from spire.component import Module
+    from spire.component import Netlist
     from spire.expr import UInt, cat
 
     # --- helpers ---------------------------------------------------------------
@@ -74,7 +74,7 @@ def build_multiplier_from_compressor_graph(name: str, A, nodes):
     W = 2 * n  # product width
 
     # --- Spire module skeleton ----------------------------------------------
-    m = Module(name, with_clock=False, with_reset=False)
+    m = Netlist(name, with_clock=False, with_reset=False)
     a = m.input(UInt(n), "a")
     b = m.input(UInt(n), "b")
     y = m.output(UInt(W), "y")
@@ -214,7 +214,7 @@ def build_multiplier_from_compressor_graph(name: str, A, nodes):
     return m
 
 
-def gen_compressor_tree_graph_and_spire_module(n_bits: int, policy: str = "dadda", name: Optional[str] = None) -> Tuple[Graph, Module]:
+def gen_compressor_tree_graph_and_spire_module(n_bits: int, policy: str = "dadda", name: Optional[str] = None) -> Tuple[Graph, Netlist]:
 
     """
     Convenience function to build a compressor-tree multiplier graph and
@@ -226,7 +226,7 @@ def gen_compressor_tree_graph_and_spire_module(n_bits: int, policy: str = "dadda
       policy: "dadda" or "wallace"
 
     Returns:
-      spire.component.Module
+      spire.component.Netlist
     """
 
     N = n_bits  # change to try other bitwidths; for plotting, keep <= 6
@@ -283,7 +283,7 @@ def main():
 
 
 
-    def get_size_and_depth(name: str, m: Module):
+    def get_size_and_depth(name: str, m: Netlist):
         aag = AigerExporter(m).get_aag()
         aig = conv_aag_into_aig(aag)
 
@@ -331,7 +331,7 @@ def main():
         # Estimate: 1 transistor per signal, 4 per FA, 2 per HA
         return sig_count * 0 + 36 * fa_count + 18 * ha_count + 6 * pp_count + n_ripple
 
-    def get_transistor_count_from_m(m: Module) -> int:
+    def get_transistor_count_from_m(m: Netlist) -> int:
 
         gr = m.module_analyze()
         transistor_count_dict = {'Op2<&>': 6, 'Op2<|>': 6, 'Op2<^>': 12, 'Op1<~>': 2, "Op2<nand>":4,

@@ -14,6 +14,13 @@ wanted. Critically, the user's FSM body inside the wrapper is *byte-identical*
 to the un-optimised version — same `switch_/case_/if_/else_` you already
 write. The optimization happens on `__exit__`.
 
+> **Note — these two passes operate on the lowered `Netlist` IR.** Unlike the rest of
+> Spire (where you author a `Component` and never touch the IR), `optimized_fsm` /
+> `optimized_encoding` take a `module=` netlist handle and rewrite `module._signals` in
+> place, so the examples below build a `Netlist` directly. The FSM body itself — the
+> `State` declaration and the `switch_`/`case_`/`if_` block — is exactly what you'd write
+> inside a `Component.elaborate()`.
+
 ```python
 from spire.state import (
     State, Encoding, state,
@@ -54,14 +61,14 @@ every state in a class shares its representative's value, and runs
 ```python
 from spire.state import State, Encoding, state, optimized_fsm
 from spire.expr import Bool, UInt
-from spire.component import Module
+from spire.ir import Netlist
 from spire.control_structures import case_, default, if_, else_, switch_
 
 class S(State, encoding=Encoding.BINARY):
     S0 = state(); S1 = state(); S2 = state()
     S3 = state(); S4 = state(); S5 = state(); S6 = state()
 
-m = Module("example", with_clock=True, with_reset=False)
+m = Netlist("example", with_clock=True, with_reset=False)
 x   = m.input(Bool(), "x")
 out = m.output(UInt(1), "out")
 reg = m.reg(S.typ, "state_reg", init=S.S0)
@@ -94,7 +101,7 @@ collapses the now-redundant duplicates so synthesis sees a tight 4-state FSM.
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `reg` | — | The FSM state register (an `m.reg(...)` instance). |
-| `module` | — | The `Module` containing `reg`. Required so `apply_simplify` can run after rewriting. |
+| `module` | — | The `Netlist` containing `reg`. Required so `apply_simplify` can run after rewriting. |
 | `minimize` | `True` | Master switch. When `False`, the wrapper is a no-op marker. |
 | `outputs` | `()` | Moore outputs whose drivers participate in the equivalence-class signature (initial Hopcroft partition keys on outputs). |
 | `state_cls` | auto-inferred | Override the State subclass driving `reg`. Inference walks `reg._driver` for the first tagged Const. |
@@ -120,12 +127,12 @@ not just FSMs.
 ```python
 from spire.state import State, Encoding, state, optimized_encoding
 from spire.expr import UInt, mux
-from spire.component import Module
+from spire.ir import Netlist
 
 class Op(State, encoding=Encoding.BINARY):
     ADD = state(); SUB = state(); AND = state(); OR = state(); XOR = state()
 
-m = Module("alu", with_clock=False, with_reset=False)
+m = Netlist("alu", with_clock=False, with_reset=False)
 op = m.input(Op.typ, "op")
 a  = m.input(UInt(8), "a")
 b  = m.input(UInt(8), "b")
@@ -173,7 +180,7 @@ with optimized_encoding(MyStates, module=m, search="adjacency", top_k=64):
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `state_cls` | — | The State subclass to re-encode. |
-| `module` | — | The `Module` whose Verilog gets synthesised for each candidate assignment. |
+| `module` | — | The `Netlist` whose Verilog gets synthesised for each candidate assignment. |
 | `objective` | `"cells"` | Synthesis metric to minimise. One of `cells`, `wires`, `transistors` (via in-process pyosys), `aig_gates`, `aig_depth`, `adp_proxy` (= `aig_gates × aig_depth`, a PDK-free area×delay proxy; AIG metrics via aigverse). AIG objectives require the combinational cone, so `adp_proxy` auto-enables `bit_level_emit`. |
 | `search` | `"auto"` | Strategy (see ladder above). One of `predefined`, `exhaustive`, `swap`, `adjacency`, `anneal`, `auto`. |
 | `width` | `state_cls._width` | Width of the encoding. Width-changing search (widen for `ONEHOT`, etc.) is **future work** — must equal the current width. |
@@ -354,9 +361,9 @@ states that Hopcroft just merged.
 - **Input domain cap** on FSM transition-table extraction:
   `MAX_INPUT_COMBINATIONS = 65 536`. When exceeded, minimization is
   silently skipped (encoding search still runs).
-- **Single-module scope.** `optimized_encoding(state_cls, module=m)`
-  optimises one Module at a time. Multi-Module designs that share a
-  State class need one wrapper per Module.
+- **Single-netlist scope.** `optimized_encoding(state_cls, module=m)`
+  optimises one `Netlist` at a time. Designs split across several netlists that
+  share a State class need one wrapper per netlist.
 - **Mealy guards over wide data inputs** are enumerated by exhaustive
   product. Narrow inputs are fine; for wide combined input domains,
   consider partitioning the FSM.

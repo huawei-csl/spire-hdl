@@ -34,7 +34,7 @@ from spire.expr import (
     mux,
     reset_shared_cache,
 )
-from spire.component import Module
+from spire.component import Netlist
 from spire.simplify import apply_simplify
 
 
@@ -62,7 +62,7 @@ def _resolve(e: Expr) -> Expr:
     return e
 
 
-def _collect_ops(module: Module) -> Set[str]:
+def _collect_ops(module: Netlist) -> Set[str]:
     """Return the set of all Op1/Op2 operator symbols reachable from any Signal driver."""
     ops: Set[str] = set()
     seen: Set[int] = set()
@@ -95,7 +95,7 @@ def _collect_ops(module: Module) -> Set[str]:
     return ops
 
 
-def _count_ternaries(module: Module) -> int:
+def _count_ternaries(module: Netlist) -> int:
     """Count distinct Ternary nodes reachable from user-declared (non-auto-shared) signals.
 
     Auto-shared wires created by ``_maybe_share`` can become orphaned after a guard-substitution rewrite (the wire is
@@ -141,7 +141,7 @@ def _count_ternaries(module: Module) -> int:
 # ---------------------------------------------------------------------------
 
 def test_const_fold_add():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     y = m.output(UInt(8), "y")
     y <<= Const(5, UInt(8)) + Const(3, UInt(8))
     m.collect_signals()
@@ -151,7 +151,7 @@ def test_const_fold_add():
 
 
 def test_const_fold_bitwise_and():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     y = m.output(UInt(8), "y")
     y <<= Const(0xF0, UInt(8)) & Const(0x33, UInt(8))
     m.collect_signals()
@@ -161,7 +161,7 @@ def test_const_fold_bitwise_and():
 
 
 def test_const_fold_mul_wraps_to_width():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     y = m.output(UInt(4), "y")
     # 5 * 5 = 25 ≡ 9 (mod 16). The result type for mul is sum of widths (8 bits), but the output is 4 bits so a Resize
     # trims it. Our pass folds the Resize of a Const back to a Const.
@@ -173,7 +173,7 @@ def test_const_fold_mul_wraps_to_width():
 
 
 def test_const_fold_compare():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     y = m.output(UInt(1), "y")
     y <<= (Const(5, UInt(8)) == Const(5, UInt(8)))
     m.collect_signals()
@@ -187,7 +187,7 @@ def test_const_fold_compare():
 # ---------------------------------------------------------------------------
 
 def test_or_with_zero_collapses_to_self():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     y = m.output(UInt(8), "y")
     y <<= a | Const(0, UInt(8))
@@ -198,7 +198,7 @@ def test_or_with_zero_collapses_to_self():
 
 
 def test_and_with_zero_collapses_to_zero():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     y = m.output(UInt(8), "y")
     y <<= a & Const(0, UInt(8))
@@ -210,7 +210,7 @@ def test_and_with_zero_collapses_to_zero():
 
 
 def test_xor_self_is_zero():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     y = m.output(UInt(8), "y")
     y <<= a ^ a
@@ -221,7 +221,7 @@ def test_xor_self_is_zero():
 
 
 def test_or_self_is_self():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     y = m.output(UInt(8), "y")
     y <<= a | a
@@ -231,7 +231,7 @@ def test_or_self_is_self():
 
 
 def test_double_negation():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     y = m.output(UInt(8), "y")
     y <<= ~~a
@@ -241,7 +241,7 @@ def test_double_negation():
 
 
 def test_negate_const():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     y = m.output(UInt(8), "y")
     y <<= ~Const(0x55, UInt(8))
     m.collect_signals()
@@ -255,7 +255,7 @@ def test_negate_const():
 # ---------------------------------------------------------------------------
 
 def test_mux_const_true_selector():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     y = m.output(UInt(8), "y")
@@ -267,7 +267,7 @@ def test_mux_const_true_selector():
 
 
 def test_mux_const_false_selector():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     y = m.output(UInt(8), "y")
@@ -279,7 +279,7 @@ def test_mux_const_false_selector():
 
 
 def test_mux_equal_branches_collapses():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     c = m.input(UInt(1), "c")
     a = m.input(UInt(8), "a")
     y = m.output(UInt(8), "y")
@@ -292,7 +292,7 @@ def test_mux_equal_branches_collapses():
 
 
 def test_mux_structurally_equal_branches_collapses():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     c = m.input(UInt(1), "c")
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
@@ -313,7 +313,7 @@ def test_mux_structurally_equal_branches_collapses():
 
 def test_mux_tree_outer_inner_same_guard_true_side():
     """mux(g, mux(g, A, B), F) → mux(g, A, F): one Ternary instead of two."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     g = m.input(UInt(1), "g")
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
@@ -327,7 +327,7 @@ def test_mux_tree_outer_inner_same_guard_true_side():
 
 def test_mux_tree_outer_inner_same_guard_false_side():
     """mux(g, T, mux(g, A, B)) → mux(g, T, B): one Ternary instead of two."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     g = m.input(UInt(1), "g")
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
@@ -341,7 +341,7 @@ def test_mux_tree_outer_inner_same_guard_false_side():
 
 def test_mux_tree_both_inner_share_outer_guard_collapses_when_branches_match():
     """mux(g, mux(g, A, _), mux(g, _, A)) — both sides simplify to A → fully collapses."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     g = m.input(UInt(1), "g")
     a = m.input(UInt(8), "a")
     x = m.input(UInt(8), "x")
@@ -360,7 +360,7 @@ def test_mux_tree_both_inner_share_outer_guard_collapses_when_branches_match():
 
 def test_to_verilog_eliminates_redundant_addition():
     """A constant-zero addition should be gone from the emitted Verilog."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     y = m.output(UInt(8), "y")
     y <<= a + Const(0, UInt(8))
@@ -371,7 +371,7 @@ def test_to_verilog_eliminates_redundant_addition():
 
 def test_to_verilog_collapses_constant_mux():
     """mux with a Const selector should leave no ternary `?` in the output."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     y = m.output(UInt(8), "y")
@@ -382,7 +382,7 @@ def test_to_verilog_collapses_constant_mux():
 
 def test_to_verilog_preserves_correctness_for_normal_designs():
     """A normal design with no simplification opportunities should pass through unchanged."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     c = m.input(UInt(1), "c")

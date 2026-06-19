@@ -337,7 +337,7 @@ def eval_mia(
     `lookup_best_mia_config(N, width, signed, …)` snaps to the nearest `N`.
     """
     reset_shared_cache()
-    from spire.component import Module
+    from spire.component import Netlist
     from spire.expr import UInt, SInt
     from spire.arithmetic.int_multipliers.stages.ppa_fsa_util import (
         OutputConfig, compressor_sum,
@@ -351,7 +351,7 @@ def eval_mia(
     extra = max(1, (n_inputs - 1).bit_length())
     out_w = n_bits + extra
 
-    m = Module(
+    m = Netlist(
         f"mia{n_inputs}_{ppa_opt.name}_{fsa_opt.name}_{n_bits}b_{encoding.name}_{optim_type}",
         with_clock=False, with_reset=False,
     )
@@ -414,8 +414,8 @@ def eval_inner_product(
         optim_type=optim_type,
     )
 
-    from spire.component import Module
-    m = Module(f"dot{n_terms}_{ppg_opt.name}_{ppa_opt.name}_{fsa_opt.name}_{n_bits}b_{encoding.name}_{optim_type}",
+    from spire.component import Netlist
+    m = Netlist(f"dot{n_terms}_{ppg_opt.name}_{ppa_opt.name}_{fsa_opt.name}_{n_bits}b_{encoding.name}_{optim_type}",
                with_clock=False, with_reset=False)
     vec_a = [m.input(io_type(n_bits), f"a{i}") for i in range(n_terms)]
     vec_b = [m.input(io_type(n_bits), f"b{i}") for i in range(n_terms)]

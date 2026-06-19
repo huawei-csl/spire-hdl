@@ -11,7 +11,7 @@ import pytest
 
 from spire.optimize.fsm._emit import restore_encoding
 from spire.expr import Bool, UInt, mux
-from spire.component import Module
+from spire.component import Netlist
 from spire.state import (
     Encoding, State, optimized_encoding, state,
 )
@@ -31,7 +31,7 @@ def test_optimized_encoding_picks_minimum_under_synthetic_cost():
     """Custom cost_fn returns 0 for the target assignment, 1 otherwise.
     With strategy=exhaustive, the wrapper must find and apply that target.
     """
-    m = Module("alu_op", with_clock=False, with_reset=False)
+    m = Netlist("alu_op", with_clock=False, with_reset=False)
     op = m.input(Op.typ, "op")
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
@@ -55,7 +55,7 @@ def test_optimized_encoding_picks_minimum_under_synthetic_cost():
 def test_no_state_const_use_is_noop():
     """If the user's with-block doesn't reference the State class, the wrapper
     should detect that and skip the search entirely (leaving the encoding alone)."""
-    m = Module("noop", with_clock=False, with_reset=False)
+    m = Netlist("noop", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     y = m.output(UInt(8), "y")
@@ -76,7 +76,7 @@ def test_no_state_const_use_is_noop():
 
 def test_predefined_strategy():
     """With strategy=predefined, only BINARY and GRAY are tried."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     op = m.input(Op.typ, "op")
     a = m.input(UInt(8), "a")
     y = m.output(UInt(8), "y")

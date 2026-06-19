@@ -25,34 +25,28 @@ a Python reference model (used by `Simulator`); `custom_verilog()` returns
 a hand-written Verilog block (used by `to_verilog`).
 
 ```python
-from dataclasses import dataclass
-from spire.expr import Bool, Signal, UInt, Wire
-from spire.component import Component
+from spire import Component, IORecord, Input, Output, UInt
+from spire.expr import Wire
 
 
 class CustomAdder(Component):
     def __init__(self):
-        @dataclass
-        class IO:
-            a: Signal
-            b: Signal
-            sum: Signal
-        self.io = IO(
-            a   = Signal(typ=UInt(8), kind="input"),
-            b   = Signal(typ=UInt(8), kind="input"),
-            sum = Signal(typ=UInt(9), kind="output"),
+        self.io = IORecord(
+            a=Input(UInt(8)),
+            b=Input(UInt(8)),
+            sum=Output(UInt(9)),
         )
         self.elaborate()
 
     def elaborate(self):
-        # Python sim model — used by Simulator(m). Free to use any spire-hdl
+        # Python sim model — used by Simulator(comp). Free to use any spire
         # primitives (Registers, Wires, Memory, etc.).
         tmp = Wire(UInt(9))
         tmp <<= self.io.a + self.io.b
         self.io.sum <<= tmp
 
     def custom_verilog(self) -> str:
-        # Hand-written Verilog — used by m.to_verilog(). The Signal names are
+        # Hand-written Verilog — used by comp.to_verilog(). The Signal names are
         # resolved at emit time, so uniquification (e.g. `a_1` if `a` collides
         # with a parent port) is already applied.
         return (
@@ -64,16 +58,15 @@ class CustomAdder(Component):
 Compile and simulate:
 
 ```python
-from spire.simulator import Simulator
+from spire import Simulator
 
 comp = CustomAdder()
-m    = comp.to_module(name="CustomAdder", with_clock=False, with_reset=False)
 
 # Verilog: the elaborate's `tmp` wire is suppressed; the hand-tuned block emits.
-print(m.to_verilog())
+print(comp.to_verilog(name="CustomAdder"))
 
-# Simulation: uses elaborate's Python model.
-sim = Simulator(m)
+# Simulation: uses elaborate's Python model — same instance, no IR to manage.
+sim = Simulator(comp)
 sim.set("a", 5).set("b", 7).eval()
 assert sim.get("sum") == 12
 ```
@@ -90,28 +83,24 @@ endmodule
 ```
 
 No `tmp` wire — the framework tagged it `_no_emit_decl + _no_emit_drive` at
-`to_module` time so the emitter skips it.
+`to_netlist` time so the emitter skips it.
 
 ## Quick start — blackbox (only Verilog, no Python model)
 
 For vendor IP or opaque macros, leave `elaborate()` empty:
 
 ```python
+from spire import Component, IORecord, Input, Output, Bool, UInt
+
 class VendorRAM(Component):
     def __init__(self):
-        @dataclass
-        class IO:
-            clk: Signal
-            addr: Signal
-            data_in: Signal
-            we: Signal
-            data_out: Signal
-        self.io = IO(
-            clk      = Signal(typ=Bool(), kind="input"),
-            addr     = Signal(typ=UInt(10), kind="input"),
-            data_in  = Signal(typ=UInt(32), kind="input"),
-            we       = Signal(typ=Bool(), kind="input"),
-            data_out = Signal(typ=UInt(32), kind="output"),
+        # `clk` is not an IO field — it's the implicit clock added by `with_clock=True`
+        # at emit time, which the Verilog body below references directly.
+        self.io = IORecord(
+            addr     = Input(UInt(10)),
+            data_in  = Input(UInt(32)),
+            we       = Input(Bool()),
+            data_out = Output(UInt(32)),
         )
         self.elaborate()
 
@@ -132,11 +121,10 @@ Compile and use:
 
 ```python
 ram = VendorRAM()
-m   = ram.to_module(name="VendorRAM", with_clock=True)
-print(m.to_verilog())   # contains the hand-written RAM macro
+print(ram.to_verilog(name="VendorRAM", with_clock=True))   # contains the hand-written RAM macro
 
 # Simulation: the blackbox has no Python model — outputs read as 0.
-sim = Simulator(m)
+sim = Simulator(ram)
 sim.set("addr", 5).set("data_in", 0xDEADBEEF).set("we", 1).step()
 assert sim.get("data_out") == 0   # stub
 ```
@@ -144,36 +132,32 @@ assert sim.get("data_out") == 0   # stub
 ## Embedding inside a larger Component
 
 A custom-Verilog or blackbox Component slots into a parent Component via
-`make_internal()` — same pattern as any other sub-Component:
+`inline()` — same pattern as any other sub-Component:
 
 ```python
+from spire import Component, IORecord, Input, Output, UInt
+
 class TopWithVendorRAM(Component):
     def __init__(self):
-        @dataclass
-        class IO:
-            clk: Signal
-            x: Signal
-            y: Signal
-            result: Signal
-        self.io = IO(
-            clk    = Signal(typ=Bool(), kind="input"),
-            x      = Signal(typ=UInt(10), kind="input"),
-            y      = Signal(typ=UInt(32), kind="input"),
-            result = Signal(typ=UInt(32), kind="output"),
+        self.io = IORecord(
+            x      = Input(UInt(10)),
+            y      = Input(UInt(32)),
+            result = Output(UInt(32)),
         )
         self.elaborate()
 
     def elaborate(self):
-        ram = VendorRAM().make_internal()
-        ram.io.clk      <<= self.io.clk
+        ram = VendorRAM().inline()
         ram.io.addr     <<= self.io.x
         ram.io.data_in  <<= self.io.y
         ram.io.we       <<= 1
         self.io.result  <<= ram.io.data_out
+        # The implicit clock (with_clock=True) is shared across the flat module,
+        # so the inlined RAM's `posedge clk` binds to it — no explicit wiring needed.
 ```
 
-`m.to_verilog()` produces a single flat module containing both the parent's
-auto-emitted glue and the vendor RAM's custom block. The parent's `assign`
+`TopWithVendorRAM().to_verilog(with_clock=True)` produces a single flat module
+containing both the parent's auto-emitted glue and the vendor RAM's custom block. The parent's `assign`
 lines connect the parent inputs to the RAM's port wires; the vendor block
 provides the RAM's behaviour.
 
@@ -184,7 +168,7 @@ Two flags on `Signal`:
 - `_no_emit_decl`: skip the wire/reg/mem declaration.
 - `_no_emit_drive`: skip the `assign` or always-block update.
 
-When `Component.to_module` (top-level) or `Component.make_internal`
+When `Component.to_netlist` (top-level) or `Component.inline`
 (embedded) detects a `custom_verilog` method, it runs
 `_apply_custom_verilog_tags()`:
 
@@ -197,7 +181,7 @@ When `Component.to_module` (top-level) or `Component.make_internal`
    driver — used by the collector to decide whether the parent's
    input-side wiring needs explicit peer-seeding.
 
-At emit time, `Module.to_verilog_lines`:
+At emit time, `Netlist.to_verilog_lines`:
 
 - Skips signals tagged `_no_emit_decl` in the wire/reg/mem decl loops.
 - Skips signals tagged `_no_emit_drive` in the combinational-assigns loop

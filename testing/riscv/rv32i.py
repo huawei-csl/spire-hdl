@@ -3,8 +3,8 @@
 from typing import List, Tuple, Dict
 
 from spire.helpers import get_yosys_transistor_count
-from spire.component import Module
-from spire.expr import UInt, Bool, Const, mux, cat, fit_width
+from spire import Component, IORecord, Input, Output
+from spire.expr import UInt, Bool, Const, Register, mux, cat, fit_width
 from spire.simulator import Simulator
 
 
@@ -53,114 +53,132 @@ def read_reg(regs: List, idx_expr):
 # -----------------------
 # Core builder
 # -----------------------
-def build_rv32i_simple(name="RV32I_Simple"):
-    """
+class RV32ISimple(Component):
+    """Minimal single-cycle RV32I core, authored the Component way.
+
     Ports:
-      in  instr[31:0]            -- instruction at imem_addr (combinational)
-      in  dmem_rdata[31:0]       -- read word from data memory @ dmem_addr (combinational)
-      out imem_addr[31:0]        -- PC (byte address)
-      out dmem_addr[31:0]        -- byte address for load/store
-      out dmem_wdata[31:0]       -- store data
-      out dmem_we                -- store enable
-      out halt                   -- 1 on EBREAK
+      in  instr[31:0]      -- instruction at imem_addr (combinational)
+      in  dmem_rdata[31:0] -- read word from data memory @ dmem_addr (combinational)
+      out imem_addr[31:0]  -- PC (byte address)
+      out dmem_addr[31:0]  -- byte address for load/store
+      out dmem_wdata[31:0] -- store data
+      out dmem_we          -- store enable
+      out halt             -- 1 on EBREAK
     """
-    m = Module(name, with_clock=True, with_reset=True)
 
-    # ---- Ports ----
-    instr       = m.input(UInt(32), "instr")
-    dmem_rdata  = m.input(UInt(32), "dmem_rdata")
+    def __init__(self, name: str = "RV32I_Simple"):
+        self._name = name
+        self.io = IORecord(
+            instr=Input(UInt(32)),
+            dmem_rdata=Input(UInt(32)),
+            imem_addr=Output(UInt(32)),
+            dmem_addr=Output(UInt(32)),
+            dmem_wdata=Output(UInt(32)),
+            dmem_we=Output(Bool()),
+            halt=Output(Bool()),
+        )
+        self.elaborate()
 
-    imem_addr   = m.output(UInt(32), "imem_addr")
-    dmem_addr   = m.output(UInt(32), "dmem_addr")
-    dmem_wdata  = m.output(UInt(32), "dmem_wdata")
-    dmem_we     = m.output(Bool(),   "dmem_we")
-    halt        = m.output(Bool(),   "halt")
+    def elaborate(self):
+        # Bind IO ports to local names so the core logic below reads exactly like plain HDL.
+        instr      = self.io.instr
+        dmem_rdata = self.io.dmem_rdata
+        imem_addr  = self.io.imem_addr
+        dmem_addr  = self.io.dmem_addr
+        dmem_wdata = self.io.dmem_wdata
+        dmem_we    = self.io.dmem_we
+        halt       = self.io.halt
 
-    # ---- State ----
-    pc = m.reg(UInt(32), "pc", init=0)
+        # ---- State ----
+        pc = Register(UInt(32), init=0, name="pc")
+        # 32 general-purpose registers (x0 is hard-wired to zero by construction)
+        regs = [Register(UInt(32), init=0, name=f"x{i}") for i in range(32)]
 
-    # 32 general-purpose registers (x0 is hard-wired to zero by construction)
-    regs = [m.reg(UInt(32), f"x{i}", init=0) for i in range(32)]
+        # ---- Decode fields ----
+        opcode = instr[0:7]          # instr[0:7]
+        rd     = instr[7:12]         # instr[7:12]
+        funct3 = instr[12:15]        # instr[12:15]
+        rs1    = instr[15:20]        # instr[15:20]
+        rs2    = instr[20:25]        # instr[20:25]
+        funct7 = instr[25:32]        # instr[25:32]
 
-    # ---- Decode fields ----
-    opcode = instr[0:7]          # instr[0:7]
-    rd     = instr[7:12]         # instr[7:12]
-    funct3 = instr[12:15]        # instr[12:15]
-    rs1    = instr[15:20]        # instr[15:20]
-    rs2    = instr[20:25]        # instr[20:25]
-    funct7 = instr[25:32]        # instr[25:32]
+        # Opcodes
+        is_rtype  = (opcode == 0x33)
+        is_itype  = (opcode == 0x13)
+        is_load   = (opcode == 0x03)  # LW (funct3=010)
+        is_store  = (opcode == 0x23)  # SW (funct3=010)
+        is_branch = (opcode == 0x63)  # BEQ/BNE
+        is_system = (opcode == 0x73)  # EBREAK/ECALL/CSR
+        is_ebreak = (instr == 0x00100073)  # exact encoding
 
-    # Opcodes
-    is_rtype  = (opcode == 0x33)
-    is_itype  = (opcode == 0x13)
-    is_load   = (opcode == 0x03)  # LW (funct3=010)
-    is_store  = (opcode == 0x23)  # SW (funct3=010)
-    is_branch = (opcode == 0x63)  # BEQ/BNE
-    is_system = (opcode == 0x73)  # EBREAK/ECALL/CSR
-    is_ebreak = (instr == 0x00100073)  # exact encoding
+        # Read sources
+        rs1_val = read_reg(regs, rs1)
+        rs2_val = read_reg(regs, rs2)
 
-    # Read sources
-    rs1_val = read_reg(regs, rs1)
-    rs2_val = read_reg(regs, rs2)
+        # Immediates
+        i_imm = imm_i32(instr)
+        s_imm = imm_s32(instr)
+        b_imm = imm_b32(instr)
 
-    # Immediates
-    i_imm = imm_i32(instr)
-    s_imm = imm_s32(instr)
-    b_imm = imm_b32(instr)
+        # ALU (minimal ops: ADD, SUB; ADDI; plus SLTU for simple comparisons)
+        is_sub  = (is_rtype & (funct3 == 0) & (funct7 == 0x20))
+        is_slt  = (is_rtype & (funct3 == 2) & (funct7 == 0x00))  # SLT (treated as unsigned here)
+        is_sltu = (is_rtype & (funct3 == 3) & (funct7 == 0x00))  # SLTU
+        # operand B: for I-type arith use immediate, else rs2
+        opB = mux(is_itype, i_imm, rs2_val)
 
-    # ALU (minimal ops: ADD, SUB; ADDI; plus SLTU for simple comparisons)
-    is_sub  = (is_rtype & (funct3 == 0) & (funct7 == 0x20))
-    is_slt  = (is_rtype & (funct3 == 2) & (funct7 == 0x00))  # SLT (treated as unsigned here)
-    is_sltu = (is_rtype & (funct3 == 3) & (funct7 == 0x00))  # SLTU
-    # operand B: for I-type arith use immediate, else rs2
-    opB = mux(is_itype, i_imm, rs2_val)
+        add_res = fit_width(rs1_val + opB, UInt(32))
+        sub_res = fit_width(rs1_val - rs2_val, UInt(32))
+        # Less-than result as 0/1 extended to 32 bits
+        lt_bit  = (rs1_val < rs2_val)
+        lt_res  = mux(lt_bit, Const(1, UInt(32)), Const(0, UInt(32)))
+        alu_sub_add = mux(is_sub, sub_res, add_res)
+        alu_res = mux((is_slt | is_sltu), lt_res, alu_sub_add)
 
-    add_res = fit_width(rs1_val + opB, UInt(32))
-    sub_res = fit_width(rs1_val - rs2_val, UInt(32))
-    # Less-than result as 0/1 extended to 32 bits
-    lt_bit  = (rs1_val < rs2_val)
-    lt_res  = mux(lt_bit, Const(1, UInt(32)), Const(0, UInt(32)))
-    alu_sub_add = mux(is_sub, sub_res, add_res)
-    alu_res = mux((is_slt | is_sltu), lt_res, alu_sub_add)
+        # Data memory interface
+        addr_imm = mux(is_store, s_imm, i_imm)           # S uses s_imm; I (LW) uses i_imm
+        daddr    = fit_width(rs1_val + addr_imm, UInt(32))
 
-    # Data memory interface
-    addr_imm = mux(is_store, s_imm, i_imm)           # S uses s_imm; I (LW) uses i_imm
-    daddr    = fit_width(rs1_val + addr_imm, UInt(32))
+        dmem_addr <<= daddr
+        dmem_wdata <<= rs2_val
+        dmem_we <<= is_store
 
-    dmem_addr <<= daddr
-    dmem_wdata <<= rs2_val
-    dmem_we <<= is_store
+        # Instruction memory address = PC
+        imem_addr <<= pc
 
-    # Instruction memory address = PC
-    imem_addr <<= pc
+        # Branch decision (BEQ/BNE only)
+        beq = (funct3 == 0) & (rs1_val == rs2_val)
+        bne = (funct3 == 1) & (rs1_val != rs2_val)
+        take_branch = is_branch & (beq | bne)
 
-    # Branch decision (BEQ/BNE only)
-    beq = (funct3 == 0) & (rs1_val == rs2_val)
-    bne = (funct3 == 1) & (rs1_val != rs2_val)
-    take_branch = is_branch & (beq | bne)
+        pc_plus4   = fit_width(pc + 4, UInt(32))
+        pc_br_tgt  = fit_width(pc + b_imm, UInt(32))
+        pc_next    = mux(is_ebreak, pc, mux(take_branch, pc_br_tgt, pc_plus4))
+        pc         <<= pc_next
 
-    pc_plus4   = fit_width(pc + 4, UInt(32))
-    pc_br_tgt  = fit_width(pc + b_imm, UInt(32))
-    pc_next    = mux(is_ebreak, pc, mux(take_branch, pc_br_tgt, pc_plus4))
-    pc         <<= pc_next
+        # Register writeback:
+        wb_from_mem = is_load
+        wb_data     = mux(wb_from_mem, dmem_rdata, alu_res)
+        reg_we      = (is_rtype | is_itype | is_load) & (~is_system)
 
-    # Register writeback:
-    wb_from_mem = is_load
-    wb_data     = mux(wb_from_mem, dmem_rdata, alu_res)
-    reg_we      = (is_rtype | is_itype | is_load) & (~is_system)
+        for i in range(32):
+            if i == 0:
+                # x0 is hard-wired zero
+                regs[i] <<= Const(0, UInt(32))
+            else:
+                we_i = reg_we & (rd == i)
+                regs[i] <<= mux(we_i, wb_data, regs[i])
 
-    for i in range(32):
-        if i == 0:
-            # x0 is hard-wired zero
-            regs[i] <<= Const(0, UInt(32))
-        else:
-            we_i = reg_we & (rd == i)
-            regs[i] <<= mux(we_i, wb_data, regs[i])
+        # Halt signal on EBREAK
+        halt <<= is_ebreak
 
-    # Halt signal on EBREAK
-    halt <<= is_ebreak
 
-    return m
+def build_rv32i_simple(name="RV32I_Simple"):
+    """Return the RV32I core as a Component (back-compat shim).
+
+    The simulation harness below drives it directly via ``Simulator(core)`` -- the IR stays hidden.
+    """
+    return RV32ISimple(name)
 
 
 # -----------------------

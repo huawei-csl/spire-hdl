@@ -10,7 +10,7 @@ from spire.helpers import optimize_aag, run_vectors
 from spire.expr import Bool, Concat, Const, Expr, Op2, SInt, UInt
 from spire.aiger import AigerExporter, AigerImporter
 from spire.component import IOCollector
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 
 
@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 
 def run_vectors_io_log(
-    m: Module, vectors: List[Tuple[str, Dict[str, int], Dict[str, int]]], *, 
+    m: Netlist, vectors: List[Tuple[str, Dict[str, int], Dict[str, int]]], *, 
     decoder: Callable[[int], float] | None = None, exprs: List[Expr] = [],
     use_signed: bool = False,
 ) -> None:
@@ -70,8 +70,8 @@ def run_vectors_io_log(
     return states_list
 
 
-def build_multiplier(W: int = 8, tb_sigma: Optional[float] = None, n_vecs: int = 64) -> Tuple[Module, Dict[str, UInt], List]:
-    m = Module(f"Mul{W}", with_clock=False, with_reset=False)
+def build_multiplier(W: int = 8, tb_sigma: Optional[float] = None, n_vecs: int = 64) -> Tuple[Netlist, Dict[str, UInt], List]:
+    m = Netlist(f"Mul{W}", with_clock=False, with_reset=False)
     a = m.input(UInt(W), "a")
     b = m.input(UInt(W), "b")
     y = m.output(UInt(2*W), "y")
@@ -91,8 +91,8 @@ def build_multiplier(W: int = 8, tb_sigma: Optional[float] = None, n_vecs: int =
     spec = {"a": UInt(W), "b": UInt(W), "y": UInt(2*W)}
     return m, spec, vecs, None
 
-def build_multiplier_from_compressor_tree(W: int = 8, tb_sigma: Optional[float] = None, n_vecs: int = 64) -> Tuple[Module, Dict[str, UInt], List]:
-    #m = Module(f"Mul{W}", with_clock=False, with_reset=False)
+def build_multiplier_from_compressor_tree(W: int = 8, tb_sigma: Optional[float] = None, n_vecs: int = 64) -> Tuple[Netlist, Dict[str, UInt], List]:
+    #m = Netlist(f"Mul{W}", with_clock=False, with_reset=False)
     #a = m.input(UInt(W), "a")
     #b = m.input(UInt(W), "b")
     #y = m.output(UInt(2*W), "y")
@@ -115,8 +115,8 @@ def build_multiplier_from_compressor_tree(W: int = 8, tb_sigma: Optional[float] 
     return m, spec, vecs, None
 
 
-def build_signed_multiplier(W: int = 8, tb_sigma: Optional[float]= None, n_vecs: int = 64) -> Tuple[Module, Dict[str, UInt], List]:
-    m = Module(f"SMul{W}", with_clock=False, with_reset=False)
+def build_signed_multiplier(W: int = 8, tb_sigma: Optional[float]= None, n_vecs: int = 64) -> Tuple[Netlist, Dict[str, UInt], List]:
+    m = Netlist(f"SMul{W}", with_clock=False, with_reset=False)
     a = m.input(SInt(W), "a")
     b = m.input(SInt(W), "b")
     y = m.output(SInt(2*W), "y")
@@ -142,8 +142,8 @@ def build_signed_multiplier(W: int = 8, tb_sigma: Optional[float]= None, n_vecs:
 
 
 # input in sign magnitude, output in two's complement
-def build_signed_multiplier_sign_magnitude(W: int = 8, tb_sigma: Optional[float] = None, n_vecs: int = 64) -> Tuple[Module, Dict[str, UInt], List]:
-    m = Module(f"SMulSM{W}", with_clock=False, with_reset=False)
+def build_signed_multiplier_sign_magnitude(W: int = 8, tb_sigma: Optional[float] = None, n_vecs: int = 64) -> Tuple[Netlist, Dict[str, UInt], List]:
+    m = Netlist(f"SMulSM{W}", with_clock=False, with_reset=False)
     a = m.input(UInt(W), "a")  # sign-magnitude
     b = m.input(UInt(W), "b")  # sign-magnitude
     y = m.output(UInt(2*W), "y") # two's complement

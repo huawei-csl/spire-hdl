@@ -4,13 +4,13 @@
 Builds a 4-bit multiplier with and without the decorator, compares AIG stats.
 """
 
-from spire.component import Module
+from spire.component import Netlist
 from spire.expr import UInt, Const, mux
 from spire.aiger import AigerExporter
 from spire.optimize import flowy_optimized
 
 
-def aig_gate_count(m: Module) -> int:
+def aig_gate_count(m: Netlist) -> int:
     """Return the AND-gate count from the AAG header."""
     m.collect_signals()
     header = AigerExporter(m).get_aag()[0].split()
@@ -21,7 +21,7 @@ def aig_gate_count(m: Module) -> int:
 
 
 def build_original():
-    m = Module("mult_orig", with_clock=False, with_reset=False)
+    m = Netlist("mult_orig", with_clock=False, with_reset=False)
     a = m.input(UInt(4), "a")
     b = m.input(UInt(4), "b")
     p = m.output(UInt(8), "p")
@@ -43,7 +43,7 @@ def optimized_mult(a, b):
 
 
 def build_optimized():
-    m = Module("mult_opt", with_clock=False, with_reset=False)
+    m = Netlist("mult_opt", with_clock=False, with_reset=False)
     a = m.input(UInt(4), "a")
     b = m.input(UInt(4), "b")
     p = m.output(UInt(8), "p")
@@ -89,7 +89,7 @@ def compute_guard_sticky_normal(prod, sr, need_right):
 
 
 def build_guard_sticky_orig():
-    m = Module("gs_orig", with_clock=False, with_reset=False)
+    m = Netlist("gs_orig", with_clock=False, with_reset=False)
     prod = m.input(UInt(PROD_W), "prod")
     sr = m.input(UInt(LZ_W), "sr")
     nr = m.input(UInt(1), "need_right")
@@ -117,7 +117,7 @@ print(f"Original:  {gates_gs_orig} AIG gates")
 
 
 def build_guard_sticky_opt():
-    m = Module("gs_opt", with_clock=False, with_reset=False)
+    m = Netlist("gs_opt", with_clock=False, with_reset=False)
     prod = m.input(UInt(PROD_W), "prod")
     sr = m.input(UInt(LZ_W), "sr")
     nr = m.input(UInt(1), "need_right")

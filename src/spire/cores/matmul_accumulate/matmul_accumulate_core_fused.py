@@ -11,7 +11,7 @@ from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding
 from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType, SelectionMode, SplitMode, StageBasedMultiplierIO, TwoInputAritConfig
 from spire.cores.matmul_accumulate.matmul_accumulate_core import MatmulAccumulateCore, MatmulAccumulateIO, MMAcDims, MMAcWidths
 from spire.expr import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, fit_type, fit_width, reinterpret, s_ext
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 
 
 @dataclass
@@ -224,7 +224,7 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
 @dataclass
 class MatmulAccumulateBuildOut:
     component: MatmulAccumulateComponent
-    module: Module
+    module: Netlist
     A: Array
     B: Array
     C: Array

@@ -1,4 +1,4 @@
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 from spire.expr import *
 from spire.expr import Signal, Expr, Const, Op1, Op2, Ternary, Concat, Slice, Resize
 from spire.memory import _MemoryArray, _ArrayIndex
@@ -140,7 +140,7 @@ class _SimExprEval(ExprVisitor[int]):
 
 class Simulator(SimulatorBase):
     """
-    Cycle-accurate simulator for a single Module.
+    Cycle-accurate simulator for a single Netlist.
     - step(): one rising edge of clk (if module has clock)
     - set(): set an input or (optionally) force a reg
     - get(): read any signal (inputs, wires, outputs, regs)
@@ -148,8 +148,8 @@ class Simulator(SimulatorBase):
     - eval(): recompute combinational paths (lazy anyway)
     """
 
-    def __init__(self, module: "Module | Component"):
-        # Accept a Component directly and lower it to its netlist IR (a Netlist/Module is used as-is).
+    def __init__(self, module: "Netlist | Component"):
+        # Accept a Component directly and lower it to its netlist IR (a Netlist is used as-is).
         if isinstance(module, Component):
             module = module.to_netlist()
         self.m = module

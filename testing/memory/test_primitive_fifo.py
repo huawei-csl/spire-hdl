@@ -33,7 +33,7 @@ from spire.composite.record import CompositeRecord
 # ---------------------------------------------------------------------------
 
 def _build_fifo(*, depth: int = 4, elem_w: int = 8, name: str = "myfifo"):
-    """Wraps a FIFOPrimitive in a parent Component so it sits as the top of a Module."""
+    """Wraps a FIFOPrimitive in a parent Component so it sits as the top of a Netlist."""
     count_w = (depth - 1).bit_length() + 1
 
     class TopFifo(Component):

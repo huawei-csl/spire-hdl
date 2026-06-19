@@ -66,7 +66,7 @@ from spire.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
 from spire.helpers import get_aig_stats, get_yosys_metrics, run_vectors_on_simulator
 from spire.verilog_testbench import TestbenchGenSimulator
 from spire.aiger import AigerExporter
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 
 
@@ -222,7 +222,7 @@ class GenerationActions:
 
 @dataclass
 class GenerationResult:
-    module: Module
+    module: Netlist
     component: Any
     input_encoding: Encoding | None = None
     output_encoding: Encoding | None = None
@@ -315,7 +315,7 @@ def _validate_clock_reset(with_clock: bool, with_reset: bool) -> None:
 
 
 def _apply_actions(
-    module: Module,
+    module: Netlist,
     vectors: list[tuple[str, dict[str, int], dict[str, int]]] | None,
     *,
     actions: GenerationActions,
@@ -382,7 +382,7 @@ def _apply_actions(
 
 
 def _finalize(
-    module: Module,
+    module: Netlist,
     component: Any,
     vectors: list[tuple[str, dict[str, int], dict[str, int]]] | None,
     actions: GenerationActions,

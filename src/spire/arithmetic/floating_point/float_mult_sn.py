@@ -11,11 +11,11 @@
 #   EW, FW: widths
 #   subnormals: enable subnormal in/out (gradual underflow). Default False = flush-to-zero.
 #
-# Requires: Module, UInt, Bool, mux, cat from your Spire.
+# Requires: Netlist, UInt, Bool, mux, cat from your Spire.
 
 from typing import Dict, List, Optional, Tuple
 
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 from spire.io_record import IORecord, Input, Output
 from spire.expr import *
 from spire.simulator import Simulator
@@ -27,7 +27,7 @@ from spire.arithmetic.int_arithmetic_config import (
 )
 
 
-# Uses: Module, UInt, Bool, mux, cat (from your Spire)
+# Uses: Netlist, UInt, Bool, mux, cat (from your Spire)
 
 
 # ---- helpers used inside FpMulSN ----
@@ -338,7 +338,7 @@ class FpMulSN(Component):
         y <<= cat(frac_field, exp_field, sign_field)
 
 
-def build_fp_mul_sn(name: str, EW: int, FW: int, *, subnormals: bool = True, always_subnormal_rounding: bool = False) -> "Module":
+def build_fp_mul_sn(name: str, EW: int, FW: int, *, subnormals: bool = True, always_subnormal_rounding: bool = False) -> "Netlist":
     comp = FpMulSN(EW, FW, subnormals=subnormals, always_subnormal_rounding=always_subnormal_rounding)
     return comp.to_module(name, with_clock=False, with_reset=False)
 

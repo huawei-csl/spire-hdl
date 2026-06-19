@@ -8,7 +8,7 @@ from spire.arithmetic.prefix_adders.prefix_adder_topologies import P_brent_kung,
 from spire.arithmetic.prefix_adders.prefix_adder_specials import ParallelScan_16_a, ParallelScan_16_b, ParallelScan_8_a, ParallelScan_8_b, get_multiscan_nodes_24, get_multiscan_nodes_32, prefix_nodes_to_ranges, zcg_24, zcg_32
 from spire.helpers import get_yosys_metrics
 from spire.analyzer import GraphReport
-from spire.component import Module
+from spire.component import Netlist
 from spire.aig.aig_aigerverse import conv_aag_into_aig, read_aag_into_aig
 from spire.expr import UInt, cat
 from spire.aiger import AigerExporter
@@ -52,7 +52,7 @@ def build_prefix_adder_from_matrix(
     with_cin: bool = False,
     with_cout: bool = True,
     depth_optimize: bool = True,
-) -> Module:
+) -> Netlist:
     """
     Build an n-bit Spire adder using a prefix tree specified by P.
 
@@ -72,7 +72,7 @@ def build_prefix_adder_from_matrix(
     nodes = _normalize_P(n, P)
     if depth_optimize:
         depth, best_k, _, _ = analyze_prefix_matrix(n, nodes)
-    m = Module(name, with_clock=False, with_reset=False)
+    m = Netlist(name, with_clock=False, with_reset=False)
 
     a = m.input(UInt(n), "a")
     b = m.input(UInt(n), "b")

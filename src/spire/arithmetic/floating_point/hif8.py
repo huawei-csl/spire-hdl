@@ -27,7 +27,7 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
             "get_yosys_transistor_count requires the optional 'aigverse' dependency"
         )
 from spire.expr import *
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 
 # -----------------------------------------------------------------------------
@@ -235,8 +235,8 @@ def multiply_hif8(a: int, b: int) -> int:
 # -----------------------------------------------------------------------------
 
 
-def build_hif8_mul_logic(name: str = "HiF8Mul", *, debug: bool = False) -> Module:
-    m = Module(name, with_clock=False, with_reset=False)
+def build_hif8_mul_logic(name: str = "HiF8Mul", *, debug: bool = False) -> Netlist:
+    m = Netlist(name, with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     y = m.output(UInt(8), "y")
@@ -532,8 +532,8 @@ def _decode_operand_expr(x: Expr) -> Dict[str, Expr]:
     }
 
 
-def build_hif8_mul_lut(name: str = "HiF8Mul_LUT") -> Module:
-    m = Module(name, with_clock=False, with_reset=False)
+def build_hif8_mul_lut(name: str = "HiF8Mul_LUT") -> Netlist:
+    m = Netlist(name, with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     y = m.output(UInt(8), "y")
@@ -569,7 +569,7 @@ def build_hif8_mul_lut(name: str = "HiF8Mul_LUT") -> Module:
     return m
 
 
-def build_hif8_mul_module(name: str = "HiF8Mul") -> Module:
+def build_hif8_mul_module(name: str = "HiF8Mul") -> Netlist:
     return build_hif8_mul_logic(name)
 
 # -----------------------------------------------------------------------------

@@ -65,7 +65,7 @@ def test_top_level_blackbox_emits_custom_verilog():
     # Custom block is the entire body — no auto-emit logic from elaborate.
     assert "// --- blackbox adder ---" in v
     assert "assign sum = a + b;" in v
-    # Module has its ports declared but no internal wires/regs.
+    # Netlist has its ports declared but no internal wires/regs.
     assert "wire" not in re.sub(r"//.*", "", v)  # no wire decls (strip comments first)
 
 

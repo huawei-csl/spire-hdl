@@ -7,13 +7,13 @@ from spire.arithmetic.int_multipliers.eval.testvector_generation import (
     EncoderDecoderTestVectors,
 )
 from spire.helpers import run_vectors, run_vectors_on_simulator
-from spire.component import Module
+from spire.component import Netlist
 from spire.simulator import Simulator
 from spire.verilog_testbench import TestbenchGenSimulator
 from spire.various.vcd_writer import write_vcd
 
 
-def _run_component(module: Module, vecs, base_filename: str, *, test_name: str, with_clk: bool = False) -> None:
+def _run_component(module: Netlist, vecs, base_filename: str, *, test_name: str, with_clk: bool = False) -> None:
 
     run_vectors(module, vecs, print_on_pass=True)
 

@@ -26,8 +26,8 @@ from spire.visitor import ExprVisitor, expr_children
 
 
 # The flat netlist IR now lives in spire.ir (one-way layering: component -> ir -> spire).
-# Re-exported here so existing `from spire.component import Module/IOCollector/...` keep working.
-from spire.ir import (Netlist, Module, _PortGrouper, IOCollector, _SignalCollector, get_rand_hash)
+# Re-exported here so existing `from spire.component import IOCollector/...` keep working.
+from spire.ir import (Netlist, _PortGrouper, IOCollector, _SignalCollector, get_rand_hash)
 # IO normalization helpers live in the composite layer; re-exported here for back-compat
 # (e.g. `from spire.component import iter_values`).
 from spire.composite.record_dynamic import _to_composite, iter_values
@@ -123,7 +123,7 @@ class Component(abc.ABC):
         module.collect_signals()
         return module 
 
-    def from_module(self, module: 'Module', make_internal=False, group=False) -> Self:
+    def from_module(self, module: 'Netlist', make_internal=False, group=False) -> Self:
         if group:
             IOCollector().group(module, self.get_spec())
 

@@ -17,7 +17,7 @@ import random
 from typing import Any, Callable, Dict, List, Tuple, Union
 
 from spire.expr import Expr, HDLType, Signal, UInt
-from spire.component import Module
+from spire.component import Netlist
 from spire.aiger import AigerExporter
 from spire.simulator import Simulator
 from spire.optimize import (
@@ -28,7 +28,7 @@ from spire.optimize import (
 )
 
 # ---------------------------------------------------------------------------
-# Helper: build a top-level Module that uses the decorator result, so we can
+# Helper: build a top-level Netlist that uses the decorator result, so we can
 # simulate it and get stats.
 # ---------------------------------------------------------------------------
 
@@ -36,14 +36,14 @@ def wrap_in_module(
     name: str,
     input_specs: Dict[str, HDLType],
     build_fn: Callable[..., Union[Expr, Tuple[Expr, ...]]],
-) -> Module:
-    """Create a Module with given inputs, call build_fn to produce output(s),
+) -> Netlist:
+    """Create a Netlist with given inputs, call build_fn to produce output(s),
     and wire them to module outputs.
 
     Parameters
     ----------
     name : str
-        Module name.
+        Netlist name.
     input_specs : dict
         {port_name: HDLType} for each input.
     build_fn : callable
@@ -51,9 +51,9 @@ def wrap_in_module(
 
     Returns
     -------
-    Module
+    Netlist
     """
-    m: Module = Module(name, with_clock=False, with_reset=False)
+    m: Netlist = Netlist(name, with_clock=False, with_reset=False)
     inputs: Dict[str, Signal] = {}
     for pname, typ in input_specs.items():
         inputs[pname] = m.input(typ, pname)
@@ -72,7 +72,7 @@ def wrap_in_module(
     return m
 
 
-def get_aig_gate_count(module: Module) -> int:
+def get_aig_gate_count(module: Netlist) -> int:
     """Quick AIG gate count without external optimizers."""
     aag_lines: List[str] = AigerExporter(module).get_aag()
     header: List[str] = aag_lines[0].split()
@@ -80,7 +80,7 @@ def get_aig_gate_count(module: Module) -> int:
 
 
 def simulate_module(
-    module: Module,
+    module: Netlist,
     test_vectors: List[Dict[str, int]],
 ) -> List[Dict[str, int]]:
     """Run test vectors through the simulator and return results.
@@ -114,7 +114,7 @@ def test_single_output_roundtrip() -> None:
     comp, out_names = _build_component(adder, logic_args, {})
     assert out_names == ["y"]
 
-    module: Module = comp.to_module("test_adder")
+    module: Netlist = comp.to_module("test_adder")
     assert len(module._ports_of("input")) == 2
     assert len(module._ports_of("output")) == 1
 
@@ -141,7 +141,7 @@ def test_tuple_output_roundtrip() -> None:
     comp, out_names = _build_component(sum_and_carry, logic_args, {})
     assert out_names == ["res_a", "res_b"]
 
-    module: Module = comp.to_module("test_tuple")
+    module: Netlist = comp.to_module("test_tuple")
     aag_lines: List[str] = AigerExporter(module).get_aag()
     spec: Dict[str, HDLType] = module.get_spec()
 
@@ -163,7 +163,7 @@ def test_mixed_args() -> None:
     other_args: Dict[str, int] = {"shift": 2}
     comp, out_names = _build_component(shift_add, logic_args, other_args)
 
-    module: Module = comp.to_module("test_mixed")
+    module: Netlist = comp.to_module("test_mixed")
     # Only 2 inputs (a, b), not 3
     assert len(module._ports_of("input")) == 2
     assert len(module._ports_of("output")) == 1
@@ -197,7 +197,7 @@ def test_simulation_correctness() -> None:
     # Build component + module for the function
     logic_args: Dict[str, Tuple[int, bool]] = {"a": (8, False), "b": (8, False)}
     comp, out_names = _build_component(adder, logic_args, {})
-    mod_orig: Module = comp.to_module("sim_adder")
+    mod_orig: Netlist = comp.to_module("sim_adder")
 
     # AAG roundtrip (simulates what the decorator does after optimization)
     aag_lines: List[str] = AigerExporter(mod_orig).get_aag()
@@ -207,7 +207,7 @@ def test_simulation_correctness() -> None:
     def build_optimized(a, b):
         return _instantiate_from_cache(aag_lines, spec, out_names, {"a": a, "b": b})
 
-    mod_rt: Module = wrap_in_module("sim_adder_rt", {"a": UInt(8), "b": UInt(8)}, build_optimized)
+    mod_rt: Netlist = wrap_in_module("sim_adder_rt", {"a": UInt(8), "b": UInt(8)}, build_optimized)
 
     # Generate random test vectors
     random.seed(42)
@@ -231,7 +231,7 @@ def test_aag_roundtrip_preserves_gates() -> None:
 
     logic_args: Dict[str, Tuple[int, bool]] = {"a": (8, False), "b": (8, False)}
     comp, _ = _build_component(my_circuit, logic_args, {})
-    mod: Module = comp.to_module("gate_count_test")
+    mod: Netlist = comp.to_module("gate_count_test")
     gates_orig: int = get_aig_gate_count(mod)
 
     # Roundtrip through AAG
@@ -241,7 +241,7 @@ def test_aag_roundtrip_preserves_gates() -> None:
     def build_rt(a, b):
         return _instantiate_from_cache(aag_lines, spec, ["y"], {"a": a, "b": b})
 
-    mod_rt: Module = wrap_in_module("gate_count_rt", {"a": UInt(8), "b": UInt(8)}, build_rt)
+    mod_rt: Netlist = wrap_in_module("gate_count_rt", {"a": UInt(8), "b": UInt(8)}, build_rt)
     gates_rt: int = get_aig_gate_count(mod_rt)
 
     # Roundtrip should not increase gates (may stay equal or decrease due to structural hashing)
@@ -278,7 +278,7 @@ def test_signed_types() -> None:
 
     logic_args: Dict[str, Tuple[int, bool]] = {"a": (8, True), "b": (8, True)}
     comp, out_names = _build_component(signed_add, logic_args, {})
-    module: Module = comp.to_module("test_signed")
+    module: Netlist = comp.to_module("test_signed")
 
     for p in module._ports_of("input"):
         assert p.typ.signed, f"Input {p.name} should be signed"
@@ -305,7 +305,7 @@ def test_integration_flowy() -> None:
     # Build the original (un-optimized) version for comparison
     orig_comp, _ = _build_component(lambda a, b: a * b,
                                      {"a": (8, False), "b": (8, False)}, {})
-    mod_orig: Module = orig_comp.to_module("orig_mult")
+    mod_orig: Netlist = orig_comp.to_module("orig_mult")
     stats_orig: dict = get_aig_stats(mod_orig)
     print(f"  Original:  AIG gates={stats_orig['num_gates']}, depth={stats_orig['depth']}")
 
@@ -313,7 +313,7 @@ def test_integration_flowy() -> None:
     def build_optimized(a, b):
         return my_multiplier(a, b)
 
-    mod_opt: Module = wrap_in_module("opt_mult", {"a": UInt(8), "b": UInt(8)}, build_optimized)
+    mod_opt: Netlist = wrap_in_module("opt_mult", {"a": UInt(8), "b": UInt(8)}, build_optimized)
     stats_opt: dict = get_aig_stats(mod_opt)
     print(f"  Optimized: AIG gates={stats_opt['num_gates']}, depth={stats_opt['depth']}")
 

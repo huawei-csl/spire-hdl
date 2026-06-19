@@ -4,7 +4,7 @@ from spire.arithmetic.floating_point.float_mult_sn import build_fp_mul_sn
 from spire.optimize import flowy_optimize
 
 from spire.helpers import get_aig_stats, get_yosys_metrics, get_yosys_transistor_count
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 
 def main():
 
@@ -47,7 +47,7 @@ def main():
 
     # c = module.to_component()
     
-    def get_module_stats(module: Module):
+    def get_module_stats(module: Netlist):
         transistor_count = get_yosys_transistor_count(module, n_iter_optimizations=10)
         yosys_metrics = get_yosys_metrics(module)
         aig_gates = get_aig_stats(module)

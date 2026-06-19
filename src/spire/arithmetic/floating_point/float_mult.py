@@ -8,7 +8,7 @@
 from typing import Callable, Dict, List, Optional, Tuple
 from spire.helpers import run_vectors_on_simulator
 from spire.expr import *
-from spire.component import Component, Module
+from spire.component import Component, Netlist
 from spire.io_record import IORecord, Input, Output
 from spire.simulator import Simulator
 from spire.arithmetic.int_arithmetic_config import (
@@ -16,7 +16,7 @@ from spire.arithmetic.int_arithmetic_config import (
     build_multiplier,
 )
 
-# Uses: Module, UInt, Bool, mux, cat (from your Spire)
+# Uses: Netlist, UInt, Bool, mux, cat (from your Spire)
 
 
 def _or_reduce_bits(vec_expr: Expr, hi: int, lo: int) -> Expr:
@@ -247,17 +247,17 @@ class FpMul(Component):
         y <<= cat(frac_field, exp_field, sign_field)
 
 
-def build_fp_mul(name: str, EW: int, FW: int) -> Module:
+def build_fp_mul(name: str, EW: int, FW: int) -> Netlist:
     comp = FpMul(EW, FW)
     return comp.to_module(name, with_clock=False, with_reset=False)
 
 
-def build_f16_mul(name: str = "F16Mul") -> Module:
+def build_f16_mul(name: str = "F16Mul") -> Netlist:
     # IEEE-754 binary16: exponent=5, fraction=10
     return build_fp_mul(name, EW=5, FW=10)
 
 
-def build_bf16_mul(name: str = "BF16Mul") -> Module:
+def build_bf16_mul(name: str = "BF16Mul") -> Netlist:
     # bfloat16: exponent=8, fraction=7
     return build_fp_mul(name, EW=8, FW=7)
 
@@ -309,7 +309,7 @@ def testvectors_aby_to_dict(vectors: List[VecLocal]) -> List[VecGeneric]:
     return out
 
 def run_vectors_aby(
-    mod: Module,
+    mod: Netlist,
     vectors: List[Tuple[str, int, int, int]],
     *,
     label: str = "",

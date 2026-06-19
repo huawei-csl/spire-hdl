@@ -30,7 +30,7 @@ from spire.helpers import get_yosys_metrics
 from spire.optimize.fsm._emit import restore_encoding
 from spire.expr import Bool, UInt, mux
 from spire.control_structures import case_, default, else_, if_, switch_
-from spire.component import Module
+from spire.component import Netlist
 from spire.state import (
     Encoding, State, optimized_encoding, optimized_fsm, state,
 )
@@ -54,7 +54,7 @@ def _reset_seq() -> None:
 
 
 def _build_seq(name: str):
-    m = Module(name, with_clock=True, with_reset=False)
+    m = Netlist(name, with_clock=True, with_reset=False)
     x   = m.input(Bool(), "x")
     out = m.output(UInt(1), "out")
     reg = m.reg(Seq.typ, "state_reg", init=Seq.S0)
@@ -158,7 +158,7 @@ def _reset_op() -> None:
 
 
 def _build_decoder(name: str):
-    m = Module(name, with_clock=False, with_reset=False)
+    m = Netlist(name, with_clock=False, with_reset=False)
     op_in = m.input(Op.typ, "op")
     mem   = m.output(Bool(), "mem_en")      # LOAD | STORE
     we    = m.output(Bool(), "we")          # STORE
