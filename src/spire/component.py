@@ -1,17 +1,11 @@
 import abc
 from dataclasses import make_dataclass
-import hashlib
-import random
-import time
 
-
-from spire import VERILOG_BANNER
-from spire.expr import Bool, Const, Expr, ExprLike, HDLType, Signal, UInt, cat, fit_width, get_shared_wires, reset_shared_cache
+from spire.expr import Signal, UInt
 from spire.memory import _MemoryArray
 
 
-from typing import Any, Dict, Iterable, List, Optional
-from dataclasses import is_dataclass, fields
+from typing import Any, Dict, List, Optional
 
 from spire.aig.aig_yosys import verilog_to_aag_lines_via_yosys
 
@@ -20,8 +14,8 @@ try:  # Python 3.10 compatibility
 except ImportError:
     from typing_extensions import Self  # type: ignore
 
-from spire.analyzer import _Analyzer, GraphReport
-from spire.visitor import ExprVisitor, expr_children
+from spire.analyzer import GraphReport
+from spire.visitor import expr_children
 
 
 # The flat netlist IR now lives in spire.ir (one-way layering: component -> ir -> spire).
@@ -123,16 +117,10 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
             if sig.name == "clk":
                 if module.clk is None:
                     module.clk = sig
-                else:
-                    # module already has a clock signal
-                    pass
                 continue
             if sig.name == "rst":
                 if module.rst is None:
                     module.rst = sig
-                else:
-                    # module already has a reset signal
-                    pass
                 continue
 
             if sig.kind == "input":
@@ -142,7 +130,6 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
             else:
                 raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
         module.component = self # can be used for debugging
-        # reset_shared_cache() # no longer needed as we collect signals
         module.collect_signals()
         return module 
 
@@ -293,10 +280,3 @@ class CustomVerilogComponent(Component):
             parent = getattr(node, "_memory_parent", None)
             if parent is not None:
                 stack.append(parent)
-
-
-def gen_spec(class_instance: Component) -> Dict[str, UInt]:
-    # Deprecated: superseded by Component.get_spec() / get_ios(). Routes through the same
-    # normalization so dict / namedtuple / IORecord IO all work (the old io.__dict__ walk
-    # silently broke for dict IO).
-    return {sig.name: sig.typ for sig in iter_values(class_instance.io)}

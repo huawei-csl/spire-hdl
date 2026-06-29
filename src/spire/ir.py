@@ -14,8 +14,8 @@ import time
 from typing import Any, Dict, List, Optional
 
 from spire import VERILOG_BANNER
-from spire.expr import (Bool, Const, Expr, ExprLike, HDLType, Signal, UInt, WIRE_LIKE_KINDS, cat,
-                               fit_width, get_shared_wires, reset_shared_cache)
+from spire.expr import (Bool, Expr, ExprLike, HDLType, Signal, UInt, WIRE_LIKE_KINDS, cat,
+                               fit_width, get_shared_wires)
 from spire.memory import _MemoryArray
 from spire.analyzer import _Analyzer, GraphReport
 from spire.visitor import ExprVisitor, expr_children
@@ -41,14 +41,13 @@ class Netlist:
 
     # Signal constructors
     def input(self, typ: HDLType, name: str) -> Signal:
-        s = Signal(typ=typ, kind="input", name=name) #, self)
+        s = Signal(typ=typ, kind="input", name=name)
         self._signals.append(s)
         self._ports.append(s)
         return s
 
     def add_input(self, signal: Signal) -> None:
         if signal.kind != "input":
-            # change to input
             signal.kind = "input"
         if id(signal) in [id(s) for s in self._signals]:
             raise ValueError("Signal already exists in module.")
@@ -56,14 +55,13 @@ class Netlist:
         self._ports.append(signal)
 
     def output(self, typ: HDLType, name: str) -> Signal:
-        s = Signal(typ=typ, kind="output", name=name) #, self)
+        s = Signal(typ=typ, kind="output", name=name)
         self._signals.append(s)
         self._ports.append(s)
         return s
 
     def add_output(self, signal: Signal) -> None:
         if signal.kind != "output":
-            # change to output
             signal.kind = "output"
         if id(signal) in [id(s) for s in self._signals]:
             raise ValueError("Signal already exists in module.")
@@ -71,12 +69,12 @@ class Netlist:
         self._ports.append(signal)
 
     def wire(self, typ: HDLType, name: str) -> Signal:
-        s = Signal(typ=typ, kind="wire", name=name) #, self)
+        s = Signal(typ=typ, kind="wire", name=name)
         self._signals.append(s)
         return s
 
     def reg(self, typ: HDLType, name: str, init: Optional[ExprLike] = None) -> Signal:
-        s = Signal(typ=typ, kind="reg", name=name) #, self)
+        s = Signal(typ=typ, kind="reg", name=name)
         if init is not None:
             s.set_init(init)
         self._signals.append(s)
@@ -124,18 +122,6 @@ class Netlist:
         seeds = self._ports_of("output") + user_internals
         self._signals = list(self._ports)
         _SignalCollector(self).run(seeds)
-
-        # print(f"Collected {len(self._signals)} signals.")
-
-    def to_component(self):
-        """Deprecated: use ``Component.from_netlist(netlist)``.
-
-        Kept as a thin shim for back-compat. The real implementation lives on ``Component`` so
-        the IR has no upward dependency on the user-facing layer (the import below is function-local,
-        so there is no module-load-time cycle: ``component -> ir -> spire`` stays one-way).
-        """
-        from spire.component import Component
-        return Component.from_netlist(self)
 
     # Verilog generation
     def to_verilog_lines(self, collect_signals=True, simplify=False, cse=True,
@@ -518,9 +504,6 @@ class _PortGrouper:
 
     def _demote_port_to_wire(self, m: Netlist, s):
         """Turn an input/output port into an internal wire (keeps drivers/uses intact)."""
-        # if s in m._ports:
-        #     m._ports.remove(s)
-        # s.kind = "wire"  # from input/output → wire
         m._ports[:] = [p for p in m._ports if p is not s]
         s.kind = "wire"
 
@@ -555,8 +538,6 @@ class _PortGrouper:
 # CompositeRecord); IO is read here via `Component.get_ios()` rather than those helpers directly.
 
 
-# ---------------------------------------------------------------------------
 # Deprecated aliases (kept for one release; migrate to the new names).
-# ---------------------------------------------------------------------------
 IOCollector = _PortGrouper  # `IOCollector` was renamed to `_PortGrouper`
 Netlist.module_analyze = Netlist.analyze  # `module_analyze` was renamed to `analyze`

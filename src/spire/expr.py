@@ -1,10 +1,8 @@
 # expr.py
 # A tiny, SpinalHDL-inspired EDSL for Python → Verilog
 from __future__ import annotations
-from dataclasses import dataclass, field
-import hashlib
+from dataclasses import dataclass
 import itertools
-import random
 from typing import Optional, Union, Sequence
 from spire.signal_name_inference import (
     infer_signal_name_from_assignment,
@@ -333,7 +331,7 @@ class Const(Expr):
 
 
 class Signal(Expr, Assignable):
-    def __init__(self, typ: Optional[HDLType] = None, kind: Optional[str] = None, name: Optional[str] = None): #, module: "Netlist"):
+    def __init__(self, typ: Optional[HDLType] = None, kind: Optional[str] = None, name: Optional[str] = None):
         if isinstance(typ, str):
             # Guard against the old argument order Signal(name, typ, kind) — `name` is now last.
             raise TypeError("Signal(typ, kind, name=None): argument order changed — 'name' is now last (pass name= or reorder).")
@@ -612,13 +610,6 @@ def op_mul(a: Expr, b: Expr) -> Expr:
 def op_bit(a: Expr, b: Expr, sym: str) -> Expr:
     t = bitwise_result_type(a, b)
     return mark_expr_name(Op2(fit_width(a, t), fit_width(b, t), sym, t), __file__)
-
-# op bit with shared inputs
-# def op_bit(a: Expr, b: Expr, sym: str) -> Expr:
-#     t = bitwise_result_type(a, b)
-#     a_s = _maybe_share(a, force_share=True)
-#     b_s = _maybe_share(b, force_share=True)
-#     return Op2(fit_width(a_s, t), fit_width(b_s, t), sym, t)
 
 
 def op_not(a: Expr) -> Expr:

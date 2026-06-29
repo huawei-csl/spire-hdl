@@ -40,8 +40,7 @@ def write_vector_data_file(
     with open(data_file, "w") as f:
         f.write("# " + " ".join(input_names + output_names) + "\n")
         for _, inputs, outputs in vectors:
-            # f.write(f"{inputs['a']} {inputs['b']} {outputs['y']}\n")
-            f.write(" ".join([str(inputs[k]) for k, _ in inputs.items()]) + " " + 
+            f.write(" ".join([str(inputs[k]) for k, _ in inputs.items()]) + " " +
                     " ".join([str(outputs[k]) for k, _ in outputs.items()]) + "\n")
 
 
@@ -224,7 +223,6 @@ class TestbenchGenSimulator(SimulatorBase):
         # DUT instantiation
         ports = []
         for p in self.m._ports:
-            # Wire clock first if present
             ports.append(f"    .{p.name}({p.name})")
         ports_csv = ",\n".join(ports)
         lines.append(f"  {self.m.name} dut (\n{ports_csv}\n  );")
@@ -236,7 +234,6 @@ class TestbenchGenSimulator(SimulatorBase):
             self._append_dumpvars(lines, dumpfile)
 
         lines.append("")
-        # Initialise all inputs to zero
         for s in self.inputs:
             init_literal = self._literal(0, s.typ.width)
             lines.append(f"    {s.name} = {init_literal};")
@@ -336,7 +333,6 @@ class TestbenchGenSimulator(SimulatorBase):
         if not data_inputs:
             raise ValueError("No input stimuli specified or inferred.")
 
-        control_inputs = [s for s in self.inputs if s.name in ("clk", "rst")]
         # Include control signals for declaration/connection even if not in the data file
         all_inputs: List[Signal] = self.inputs
 
@@ -383,7 +379,6 @@ class TestbenchGenSimulator(SimulatorBase):
         if dump_vcd:
             self._append_dumpvars(lines, dumpfile, trailing_blank=True)
 
-        # Initialize clock if present
         clk_sig = next((s for s in all_inputs if s.name == "clk"), None)
         if clk_sig is not None:
             lines.append(f"    {clk_sig.name} = 1'b0;")

@@ -2,12 +2,10 @@
 # Graph analysis / metrics
 # -----------------------------
 from dataclasses import dataclass
-from typing import Dict, Set, Tuple, Iterable
+from typing import Dict, Set, Iterable
 
-# from spire.component import Netlist
 from spire.expr import Concat, Const, Expr, Op1, Op2, Resize, Signal, Slice, Ternary
 from spire.visitor import expr_children
-# from spire.component import Netlist
 
 @dataclass
 class GraphReport:

@@ -39,7 +39,6 @@ from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_ext_sta
 from spire.helpers import get_aig_stats, get_switch_count, get_yosys_metrics, get_yosys_transistor_count, refactor_module_to_aig, run_vectors
 from spire.expr import Op2, reset_shared_cache
 from spire.aiger import AigerExporter, AigerImporter
-from spire.component import gen_spec
 from spire.component import IOCollector
 import matplotlib
 matplotlib.use("Agg")  # headless plotting

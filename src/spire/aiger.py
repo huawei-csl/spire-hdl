@@ -1,13 +1,12 @@
 # Export a Spire Netlist to an AIG in AIGER ASCII (.aag) format
 # Works with your 'spire.expr' DSL (duck-typing; no hard import required).
-# Tested conceptually with arithmetic & logic-heavy designs (incl. float16/bfloat16 MACs).
 from __future__ import annotations
-from typing import Dict, List, Tuple, Optional, Any, Iterable
+from typing import Dict, List, Tuple, Optional, Any
 
 
 from spire.component import Netlist
 from spire.aig.aig_aigerverse import AbstractAdapter, conv_aag_into_graph
-from spire.expr import Concat, Resize, SInt, Signal, Ternary, UInt, Bool, Const, Op1, Op2, WIRE_LIKE_KINDS, cat, mux, Slice
+from spire.expr import Concat, Resize, Signal, Ternary, Bool, Const, Op1, Op2, WIRE_LIKE_KINDS, Slice
 from spire.visitor import ExprVisitor
 
 # ---- AIGER literals helpers -------------------------------------------------
@@ -165,8 +164,8 @@ class _AIG:
 
     def bv_sub(self, a: List[int], b: List[int], w_out: Optional[int] = None) -> Tuple[List[int], int]:
         # a - b = a + (~b) + 1 ; returns (diff, carry_out). carry_out==0 -> borrow (a<b)
-        a = self._extend(a, w_out) # added
-        b = self._extend(b, w_out) # added
+        a = self._extend(a, w_out)
+        b = self._extend(b, w_out)
         nb = [lit_not(x) for x in b]
         return self.bv_add(a, nb, cin=lit_const1(), w_out=w_out)
 

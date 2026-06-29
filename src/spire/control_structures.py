@@ -38,9 +38,7 @@ from typing import Callable, Iterable, List, Optional
 from spire.expr import Expr, ExprLike, Signal, as_expr, mux
 
 
-# ---------------------------------------------------------------------------
 # Condition stack helpers
-# ---------------------------------------------------------------------------
 
 class _ConditionState:
     active: List[Expr] = []
@@ -76,9 +74,7 @@ def _combined_condition() -> Optional[Expr]:
     return cond
 
 
-# ---------------------------------------------------------------------------
 # If/elif/else support
-# ---------------------------------------------------------------------------
 
 @dataclass
 class _IfChain:
@@ -170,9 +166,7 @@ def else_() -> _ConditionalContext:
     return _ConditionalContext(cond, on_exit=_on_exit)
 
 
-# ---------------------------------------------------------------------------
 # Switch_/case_ support
-# ---------------------------------------------------------------------------
 
 
 class _SwitchState:
@@ -275,9 +269,7 @@ def default() -> _ConditionalContext:
     return _ConditionalContext(cond)
 
 
-# ---------------------------------------------------------------------------
 # Assignment patching
-# ---------------------------------------------------------------------------
 
 _PATCHED = False
 

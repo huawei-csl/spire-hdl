@@ -384,9 +384,6 @@ class Simulator(SimulatorBase):
         """Evaluate expression *e* to a bit-pattern of width ``e.typ.width``."""
         return self._expr_eval.visit(e)
 
-    # peek logic not teste yet -> not really working
-    # spire_simulator.py (patched parts)
-
     # --- helpers to convert ---
     def _bits_to_int(self, bits):
         """Convert either an int or a list of 0/1 bits (LSB first) to Python int."""
@@ -470,8 +467,6 @@ class Simulator(SimulatorBase):
             self._watches.clear()
             self._watch_values.clear()
 
-    # In your eval()/step()/tick() method, after you've computed the current combinational state,
-    # add this block to capture probe values (so they’re available immediately):
     def _capture_watches(self):
         if not hasattr(self, "_watches"):
             return
@@ -561,7 +556,3 @@ def _resize_bits(bits: int, from_w: int, to_w: int, signed: bool) -> int:
 
 def _sid(s: "Signal") -> int:
     return id(s)
-
-
-def _clsname(o) -> str:
-    return o.__class__.__name__

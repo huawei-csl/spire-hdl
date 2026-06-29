@@ -1,12 +1,9 @@
 import contextlib
 import ctypes
-import hashlib
 import os
-import random
 import sys
 import tempfile
-import time
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, List, Optional
 
 from aigverse import DepthAig, aig_cut_rewriting, aig_resubstitution, balancing, sop_refactoring
 from pyosys import libyosys as ys
@@ -72,28 +69,20 @@ def optimize_aig_elaborate(aig_in, n_iter_optimizations: Optional[int] = None) -
 
     n_iter_optimizations = _resolve_n_iter_optimizations(n_iter_optimizations)
 
-    # Track the best gate and depth
     best_gate = None
     best_depth = None
 
     best_stats = None
     best_aig = None
 
-    # Two sequences are tested
     op_seq_tuple = ([aig_resubstitution, sop_refactoring, aig_cut_rewriting], [aig_resubstitution, sop_refactoring, aig_cut_rewriting, balancing])
 
-    # Loop through the two sequences
     for op_seq in op_seq_tuple:
-        # Load the aig file
         aig = aig_in.clone()
-        # Loop through the sequences 3 times
         for i in range(n_iter_optimizations):
             for op in op_seq:
-                # Perform the operation
                 op(aig)
-                # Perform analysis
                 depth_aig = DepthAig(aig)
-                # Extract stats
                 stats = {
                     "num_pis": len(aig.pis()),
                     "num_pos": len(aig.pos()),
@@ -101,7 +90,6 @@ def optimize_aig_elaborate(aig_in, n_iter_optimizations: Optional[int] = None) -
                     "size": aig.size(),
                     "depth": depth_aig.num_levels(),
                 }
-                # Store best stats dict
                 if best_gate is None or stats["num_gates"] < best_gate:
                     best_gate = stats["num_gates"]
                     best_depth = stats["depth"]
@@ -124,15 +112,13 @@ def optimize_aig_simple(aig, n_iter_optimizations: Optional[int] = None) -> dict
 
 def optimize_aag(aag_lines: List[str], n_iter_optimizations: Optional[int] = None, simple=False) -> List[str]:
 
-    # convert to aigverse object
-    aig = conv_aag_into_aig(aag_lines)    
+    aig = conv_aag_into_aig(aag_lines)
 
     if simple:
         aig = optimize_aig_simple(aig, n_iter_optimizations=n_iter_optimizations)
     else:
         aig, _ = optimize_aig_elaborate(aig, n_iter_optimizations=n_iter_optimizations)
 
-    # aig back to aag
     aag_optimized = conv_aig_into_aag(aig, symbols=_get_aag_sym(aag_lines))
 
     return aag_optimized
@@ -208,8 +194,6 @@ def run_vectors_on_simulator(
     Prints mismatches; raises AssertionError at the end if any failed.
     """
 
-    states_list = []
-
     fails = 0
     for name, ins, outs in vectors:
         for k, v in ins.items():
@@ -223,7 +207,7 @@ def run_vectors_on_simulator(
         for oname, exp in outs.items():
             if oname[0] == "_":
                 continue
-            got_raw = sim.peek(oname) #sim.get(oname)
+            got_raw = sim.peek(oname)
             got_signed = sim.get(oname)
             got = got_signed if use_signed else got_raw
             if got != exp:
@@ -237,7 +221,6 @@ def run_vectors_on_simulator(
                         print(f"PASS {name}: {oname}=0x{got:0X} ({decoder(got):.8g})")
                     else:
                         print(f"PASS {name}: {oname}=0x{got:0X} ({got})")
-                    pass
         if bad:
             fails += 1
             print(f"FAIL  {name}:  " + " | ".join(bad))

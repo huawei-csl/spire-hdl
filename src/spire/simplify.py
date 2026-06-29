@@ -465,12 +465,6 @@ def _apply_simplify_once(module) -> int:
 #       ...
 #         mux(sel == Const(N-1), v_{N-1}, default)))
 #
-# and replace with a balanced binary mux tree using BITS of `sel`:
-#   leaves = [v_0, v_1, ..., v_{N-1}]
-#   for bit in range(log2(N)):
-#       leaves = [mux(sel[bit], leaves[i+1], leaves[i]) for i in range(0, N, 2)]
-#   return leaves[0]
-#
 # The cascade form (N comparators + N-deep mux chain) tends to synthesise to
 # a deep AOI/OAI chain under yosys+abc, whereas the bit-tree form maps cleanly
 # to log2(N) levels of native MUX2 cells. The win is largest for N ≥ 16 (on
