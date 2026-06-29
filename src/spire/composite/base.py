@@ -3,9 +3,9 @@
 # -----------------------------
 from __future__ import annotations
 from abc import abstractmethod
-from typing import List, Type, TypeVar, Union
+from typing import List, Tuple, Type, TypeVar, Union
 
-from spire.expr import Expr, ExprLike, as_expr, fit_width
+from spire.expr import Expr, ExprLike, Signal, as_expr, fit_width
 from spire.hdl_traits import BitSerializable, Assignable
 
 
@@ -44,6 +44,23 @@ class HDLComposite(BitSerializable, Assignable):
         return flat_list
 
     # width / to_bits are inherited from BitSerializable.
+
+    def _named_children(self) -> List[Tuple[str, Union[Expr, "HDLComposite"]]]:
+        """(local_key, child) pairs for one structural level. Default keys are positional
+        indices (``Array`` and friends); records override this with field names."""
+        return [(str(i), c) for i, c in enumerate(self.to_list_first_level())]
+
+    def _assign_port_names(self, prefix: str) -> None:
+        """Give every leaf a hierarchical port name (``prefix_<key>_...``) from its field/index
+        path, so nested bundles emit unique, readable ports (``up_valid``, ``bus_addr``,
+        ``data_0``) instead of colliding on bare leaf names."""
+        for key, child in self._named_children():
+            full = f"{prefix}_{key}"
+            if isinstance(child, HDLComposite):
+                child._assign_port_names(full)
+            elif isinstance(child, Signal):
+                child.name = full
+
     # -------- Assignment API shared by all composites --------
 
     def _assign_from_bits(self, bits: Expr) -> None:
