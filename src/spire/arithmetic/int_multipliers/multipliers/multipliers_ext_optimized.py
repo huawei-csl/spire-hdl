@@ -171,7 +171,7 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
                 )
 
         self.mult = LoadedMultiplier()
-        self.mult.from_module(m, make_internal=True, group=True)
+        self.mult.from_module(m, group=True)
 
         # todo: test from_verlog and from_aig_file
 
@@ -213,7 +213,7 @@ class OptimizedSignMagnitudeMultiplier(StageBasedMultiplierBase):
             ppa_cls=self.ppa_cls,
             fsa_cls=self.fsa_cls,
             f_aag_lines=self.f_aag_lines,
-        ).make_internal()
+        )
 
         self.mult = mult
 
@@ -286,7 +286,7 @@ class OptimizedMultiplierFrom4BitBlocks(StageBasedMultiplierBase):
                 ppa_cls=None,
                 fsa_cls=None,
                 f_aag_lines=self.f_aag_lines,
-            ).make_internal()
+            )
 
             # wire inputs/outputs
             multiplier.io.a <<= self.io.a
@@ -316,7 +316,7 @@ class OptimizedMultiplierFrom4BitBlocks(StageBasedMultiplierBase):
                         ppa_cls=None,
                         fsa_cls=None,
                         f_aag_lines=self.f_aag_lines,
-                    ).make_internal()
+                    )
                 )
             m_ll, m_lh, m_hl, m_hh = multipliers
 

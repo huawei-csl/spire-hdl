@@ -1,6 +1,6 @@
 # Custom Verilog Components
 
-Spire's `Component` can opt to emit a hand-written Verilog block instead of
+Spire's `CustomVerilogComponent` can opt to emit a hand-written Verilog block instead of
 the auto-generated logic derived from its `elaborate()`. Two flavours are
 supported:
 
@@ -25,11 +25,11 @@ a Python reference model (used by `Simulator`); `custom_verilog()` returns
 a hand-written Verilog block (used by `to_verilog`).
 
 ```python
-from spire import Component, IORecord, Input, Output, UInt
+from spire import CustomVerilogComponent, IORecord, Input, Output, UInt
 from spire.expr import Wire
 
 
-class CustomAdder(Component):
+class CustomAdder(CustomVerilogComponent):
     def __init__(self):
         self.io = IORecord(
             a=Input(UInt(8)),
@@ -90,9 +90,9 @@ No `tmp` wire — the framework tagged it `_no_emit_decl + _no_emit_drive` at
 For vendor IP or opaque macros, leave `elaborate()` empty:
 
 ```python
-from spire import Component, IORecord, Input, Output, Bool, UInt
+from spire import Component, CustomVerilogComponent, IORecord, Input, Output, Bool, UInt
 
-class VendorRAM(Component):
+class VendorRAM(CustomVerilogComponent):
     def __init__(self):
         # `clk` is not an IO field — it's the implicit clock added by `with_clock=True`
         # at emit time, which the Verilog body below references directly.
@@ -131,8 +131,9 @@ assert sim.get("data_out") == 0   # stub
 
 ## Embedding inside a larger Component
 
-A custom-Verilog or blackbox Component slots into a parent Component via
-`inline()` — same pattern as any other sub-Component:
+A custom-Verilog or blackbox Component slots into a parent Component the same
+way as any other sub-Component: instantiate it and wire its IO. Embedding is
+handled automatically:
 
 ```python
 from spire import Component, IORecord, Input, Output, UInt
@@ -147,7 +148,7 @@ class TopWithVendorRAM(Component):
         self.elaborate()
 
     def elaborate(self):
-        ram = VendorRAM().inline()
+        ram = VendorRAM()
         ram.io.addr     <<= self.io.x
         ram.io.data_in  <<= self.io.y
         ram.io.we       <<= 1
@@ -168,9 +169,8 @@ Two flags on `Signal`:
 - `_no_emit_decl`: skip the wire/reg/mem declaration.
 - `_no_emit_drive`: skip the `assign` or always-block update.
 
-When `Component.to_netlist` (top-level) or `Component.inline`
-(embedded) detects a `custom_verilog` method, it runs
-`_apply_custom_verilog_tags()`:
+When `CustomVerilogComponent` finalizes after `elaborate()`, it runs
+`_apply_custom_verilog_tags()` in addition to the normal Component IO ownership tagging:
 
 1. Walks from each IO output through `_driver` chains.
 2. Tags every reachable internal Signal with both flags (those drop out of

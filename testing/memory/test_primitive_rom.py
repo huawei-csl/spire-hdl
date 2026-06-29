@@ -35,7 +35,7 @@ def _build_rom(init, *, depth, width, registered=False, name="rom"):
 
         def elaborate(self):
             rom = RomPrimitive(UInt(width), depth, init=init,
-                               registered_read=registered, name=name).make_internal()
+                               registered_read=registered, name=name)
             rom.io.read_addr <<= self.io.addr
             if registered:
                 rom.io.read_enable <<= self.io.re
@@ -160,7 +160,7 @@ def test_composite_rom():
             self.elaborate()
 
         def elaborate(self):
-            rom = RomPrimitive(_Bus, depth=4, init=init, name="brom").make_internal()
+            rom = RomPrimitive(_Bus, depth=4, init=init, name="brom")
             rom.io.read_addr <<= self.io.addr
             out = _Bus()
             out <<= rom.io.read_data

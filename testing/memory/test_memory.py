@@ -50,7 +50,7 @@ def _ram(depth=16, width=9, *, registered_read=False, with_reset_arm=True, init=
             mem = MemoryPrimitive(
                 UInt(width), depth=depth, registered_read=registered_read,
                 with_reset_arm=with_reset_arm, init=init, name="mem",
-            ).make_internal()
+            )
             mem.io.write_addr   <<= self.io.aw
             mem.io.write_data   <<= self.io.din
             mem.io.write_enable <<= self.io.we
@@ -128,7 +128,7 @@ def test_one_write_two_read_ports():
 
         def elaborate(self):
             ram = RamPrimitive(UInt(8), depth=4, num_write_ports=1, num_read_ports=2,
-                               name="sdp").make_internal()
+                               name="sdp")
             ram.io.w0_addr <<= self.io.wa
             ram.io.w0_data <<= self.io.wd
             ram.io.w0_en   <<= self.io.we

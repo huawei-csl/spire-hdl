@@ -59,7 +59,7 @@ def _build_fifo(*, depth: int = 4, elem_w: int = 8, name: str = "myfifo"):
             self.elaborate()
 
         def elaborate(self):
-            fifo = FIFOPrimitive(UInt(elem_w), depth=depth, name=name).make_internal()
+            fifo = FIFOPrimitive(UInt(elem_w), depth=depth, name=name)
             fifo.io.push <<= self.io.push
             fifo.io.pop  <<= self.io.pop
             fifo.io.din  <<= self.io.din
@@ -255,7 +255,7 @@ def test_sim_composite_elem_type_fifo():
             self.elaborate()
 
         def elaborate(self):
-            fifo = FIFOPrimitive(_Bus, depth=4, name="bfifo").make_internal()
+            fifo = FIFOPrimitive(_Bus, depth=4, name="bfifo")
             bus_in = _Bus()
             bus_in.data  <<= self.io.din_data
             bus_in.valid <<= self.io.din_valid

@@ -35,12 +35,12 @@ from spire.expr import (
     Wire,
     mux,
 )
-from spire.component import Component
+from spire.component import CustomVerilogComponent
 from spire.io_record import IORecord, Input, Output
 from spire.primitives.primitive_memory import _elem_bit_width, _next_uid
 
 
-class FIFOPrimitive(Component):
+class FIFOPrimitive(CustomVerilogComponent):
     """Standard sync FIFO with registered output (one-cycle read latency).
 
     Parameters:

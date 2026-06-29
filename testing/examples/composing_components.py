@@ -1,8 +1,8 @@
 """
 Composing Components — build a bigger Component from smaller ones.
 
-A top-level `Component` instantiates sub-`Component`s and flattens their logic into itself with
-`.inline()`, producing one design — all in the Component world, never touching the IR. This is the
+A top-level `Component` instantiates sub-`Component`s and their logic is embedded automatically,
+producing one design — all in the Component world, never touching the IR. This is the
 idiomatic way to build hierarchy in Spire.
 """
 
@@ -38,12 +38,12 @@ class Sum3(Component):
         self.elaborate()
 
     def elaborate(self):
-        # inline() flattens each sub-component's logic into this component.
-        add_xy = Adder(width=8).inline()
+        # Sub-component logic is embedded automatically when its IO is wired into this component.
+        add_xy = Adder(width=8)
         add_xy.io.a <<= self.io.x
         add_xy.io.b <<= self.io.y
 
-        add_xyz = Adder(width=9).inline()
+        add_xyz = Adder(width=9)
         add_xyz.io.a <<= add_xy.io.sum
         add_xyz.io.b <<= self.io.z
 

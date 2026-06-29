@@ -22,12 +22,12 @@ from spire.expr import (
     UInt,
     mux,
 )
-from spire.component import Component
+from spire.component import CustomVerilogComponent
 from spire.io_record import IORecord, Input, Output
 from spire.primitives.primitive_memory import _elem_bit_width, _next_uid
 
 
-class MemoryPrimitive_via_reg(Component):
+class MemoryPrimitive_via_reg(CustomVerilogComponent):
     """Register-bank memory primitive (O(depth) sim). See module docstring.
 
     Same constructor and ``.io`` surface as ``MemoryPrimitive``; only the sim

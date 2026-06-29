@@ -396,7 +396,7 @@ def flowy_optimize(m: Netlist | Component,
         aiger_map_file_path = best_design_item.get("aiger_map_filepath").path
 
     c_out: Component = Component.from_netlist(m).from_aig_file(
-        aig_file_path, aiger_map_file_path, make_internal=False
+        aig_file_path, aiger_map_file_path
     )
     module: Netlist = c_out.to_module("optimized_design")
 
@@ -713,7 +713,7 @@ def _instantiate_from_cache(
             self.io = io_obj
 
     comp: Component = _CachedComponent(io)
-    comp.from_aag_lines(aag_lines, group=True, make_internal=True)
+    comp.from_aag_lines(aag_lines, group=True)
 
     # Wire actual Expr args to the (now internal wire) inputs
     for name, expr in actual_logic_args.items():
@@ -1263,10 +1263,8 @@ def arithmetic_optimized(
                 ArithmeticAutoConfig(objective=objective, metric=effective_metric),
             )
 
-            # Splice into the caller's graph: turn comp.io ports into internal
-            # wires, drive the input wires from the caller's actual Expr args,
-            # and return the output wires as the optimized expressions.
-            comp.make_internal()
+            # Splice into the caller's graph by driving the component inputs from
+            # the caller's actual Expr args and returning the component outputs.
             for name, expr in actual_logic_args.items():
                 sig: Signal = getattr(comp.io, name)
                 sig <<= expr

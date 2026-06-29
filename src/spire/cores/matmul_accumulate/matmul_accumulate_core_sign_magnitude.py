@@ -71,7 +71,7 @@ def build_multiplier(a: Expr, b: Expr, mult_cfg: BaseMultiplierConfig, enc_cfg: 
         ppa_cls=mult_cfg.ppa_opt.value,
         fsa_cls=mult_cfg.fsa_opt.value,
         optim_type=mult_cfg.optim_type,
-    ).make_internal()
+    )
     multiplier.io.a <<= a
     multiplier.io.b <<= b
     y_expr: Expr = multiplier.io.y
@@ -80,7 +80,7 @@ def build_multiplier(a: Expr, b: Expr, mult_cfg: BaseMultiplierConfig, enc_cfg: 
     if enc_cfg and enc_cfg.decoder_cls is not None:
         decoder = enc_cfg.decoder_cls(
             width=y_expr.typ.width, clip_most_negative=enc_cfg.decoder_clip_most_negative
-        ).make_internal()
+        )
         decoder.io.i <<= y_expr
         return decoder.io.o
 
@@ -151,7 +151,7 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
                 encoder = enc_cfg.encoder_cls(
                     width=matrix[i, j].typ.width,
                     clip_most_negative=enc_cfg.encoder_clip_most_negative,
-                ).make_internal()
+                )
                 encoder.io.i <<= matrix[i, j]
                 encoded_row.append(encoder.io.o)
             encoded_rows.append(Array(encoded_row))

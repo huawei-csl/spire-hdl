@@ -113,7 +113,7 @@ class FloatingPoint(HDLComposite):
         if self.ftype != other.ftype:
             raise ValueError("FloatingPoint add requires matching types")
 
-        core = FpAdd(EW=self.ftype.exponent_width, FW=self.ftype.fraction_width, adder_cfg=self.adder_cfg, subnormals=self.ftype.subnormal_support).make_internal()
+        core = FpAdd(EW=self.ftype.exponent_width, FW=self.ftype.fraction_width, adder_cfg=self.adder_cfg, subnormals=self.ftype.subnormal_support)
 
         core.io.a <<= self.bits
         core.io.b <<= other.bits
@@ -139,9 +139,9 @@ class FloatingPoint(HDLComposite):
                 EW=EW, FW=FW, mult_cfg=self.mult_cfg,
                 subnormals=self.ftype.subnormal_support,
                 always_subnormal_rounding=self.ftype.always_subnormal_rounding,
-            ).make_internal()
+            )
         else:
-            core = FpMul(EW=EW, FW=FW, mult_cfg=self.mult_cfg).make_internal()
+            core = FpMul(EW=EW, FW=FW, mult_cfg=self.mult_cfg)
 
         core.io.a <<= self.bits
         core.io.b <<= other.bits

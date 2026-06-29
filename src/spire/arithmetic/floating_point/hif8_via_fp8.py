@@ -330,7 +330,7 @@ class HiF8MulViaFP8(Component):
         enc_a = _hif8_to_fp8_expr(self.io.a)
         enc_b = _hif8_to_fp8_expr(self.io.b)
 
-        core = Component.from_netlist(build_fp_mul("HiF8Fp8Core", EW=_FP_EW, FW=_FP_FW)).inline()
+        core = Component.from_netlist(build_fp_mul("HiF8Fp8Core", EW=_FP_EW, FW=_FP_FW))
         core.io.a <<= enc_a
         core.io.b <<= enc_b
 

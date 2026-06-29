@@ -80,7 +80,7 @@ def _aig_to_aag_via_module(
             self.io = io_obj
 
     comp = _Comp(io)
-    comp.from_aig_file(aig_path, map_path, make_internal=False)
+    comp.from_aig_file(aig_path, map_path)
     module = comp.to_module("optimized_design")
 
     aag_lines = AigerExporter(module).get_aag()

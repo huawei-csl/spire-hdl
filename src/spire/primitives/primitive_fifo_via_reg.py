@@ -22,12 +22,12 @@ from spire.expr import (
     Wire,
     mux,
 )
-from spire.component import Component
+from spire.component import CustomVerilogComponent
 from spire.io_record import IORecord, Input, Output
 from spire.primitives.primitive_memory import _elem_bit_width, _next_uid
 
 
-class FIFOPrimitive_via_reg(Component):
+class FIFOPrimitive_via_reg(CustomVerilogComponent):
     """Register-bank sync FIFO (O(depth) sim). Same ``.io`` as ``FIFOPrimitive``."""
 
     def __init__(

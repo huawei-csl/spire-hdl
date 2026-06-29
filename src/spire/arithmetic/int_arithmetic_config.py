@@ -86,7 +86,7 @@ def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig | ArithmeticAu
         ppa_cls=mult_cfg.ppa_opt.value,
         fsa_cls=mult_cfg.fsa_opt.value,
         optim_type=mult_cfg.optim_type,
-    ).make_internal()
+    )
     multiplier.io.a <<= a
     multiplier.io.b <<= b
     return multiplier.io.y
@@ -130,7 +130,7 @@ def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig | ArithmeticAutoConfig)
         optim_type=adder_cfg.optim_type,
         fsa_cls=adder_cfg.fsa_opt.value,
         full_output_bit=adder_cfg.full_output_bit,
-    ).make_internal()
+    )
     adder.io.a <<= a
     adder.io.b <<= b
     return adder.io.y
@@ -236,7 +236,7 @@ def build_subtractor(a: Expr, b: Expr, sub_cfg: SubtractorConfig | ArithmeticAut
         optim_type=sub_cfg.optim_type,
         fsa_cls=sub_cfg.fsa_opt.value,
         full_output_bit=sub_cfg.full_output_bit,
-    ).make_internal()
+    )
     sub.io.a <<= a
     sub.io.b <<= b
     return sub.io.y
@@ -732,7 +732,7 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
                 optim_type=node_cfg.optim_type,
                 fsa_cls=node_cfg.fsa_opt.value,
                 full_output_bit=effective_full_bit,
-            ).make_internal()
+            )
             repl.io.a <<= a_expr
             repl.io.b <<= b_expr
             result = repl.io.y
@@ -744,7 +744,7 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
                 optim_type=node_cfg.optim_type,
                 fsa_cls=node_cfg.fsa_opt.value,
                 full_output_bit=effective_full_bit,
-            ).make_internal()
+            )
             repl.io.a <<= a_expr
             repl.io.b <<= b_expr
             result = repl.io.y
@@ -776,7 +776,7 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
                 ppa_cls=node_cfg.ppa_opt.value,
                 fsa_cls=node_cfg.fsa_opt.value,
                 optim_type=node_cfg.optim_type,
-            ).make_internal()
+            )
             repl.io.a <<= eff_a
             repl.io.b <<= eff_b
             result = repl.io.y

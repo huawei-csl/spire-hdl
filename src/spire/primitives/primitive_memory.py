@@ -17,7 +17,7 @@ boundary. The port wires are always ``UInt(elem_w)``; callers do::
         def __init__(self):
             super().__init__(data=Wire(UInt(8)), valid=Wire(UInt(1)))
 
-    mem = MemoryPrimitive(Bus, depth=16).make_internal()
+    mem = MemoryPrimitive(Bus, depth=16)
     # write
     bus_in = Bus()
     bus_in.data  <<= some_data
@@ -42,7 +42,7 @@ from spire.expr import (
     UInt,
     mux,
 )
-from spire.component import Component
+from spire.component import CustomVerilogComponent
 from spire.io_record import IORecord, Input, Output
 from spire.composite.base import HDLComposite
 from spire.primitives._ram_template import ram_block
@@ -75,7 +75,7 @@ def _elem_bit_width(elem_type) -> int:
     )
 
 
-class MemoryPrimitive(Component):
+class MemoryPrimitive(CustomVerilogComponent):
     """Component-based memory primitive (replacement candidate for built-in ``Memory``).
 
     Parameters (all kwargs except ``elem_type`` and ``depth``):

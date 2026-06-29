@@ -66,7 +66,7 @@ Beyond the automatic passes above, the unified arithmetic generator lets you han
 In its simplest form, Spire only needs these core files. This is intentional — the HDL is kept to a minimal, self-contained core, and higher-level features are layered on top:
 
 - **[`spire/expr.py`](src/spire/expr.py)** – the expression DSL. It provides bit-precise types such as `Bool`, `UInt`, and `SInt`, shared-expression caching, and the overloaded arithmetic / bitwise operators that make the Python syntax feel like an HDL.
-- **[`spire/component.py`](src/spire/component.py)** – the `Component` base class: author reusable designs, declare IO with `IORecord`/`Input`/`Output`, emit Verilog/AIG, analyze, and import/inline sub-designs. The flat netlist IR it lowers to lives in **[`spire/ir.py`](src/spire/ir.py)** (`Netlist`).
+- **[`spire/component.py`](src/spire/component.py)** – the `Component` base class: author reusable designs, declare IO with `IORecord`/`Input`/`Output`, emit Verilog/AIG, analyze, and import/embed sub-designs. The flat netlist IR it lowers to lives in **[`spire/ir.py`](src/spire/ir.py)** (`Netlist`).
 - **[`spire/simulator.py`](src/spire/simulator.py)** – a lightweight simulator that can drive inputs, tick clocks, inspect outputs or internal expressions, and capture probes for debugging—all without leaving Python.
 
 ### 📚 Further reading
@@ -80,7 +80,7 @@ Deeper guides for specific features:
 - **[Optimization decorators](docs/README_optimization_decorators.md)** — `@abc_optimized` / `@flowy_optimized` circuit optimization
 - **[FSM optimization](docs/README_fsm_optimization.md)** — `optimized_fsm` and `optimized_encoding` (state minimisation + encoding search)
 - **[Arithmetic generators](docs/README_arithmetic_generator.md)** — evaluation scripts and extra tooling notes
-- **[Custom Verilog](docs/README_custom_verilog.md)** — emit a raw Verilog block from a `Component`, with or without a Python sim model (blackbox)
+- **[Custom Verilog](docs/README_custom_verilog.md)** — emit a raw Verilog block from a `CustomVerilogComponent`, with or without a Python sim model (blackbox)
 - **[AIG / AAG export & import](docs/README_aig_export.md)** — lower a `Component` to an AIGER netlist and read AIG/AAG back in as a `Component`
 - **[Verilog testbench](docs/README_verilog_testbench.md)** — turn a `Simulator` run into a self-checking, synthesizable Verilog testbench
 - **[Examples](testing/examples/README.md)** — example designs exercising Spire features
@@ -179,7 +179,7 @@ Designs can be exported to Verilog or AIG for downstream synthesis, equivalence 
 
 ## Components and the netlist IR
 
-- `Component` is the one abstraction you author. It builds Verilog/AIG directly (`to_verilog`, `to_aag`), analyzes timing (`analyze`), imports designs from Verilog or AIG formats (`from_verilog`, `from_aag_lines`, `from_netlist`), and inlines reusable sub-designs into the surrounding logic (`inline`). Components expose `get_ios()` / `get_spec()` as the single IO normalization point — also what drives port regrouping when you import flattened designs (see [`component.py`](src/spire/component.py)).
+- `Component` is the one abstraction you author. It builds Verilog/AIG directly (`to_verilog`, `to_aag`), analyzes timing (`analyze`), imports designs from Verilog or AIG formats (`from_verilog`, `from_aag_lines`, `from_netlist`), and embeds reusable sub-designs into the surrounding logic automatically when their IO is wired. Components expose `get_ios()` / `get_spec()` as the single IO normalization point — also what drives port regrouping when you import flattened designs (see [`component.py`](src/spire/component.py)).
 - `Netlist` (in [`spire.ir`](src/spire/ir.py)) is the flat, lowered netlist that every backend consumes — Spire's internal IR. Power users can build one directly: it offers constructors for inputs, outputs, wires, and registers; signal enumeration; Verilog emission with automatic width fitting; and an `analyze()` routine reporting combinational depth and node counts. The quick start never needs it.
 - Minimal end-to-end component example: [`testing/examples/simple_component.py`](testing/examples/simple_component.py).
 
@@ -212,20 +212,20 @@ class Sum3Hierarchical(Component):
         self.elaborate()
 
     def elaborate(self):
-        add_ab = SimpleAdder(width=8).inline()     # first sub-component (logic inlined)
-        add_abc = SimpleAdder(width=9).inline()    # second sub-component
+        add_ab = SimpleAdder(width=8)     # first sub-component
+        add_abc = SimpleAdder(width=9)    # second sub-component
         add_ab.io.a <<= self.io.a
         add_ab.io.b <<= self.io.b
         add_abc.io.a <<= add_ab.io.sum
         add_abc.io.b <<= self.io.c
         self.io.sum <<= add_abc.io.sum
 
-print(Sum3Hierarchical().to_verilog(name="Sum3Hier"))  # one flat module, built from inlined components
+print(Sum3Hierarchical().to_verilog(name="Sum3Hier"))  # one flat module, built from embedded components
 ```
 
 ### Hierarchical design with components
 
-Components are how to build hierarchy: instantiate one inside another, adapt its IO, or drop in a pre-synthesized netlist — all without leaving Python. A common pattern wraps a reusable Spire block (see [`multipliers_ext.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext.py)). It is also possible to import an external AIG module, turn it into a `Component`, and call `from_module(..., make_internal=True)` so it behaves like a native Spire block inside a larger generator (see [`multipliers_ext_optimized.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)). The same approach covers Verilog imports, so Spire code and external IP mix freely.
+Components are how to build hierarchy: instantiate one inside another, adapt its IO, or drop in a pre-synthesized netlist — all without leaving Python. A common pattern wraps a reusable Spire block (see [`multipliers_ext.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext.py)). It is also possible to import an external AIG module, turn it into a `Component`, and use it directly as a native Spire block inside a larger generator (see [`multipliers_ext_optimized.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)). The same approach covers Verilog imports, so Spire code and external IP mix freely.
 
 ## Composite data types
 
@@ -290,7 +290,7 @@ Check out the `testing/examples/` directory for practical examples:
 
 - **[`simple_component.py`](testing/examples/simple_component.py)** – A minimal example showing how to define a Component with IO ports and generate Verilog
 - **[`component_example.py`](testing/examples/component_example.py)** – Comprehensive examples including hierarchical design and simulation
-- **[`composing_components.py`](testing/examples/composing_components.py)** – Shows how to compose a larger `Component` from smaller ones with `inline()`
+- **[`composing_components.py`](testing/examples/composing_components.py)** – Shows how to compose a larger `Component` from smaller automatically embedded components
 - **[`direct_expression_basics.py`](testing/examples/direct_expression_basics.py)** – Minimal direct expression examples (`y = a + b`) plus `+`, `-`, unary `-`, `Const(..., Int(...))`, typed/plain `False`, and a recursive Horner polynomial builder
 - **[`testing/riscv/rv32i.py`](testing/riscv/rv32i.py)** – Minimal RV32I core example; see [`testing/riscv/test_rv32i.py`](testing/riscv/test_rv32i.py) for simulation-based checks.
 

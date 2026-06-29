@@ -36,7 +36,7 @@ python examples/simple_component.py
 
 Shows how to compose a larger Component from smaller ones — all in the
 Component world, never touching the IR:
-- Instantiating sub-Components and flattening them with `.inline()`
+- Instantiating sub-Components and wiring their IO
 - Building hierarchy without leaving Python
 - One flat design emitted from several reusable blocks
 
@@ -91,12 +91,12 @@ self.io.sum <<= self.io.a + self.io.b
 
 To use a component as an internal building block:
 1. Instantiate the sub-component
-2. Call `.inline()` to flatten its logic into the surrounding design
-3. Connect the sub-component's IO to your component's signals
+2. Connect the sub-component's IO to your component's signals
+3. Emission embeds the reached sub-component logic automatically
 
 Example:
 ```python
-sub_component = MyComponent(width=8).inline()
+sub_component = MyComponent(width=8)
 sub_component.io.input <<= self.io.my_input
 self.io.my_output <<= sub_component.io.output
 ```

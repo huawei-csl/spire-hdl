@@ -17,7 +17,7 @@ from spire.expr import (
     Wire,
     reset_shared_cache,
 )
-from spire.component import Component
+from spire.component import Component, CustomVerilogComponent
 from spire.simulator import Simulator
 
 
@@ -25,7 +25,7 @@ from spire.simulator import Simulator
 # Fixture: a blackbox adder — only custom_verilog, no elaborate logic
 # ---------------------------------------------------------------------------
 
-class BlackboxAdder(Component):
+class BlackboxAdder(CustomVerilogComponent):
     """No Python model. The custom Verilog string is the only implementation."""
 
     def __init__(self):
@@ -110,7 +110,7 @@ class ParentWithBlackboxAndExtraLogic(Component):
         helper = Wire(UInt(8))
         helper <<= self.io.x ^ self.io.y
 
-        bb = BlackboxAdder().make_internal()
+        bb = BlackboxAdder()
         bb.io.a <<= helper      # parent drives blackbox.a from helper
         bb.io.b <<= self.io.y   # parent drives blackbox.b directly
         self.io.result <<= bb.io.sum
@@ -173,11 +173,11 @@ def test_multiple_blackboxes_each_emit_and_stub():
             )
             self.elaborate()
         def elaborate(self):
-            left = BlackboxAdder().make_internal()
+            left = BlackboxAdder()
             left.io.a <<= self.io.a
             left.io.b <<= self.io.b
             self.io.left_sum <<= left.io.sum
-            right = BlackboxAdder().make_internal()
+            right = BlackboxAdder()
             right.io.a <<= self.io.c
             right.io.b <<= self.io.d
             self.io.right_sum <<= right.io.sum

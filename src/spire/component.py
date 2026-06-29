@@ -24,7 +24,6 @@ from spire.analyzer import _Analyzer, GraphReport
 from spire.visitor import ExprVisitor, expr_children
 
 
-
 # The flat netlist IR now lives in spire.ir (one-way layering: component -> ir -> spire).
 # Re-exported here so existing `from spire.component import IOCollector/...` keep working.
 from spire.ir import (Netlist, _PortGrouper, IOCollector, _SignalCollector, get_rand_hash)
@@ -33,9 +32,37 @@ from spire.ir import (Netlist, _PortGrouper, IOCollector, _SignalCollector, get_
 from spire.composite.record import CompositeRecord, _to_composite, iter_values
 
 
-class Component(abc.ABC):
+class _ComponentMeta(abc.ABCMeta):
+    """Run ``_finalize()`` once, right after a Component is fully constructed.
+
+    Hooking the metaclass ``__call__`` (instead of wrapping ``__init__`` in ``__init_subclass__``)
+    fires the hook exactly once for the outermost ``Cls(...)``: a subclass ``__init__`` that calls
+    ``super().__init__()`` does NOT re-trigger it, so no re-entrancy bookkeeping is needed and the
+    user's ``__init__`` is left untouched (clean tracebacks; works with ``@dataclass`` IO).
+    """
+
+    def __call__(cls, *args, **kwargs):
+        obj = super().__call__(*args, **kwargs)   # runs the full __init__ chain (ABCMeta enforces abstractness)
+        obj._finalize()
+        return obj
+
+
+class Component(abc.ABC, metaclass=_ComponentMeta):
 
     io: "CompositeRecord | Any"
+
+    def _finalize(self) -> None:
+        """Tag each IO leaf with its owning Component once construction is complete.
+
+        Ownership lets the netlist attribute IO leaves by identity (membership in ``_ports`` decides
+        global-vs-internal) with no destructive ``kind`` mutation — this replaced the old ``inline()``.
+        Subclasses extend it (see ``CustomVerilogComponent``).
+
+        Contract: ``_ComponentMeta`` calls this the moment ``__init__`` returns, so every subclass must
+        have ``self.io`` set — or ``get_ios()`` overridden — by then, else construction fails fast here.
+        """
+        for sig in self.get_ios().to_list():
+            sig._owning_component = self
 
     # define attribute name
     @property
@@ -115,15 +142,11 @@ class Component(abc.ABC):
             else:
                 raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
         module.component = self # can be used for debugging
-        # Top-level Component with custom Verilog: tag elaborate-created signals so the emitter skips them.
-        # (Embedded Components do this in make_internal.)
-        if hasattr(self, 'custom_verilog'):
-            self._apply_custom_verilog_tags()
-        #reset_shared_cache() # no longer needed as we collect signals
+        # reset_shared_cache() # no longer needed as we collect signals
         module.collect_signals()
         return module 
 
-    def from_module(self, module: 'Netlist', make_internal=False, group=False) -> Self:
+    def from_module(self, module: 'Netlist', group=False) -> Self:
         if group:
             IOCollector().group(module, self.get_spec())
 
@@ -136,8 +159,9 @@ class Component(abc.ABC):
             else:
                 raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
         self.elaborate()  # re-elaborate to rebuild internal structure
-        if make_internal:
-            self.inline()
+        self._finalize()
+        # No inlining step: if this imported component is later embedded in a parent, the parent's
+        # emitter classifies its ports as internal wires by membership (see ir.py).
 
     def from_verilog(self, verilog_str: str, top=None, group=True) -> Self:
         from spire.aig.aig_yosys import aig_file_to_aag_lines_via_yosys
@@ -145,18 +169,18 @@ class Component(abc.ABC):
         aag_lines = verilog_to_aag_lines_via_yosys(verilog_str, top=top, embed_symbols=True, no_startoffset=True)
         self.from_aag_lines(aag_lines, group=group)
 
-    def from_aig_file(self, aig_path: str, map_file: str|None = None, group=True, make_internal=False) -> Self:
+    def from_aig_file(self, aig_path: str, map_file: str|None = None, group=True) -> Self:
         from spire.aig.aig_yosys import aig_file_to_aag_lines_via_yosys
 
         aag_lines = aig_file_to_aag_lines_via_yosys(aig_path, map_file=map_file)
-        self.from_aag_lines(aag_lines, group=group, make_internal=make_internal)
+        self.from_aag_lines(aag_lines, group=group)
         return self
 
-    def from_aag_lines(self, aag_lines: List[str], group=True, make_internal=True) -> Self:
+    def from_aag_lines(self, aag_lines: List[str], group=True) -> Self:
         from spire.aiger import AigerImporter
 
         m = AigerImporter(aag_lines).get_spire_module()
-        self.from_module(m, make_internal=make_internal, group=group)
+        self.from_module(m, group=group)
 
     @classmethod
     def from_netlist(cls, net: "Netlist") -> "Component":
@@ -187,89 +211,14 @@ class Component(abc.ABC):
             io_fields.append((field_name, Signal))
             values[field_name] = sig
 
-        IO = make_dataclass("IO", io_fields)
-        comp = ImportedComponent()
-        comp.io = IO(**values)
-        return comp
-
-    def inline(self) -> Self:
-        # Inline this Component's logic into the surrounding design: retag its IO signals as wires so the
-        # parent's signal collector splices the child's graph in (it does NOT instantiate a sub-module).
-        # If this Component supplies a custom Verilog body, tag its elaborate()-created internals so the parent's
-        # emitter skips them. Do this BEFORE flipping kind="output" → "wire" so the tagger can find the outputs by
-        # their original direction.
-        if hasattr(self, 'custom_verilog'):
-            self._apply_custom_verilog_tags()
-        # go through all signals in io and change to 'wire'
-        for sig in self.get_ios().to_list():
-            if sig.kind in ('input', 'output'):
-                sig.kind = 'wire'
-                # Back-reference so the parent's emitter knows which Component owns this wire (and thus which
-                # custom_verilog block to call).
-                if hasattr(self, 'custom_verilog'):
-                    sig._owning_component = self
-            else:
-                raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
-        return self
-
-    def _apply_custom_verilog_tags(self) -> None:
-        """Walk from IO outputs and tag elaborate()-created signals as no-emit.
-
-        Internal signals (anything reachable from an IO output via driver chains that isn't itself an IO port) get
-        both flags set — they don't appear in the emitted Verilog at all. IO outputs get only ``_no_emit_drive`` set:
-        the port/wire declaration stays (parent code references it) but the elaborate-set ``assign`` is suppressed,
-        leaving the custom Verilog block to provide the actual value.
-
-        Sets ``self._is_blackbox = True`` iff *no* output had an elaborate-set driver — the signal the collector
-        uses to decide whether peer-seeding is needed (only blackboxes need it).
-        """
-        from spire.visitor import expr_children  # local to avoid cycles
-        io_ids = {id(s) for s in self.get_ios().to_list()}
-        stack: List = []
-        for sig in self.get_ios().to_list():
-            if sig.kind == "output":
-                sig._no_emit_drive = True
-                if sig._driver is not None:
-                    stack.append(sig._driver)
-        self._is_blackbox = not stack  # nothing to walk = no elaborate output drivers = blackbox
-        visited: set = set()
-        while stack:
-            node = stack.pop()
-            nid = id(node)
-            if nid in visited:
-                continue
-            visited.add(nid)
-            if isinstance(node, Signal):
-                # Boundary check: signals owned by a *different* Component (i.e. a `make_internal`'d sub-Component)
-                # are that Component's namespace — its tagging is already done at its own `make_internal` time. We
-                # neither tag them here nor walk past them; the boundary stops us.
-                owner = getattr(node, "_owning_component", None)
-                if owner is not None and owner is not self:
-                    continue
-                if nid not in io_ids:
-                    node._no_emit_decl = True
-                    node._no_emit_drive = True
-                if node._driver is not None:
-                    stack.append(node._driver)
-                # Mirror `collect_signals`' store traversal: the `_ArrayIndex` leaf stops the driver walk, so
-                # follow store ↔ port-wire edges explicitly — else state reachable only through a store (e.g. a
-                # FIFO's write pointer via `store.write_addr`) is collected but never tagged, leaking into the Verilog.
-                if isinstance(node, _MemoryArray):
-                    for p in node._iter_ports():
-                        stack.append(p)
-                parent = getattr(node, "_memory_parent", None)
-                if parent is not None:
-                    stack.append(parent)
-            else:
-                for ch in expr_children(node):
-                    stack.append(ch)
+        IO = make_dataclass("IO", io_fields, bases=(CompositeRecord,))
+        return ImportedComponent(IO(**values))
 
     def get_spec(self) -> Dict[str, UInt]:
         return {s.name: s.typ for s in self.get_ios().to_list()}
 
     # Deprecated method aliases (renamed for clarity; kept for one release).
     to_module = to_netlist     # `to_module` was renamed to `to_netlist`
-    make_internal = inline     # `make_internal` was renamed to `inline`
 
 
 class ImportedComponent(Component):
@@ -277,8 +226,73 @@ class ImportedComponent(Component):
     ``from_verilog``) rather than ``elaborate()``. Satisfies the (now abstract) ``elaborate()``
     with a no-op — its logic is reinjected by ``from_module`` at import time, not built here."""
 
+    def __init__(self, io: "CompositeRecord | Any") -> None:
+        self.io = io
+
     def elaborate(self) -> None:
         pass
+
+
+class CustomVerilogComponent(Component):
+    """Base for components whose emitted implementation is supplied by ``custom_verilog()``."""
+
+    _is_blackbox: bool = False   # set in _apply_custom_verilog_tags: True iff no output has an elaborate driver
+
+    def _finalize(self) -> None:
+        super()._finalize()
+        self._apply_custom_verilog_tags()
+
+    @abc.abstractmethod
+    def custom_verilog(self) -> str:
+        ...
+
+    def _apply_custom_verilog_tags(self) -> None:
+        """Suppress the ``elaborate()`` logic of a custom-Verilog component so only its custom block emits.
+
+        A custom-Verilog component keeps two implementations: the ``elaborate()`` graph (for simulation) and
+        the ``custom_verilog()`` string (for emission). Walking the graph backward from the IO outputs, this:
+
+        - tags internal signals (reachable from an output, not themselves IO) ``_no_emit_decl`` +
+          ``_no_emit_drive`` — they drop out of the Verilog entirely;
+        - tags IO outputs ``_no_emit_drive`` only — the declaration stays (parents reference it) but the
+          elaborate ``assign`` is dropped, so the custom block provides the value;
+        - for memory, follows store ↔ port-wire edges so state reachable only through a store is tagged too;
+        - for sub-components, stops at any signal owned by a *different* Component (it self-tags) — neither
+          tagging nor crossing it;
+        - for blackboxes, sets ``self._is_blackbox`` when no output had an elaborate driver — the cue the
+          collector uses to peer-seed the inputs.
+        """
+        io_ids = {id(s) for s in self.get_ios().to_list()}
+        stack: List = []
+        for sig in self.get_ios().to_list():
+            if sig.kind == "output":
+                sig._no_emit_drive = True
+                if sig._driver is not None:
+                    stack.append(sig._driver)
+        self._is_blackbox = not stack
+        visited: set = set()
+        while stack:
+            node = stack.pop()
+            nid = id(node)
+            if nid in visited:
+                continue
+            visited.add(nid)
+            if not isinstance(node, Signal):
+                stack.extend(expr_children(node))
+                continue
+            owner = getattr(node, "_owning_component", None)
+            if owner is not None and owner is not self:
+                continue   # sub-component boundary
+            if nid not in io_ids:
+                node._no_emit_decl = True
+                node._no_emit_drive = True
+            if node._driver is not None:
+                stack.append(node._driver)
+            if isinstance(node, _MemoryArray):
+                stack.extend(node._iter_ports())
+            parent = getattr(node, "_memory_parent", None)
+            if parent is not None:
+                stack.append(parent)
 
 
 def gen_spec(class_instance: Component) -> Dict[str, UInt]:

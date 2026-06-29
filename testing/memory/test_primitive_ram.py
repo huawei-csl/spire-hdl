@@ -32,7 +32,7 @@ def _top_from(ram_factory, io_fields, wiring):
             self.elaborate()
 
         def elaborate(self):
-            ram = ram_factory().make_internal()
+            ram = ram_factory()
             wiring(self, ram)
 
     reset_shared_cache()

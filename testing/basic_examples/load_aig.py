@@ -25,10 +25,10 @@ if __name__ == "__main__":
 
     mult = Multiplier(width=width)
     print(mult)
-    #mult.from_aig_file("../gate_net/circuit.aig", make_internal=False)
-    mult.from_aig_file("../AI4EDA_TNet/out.aag", make_internal=False)
+    #mult.from_aig_file("../gate_net/circuit.aig")
+    mult.from_aig_file("../AI4EDA_TNet/out.aag")
 
-    # from_aig_file(aig_file_path, aiger_map_file_path, make_internal=False)
+    # from_aig_file(aig_file_path, aiger_map_file_path)
 
     print(mult)
 

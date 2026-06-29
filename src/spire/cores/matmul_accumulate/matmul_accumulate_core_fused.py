@@ -229,4 +229,3 @@ class MatmulAccumulateBuildOut:
     B: Array
     C: Array
     Y: Array
-

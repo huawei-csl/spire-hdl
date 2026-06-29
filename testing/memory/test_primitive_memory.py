@@ -63,7 +63,7 @@ def _build_fifo16(*, registered_read: bool = False, with_reset_arm: bool = True,
                 with_reset_arm=with_reset_arm,
                 init=init,
                 name="fifo",
-            ).make_internal()
+            )
             mem.io.write_addr   <<= self.io.addr_w
             mem.io.write_data   <<= self.io.din
             mem.io.write_enable <<= self.io.we
@@ -99,7 +99,7 @@ def _build_rom8(init):
                 registered_read=True,
                 init=init,
                 name="rom",
-            ).make_internal()
+            )
             rom.io.read_addr   <<= self.io.addr
             rom.io.read_enable <<= self.io.re
             # write port is required at the boundary but tied off here (ROM behavior).
@@ -256,7 +256,7 @@ def test_sim_composite_elem_type():
             self.elaborate()
 
         def elaborate(self):
-            mem = MemoryPrimitive(_Bus, depth=4, name="busmem").make_internal()
+            mem = MemoryPrimitive(_Bus, depth=4, name="busmem")
             # Pack input bus into UInt(9) for the write port.
             bus_in = _Bus()
             bus_in.data  <<= self.io.din_data

@@ -120,7 +120,7 @@ class KaratsubaMultiplier(StageBasedMultiplierBase):
             ppa_cls=self.multiplier_core_config.ppa_opt.value if self.multiplier_core_config.ppa_opt else None,
             fsa_cls=self.multiplier_core_config.fsa_opt.value if self.multiplier_core_config.fsa_opt else None,
             optim_type=self.optim_type,
-        ).make_internal()
+        )
 
         core.io.a <<= a_sig
         core.io.b <<= b_sig

@@ -38,9 +38,7 @@ class Imported(ImportedComponent):
         self.io = IORecord(a=Input(UInt(4)), b=Input(UInt(4)), y=Output(UInt(8)))
 
 comp = Imported()
-# make_internal=False keeps the IO as ports so the result is a standalone netlist
-# (use make_internal=True instead to inline the imported logic into a surrounding Component).
-comp.from_aag_lines(aag_lines, make_internal=False)   # or: comp.from_aig_file("design.aig", map_file=...)
+comp.from_aag_lines(aag_lines)   # or: comp.from_aig_file("design.aig", map_file=...)
 net = comp.to_netlist("from_aig")
 ```
 

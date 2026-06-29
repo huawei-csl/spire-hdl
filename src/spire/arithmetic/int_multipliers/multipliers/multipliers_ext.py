@@ -77,7 +77,7 @@ class StageBasedMultiplier(StageBasedMultiplierBase):
             optim_type=self.optim_type,
             selection_mode=self.selection_mode,
             split_mode=self.split_mode,
-        ).make_internal()
+        )
 
         self.mult = mult
 
@@ -116,7 +116,7 @@ class StageBasedSignMagnitudeMultiplier(StageBasedMultiplierBase):
             optim_type=self.optim_type,
             selection_mode=self.selection_mode,
             split_mode=self.split_mode,
-        ).make_internal()
+        )
         
         self.mult = mult
 
@@ -172,7 +172,7 @@ class StageBasedSignMagnitudeExtMultiplier(StageBasedMultiplierBase):
             optim_type=self.optim_type,
             selection_mode=self.selection_mode,
             split_mode=self.split_mode,
-        ).make_internal()
+        )
 
         self.mult = mult
 
@@ -264,7 +264,7 @@ class StageBasedSignMagnitudeExtUpMultiplier(StageBasedMultiplierBase):
             optim_type=self.optim_type,
             selection_mode=self.selection_mode,
             split_mode=self.split_mode,
-        ).make_internal()
+        )
 
         self.mult = mult
 
@@ -360,13 +360,13 @@ class StageBasedSignMagnitudeToTwosComplementMultiplier(StageBasedMultiplierBase
             optim_type=self.optim_type,
             selection_mode=self.selection_mode,
             split_mode=self.split_mode,
-        ).make_internal()      
+        )
         mult.io.a <<= self.io.a
         mult.io.b <<= self.io.b
 
         self.mult = mult
 
-        enc = SignMagnitudeToTwosComplementDecoder(width=self.aw + self.bw - 1).make_internal()
+        enc = SignMagnitudeToTwosComplementDecoder(width=self.aw + self.bw - 1)
         enc.io.i <<= mult.io.y
         self.io.y <<= enc.io.o
 
@@ -402,13 +402,13 @@ class StageBasedSignMagnitudeExtToTwosComplementMultiplier(StageBasedMultiplierB
             optim_type=self.optim_type,
             selection_mode=self.selection_mode,
             split_mode=self.split_mode,
-        ).make_internal()      
+        )
         mult.io.a <<= self.io.a
         mult.io.b <<= self.io.b
 
         self.mult = mult
 
-        enc = SignMagnitudeToTwosComplementDecoder(width=self.aw + self.bw).make_internal()
+        enc = SignMagnitudeToTwosComplementDecoder(width=self.aw + self.bw)
         enc.io.i <<= mult.io.y
         self.io.y <<= enc.io.o
 
@@ -444,13 +444,13 @@ class StageBasedSignMagnitudeExtToTwosComplementUpperMultiplier(StageBasedMultip
             optim_type=self.optim_type,
             selection_mode=self.selection_mode,
             split_mode=self.split_mode,
-        ).make_internal()      
+        )
         mult.io.a <<= self.io.a
         mult.io.b <<= self.io.b
 
         self.mult = mult
 
-        enc = SignMagnitudeToTwosComplementDecoder(width=self.aw + self.bw - 1).make_internal()
+        enc = SignMagnitudeToTwosComplementDecoder(width=self.aw + self.bw - 1)
         enc.io.i <<= mult.io.y
         self.io.y <<= enc.io.o
 

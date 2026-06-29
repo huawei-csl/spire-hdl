@@ -63,14 +63,14 @@ class AdderWithCompare(Component):
         self.elaborate()
 
     def elaborate(self):
-        # Instantiate an adder and inline it (flatten its logic into this component).
-        adder = Adder(width=self.width).inline()
+        # Instantiate an adder; its logic is embedded automatically when its IO is wired.
+        adder = Adder(width=self.width)
         adder.io.a <<= self.io.a
         adder.io.b <<= self.io.b
         self.io.sum <<= adder.io.sum
 
         # Instantiate a comparator to check if sum > a.
-        comparator = Comparator(width=self.width + 1).inline()
+        comparator = Comparator(width=self.width + 1)
         comparator.io.a <<= adder.io.sum
         comparator.io.b <<= self.io.a
         self.io.sum_greater_than_a <<= comparator.io.greater

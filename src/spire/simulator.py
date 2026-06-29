@@ -1,6 +1,6 @@
 from spire.component import Component, Netlist
 from spire.expr import *
-from spire.expr import Signal, Expr, Const, Op1, Op2, Ternary, Concat, Slice, Resize
+from spire.expr import Signal, Expr, Const, Op1, Op2, Ternary, Concat, Slice, Resize, WIRE_LIKE_KINDS
 from spire.memory import _MemoryArray, _ArrayIndex
 from spire.simulator_base import SimulatorBase
 from spire.visitor import ExprVisitor
@@ -157,10 +157,10 @@ class Simulator(SimulatorBase):
         # design graph (the walker traverses `read_data._memory_parent` back-edges and the store's port-children).
         # Registered reads are ordinary capture Registers in the primitive — no store-owned regs to special-case.
         self.m.collect_signals()
-        self.inputs = [s for s in self.m._ports if s.kind == "input"]
-        self.outputs = [s for s in self.m._ports if s.kind == "output"]
+        self.inputs = [s for s in self.m._signals if self.m.is_global_io(s, "input")]
+        self.outputs = [s for s in self.m._signals if self.m.is_global_io(s, "output")]
         self.regs = [s for s in self.m._signals if s.kind == "reg"]
-        self.wires = [s for s in self.m._signals if s.kind == "wire"]
+        self.wires = [s for s in self.m._signals if s.kind in WIRE_LIKE_KINDS and not self.m.is_global_io(s)]
         self.mems = [s for s in self.m._signals if s.kind == "mem"]
 
         def check_or_duplicate_name(signals):
@@ -351,13 +351,13 @@ class Simulator(SimulatorBase):
         if sid in self._cache_sig:
             return self._cache_sig[sid]
 
-        if s.kind == "input":
+        if self.m.is_global_io(s, "input"):
             bits = _to_bits(self._in.get(_sid(s), 0), s.typ.width)
 
         elif s.kind == "reg":
             bits = _to_bits(self._reg.get(_sid(s), 0), s.typ.width)
 
-        elif s.kind in ("wire", "output"):
+        elif s.kind in WIRE_LIKE_KINDS:
             if s._driver is None:
                 # Blackbox-Component outputs have no Python sim model. The framework returns 0 as a stub so the
                 # rest of the design can still simulate. Signature: `_no_emit_drive=True`.

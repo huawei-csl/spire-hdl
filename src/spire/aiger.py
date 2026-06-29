@@ -7,7 +7,7 @@ from typing import Dict, List, Tuple, Optional, Any, Iterable
 
 from spire.component import Netlist
 from spire.aig.aig_aigerverse import AbstractAdapter, conv_aag_into_graph
-from spire.expr import Concat, Resize, SInt, Signal, Ternary, UInt, Bool, Const, Op1, Op2, cat, mux, Slice
+from spire.expr import Concat, Resize, SInt, Signal, Ternary, UInt, Bool, Const, Op1, Op2, WIRE_LIKE_KINDS, cat, mux, Slice
 from spire.visitor import ExprVisitor
 
 # ---- AIGER literals helpers -------------------------------------------------
@@ -630,8 +630,11 @@ class AigerExporter:
         key = id(s)
         if key in self._sig_bits:
             return self._sig_bits[key]
-        # inputs & regs are pre-allocated; wires/outputs are computed from drivers
-        if s.kind in ("wire", "output"):
+        # Top inputs & regs are pre-allocated (and thus cached above); wires/outputs are computed
+        # from drivers. A signal with kind=="input" that reaches here is *not* a top port (those hit
+        # the cache) — it's a sub-component input spliced in by composition, so it follows its driver
+        # like a wire (membership, not raw kind, decides what's a primary input).
+        if s.kind in WIRE_LIKE_KINDS:
             # protect against comb loops
             visiting = self._expr_eval._visiting
             vk = ("sig", key)

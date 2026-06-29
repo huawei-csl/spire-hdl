@@ -176,7 +176,7 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
                 encoder = enc_cfg.encoder_cls(
                     width=matrix[i, j].typ.width,
                     clip_most_negative=enc_cfg.encoder_clip_most_negative,
-                ).make_internal()
+                )
                 encoder.io.i <<= matrix[i, j]
                 encoded_row.append(encoder.io.o)
             encoded_rows.append(Array(encoded_row))

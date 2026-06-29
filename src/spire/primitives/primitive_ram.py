@@ -22,13 +22,13 @@ from __future__ import annotations
 from typing import Optional, Sequence
 
 from spire.expr import Bool, Register, Signal, UInt, mux
-from spire.component import Component
+from spire.component import CustomVerilogComponent
 from spire.io_record import IORecord, Input, Output
 from spire.primitives.primitive_memory import _elem_bit_width, _next_uid
 from spire.primitives._ram_template import ram_block
 
 
-class RamPrimitive(Component):
+class RamPrimitive(CustomVerilogComponent):
     def __init__(
         self,
         elem_type,

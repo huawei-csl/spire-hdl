@@ -130,7 +130,7 @@ class _Analyzer:
 
         reg_depth: Dict[str, int] = {}
         if self.include_reg_cones:
-            for r in m._internals_of("reg"):
+            for r in m._internals_of(("reg",)):
                 if r._driver is not None:
                     self._count_walk(r._driver)
                     reg_depth[r.name] = self._depth(r._driver, set())

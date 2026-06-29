@@ -14,12 +14,11 @@ import time
 from typing import Any, Dict, List, Optional
 
 from spire import VERILOG_BANNER
-from spire.expr import (Bool, Const, Expr, ExprLike, HDLType, Signal, UInt, cat,
+from spire.expr import (Bool, Const, Expr, ExprLike, HDLType, Signal, UInt, WIRE_LIKE_KINDS, cat,
                                fit_width, get_shared_wires, reset_shared_cache)
 from spire.memory import _MemoryArray
 from spire.analyzer import _Analyzer, GraphReport
 from spire.visitor import ExprVisitor, expr_children
-from spire.composite.record import iter_values  # used by _SignalCollector
 
 
 class Netlist:
@@ -91,9 +90,21 @@ class Netlist:
         # Use identity, not equality, so we don't trigger Expr.__eq__.
         return any(s is p for p in self._ports)
 
-    def _internals_of(self, kind: str) -> List[Signal]:
-        # Avoid `s not in self._ports` (it calls __eq__). Use identity instead.
-        return [s for s in self._signals if s.kind == kind and not self._is_port(s)]
+    def is_global_io(self, s: "Signal", kind: str | None = None) -> bool:
+        """Return whether ``s`` is one of this netlist's top-level IO ports.
+
+        ``kind`` may be ``"input"`` or ``"output"`` to additionally require a
+        direction. Sub-component IO leaves keep their original kind, but are not
+        global IO unless they are members of ``_ports``.
+        """
+        if kind is not None and s.kind != kind:
+            return False
+        return self._is_port(s)
+
+    def _internals_of(self, kinds) -> List[Signal]:
+        # Reached signals of the given `kinds` (e.g. ("reg",), WIRE_LIKE_KINDS) that are not the TOP's
+        # own ports. Sub-component IO leaves keep their declared input/output kind, but emit as internal wires.
+        return [s for s in self._signals if s.kind in kinds and not self.is_global_io(s)]
 
     def get_spec(self) -> Dict[str, UInt]:
         spec = {}
@@ -161,10 +172,11 @@ class Netlist:
         # provides their value. Memory stores (`_MemoryArray`) are sim-only and always no-emit, so they and their
         # rdata registers fall through these checks without special-casing.
         for s in self._signals:
-            if s.kind in ("wire", "output") and s._driver is None and not s._no_emit_drive:
-                if s.kind == "output":
-                    raise ValueError(f"Output '{s.name}' has no driver.")
-            if s.kind == "reg" and s._driver is None and not s._no_emit_drive:
+            if s._driver is not None or s._no_emit_drive:
+                continue
+            if self.is_global_io(s, "output"):
+                raise ValueError(f"Output '{s.name}' has no driver.")
+            if s.kind == "reg":
                 raise ValueError(f"Register '{s.name}' has no next-state assignment.")
 
         # Collect custom-Verilog blocks from any Component that owns part of this module's design graph (top-level
@@ -196,11 +208,11 @@ class Netlist:
             rng = p.typ.range_str()
             lines.append(f"  {dir_} {sign}{rng} {p.name};")
 
-        wires = self._internals_of("wire")
+        wires = self._internals_of(WIRE_LIKE_KINDS)
         if not collect_signals:
             wires += [s for s in get_shared_wires() if not any(s is w for w in wires)]
 
-        regs_all = self._internals_of("reg")
+        regs_all = self._internals_of(("reg",))
         regs = regs_all
 
         lines.append('// Wires')
@@ -359,10 +371,6 @@ class _SignalCollector(ExprVisitor[None]):
     def visit_signal(self, s: Signal) -> None:
         sid = id(s)
         if sid not in self.port_ids:
-            if s.kind in ("input", "output"):
-                raise RuntimeError(
-                    f"Internal signal '{s.name}' has port kind '{s.kind}'. "
-                    "Use wire/reg for internals. For internal components use make_internal()")
             self._uniquify(s)
             if sid not in self.in_list:
                 self.m._signals.append(s)
@@ -384,7 +392,7 @@ class _SignalCollector(ExprVisitor[None]):
         # back to inputs).
         owner = getattr(s, "_owning_component", None)
         if owner is not None and getattr(owner, "_is_blackbox", False):
-            for peer in iter_values(owner.io):
+            for peer in owner.get_ios().to_list():
                 if peer is not s:
                     self.visit(peer)
 
@@ -543,8 +551,8 @@ class _PortGrouper:
         return agg
 
 
-# `_to_composite` / `iter_values` now live in spire.composite.record
-# (the layer that owns CompositeRecord); `iter_values` is imported at the top of this module.
+# `_to_composite` / `iter_values` live in spire.composite.record (the layer that owns
+# CompositeRecord); IO is read here via `Component.get_ios()` rather than those helpers directly.
 
 
 # ---------------------------------------------------------------------------

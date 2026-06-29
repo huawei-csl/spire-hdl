@@ -52,7 +52,7 @@ class MultiplierConfig:
             ppa_cls=self.ppa_opt.value,
             fsa_cls=self.fsa_opt.value,
             optim_type=self.optim_type,
-        ).make_internal()
+        )
         multiplier.io.a <<= a
         multiplier.io.b <<= b
         return multiplier.io.y
@@ -80,7 +80,7 @@ class AdderConfig:
             optim_type=self.optim_type,
             fsa_cls=self.fsa_opt.value,
             full_output_bit=self.full_output_bit,
-        ).make_internal()
+        )
         adder.io.a <<= a
         adder.io.b <<= b
         return adder.io.y

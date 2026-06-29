@@ -303,6 +303,7 @@ class Expr(BitSerializable):
 
 
 ExprLike = Union[Expr, int, bool]
+WIRE_LIKE_KINDS = ("wire", "input", "output")
 
 # -----------------------------
 # Leaf nodes
