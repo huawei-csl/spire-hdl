@@ -227,8 +227,8 @@ def test_sim_underflow_and_overflow_safety():
 # ---------------------------------------------------------------------------
 
 class _Bus(CompositeRecord):
-    data  = Wire(UInt(8))
-    valid = Wire(UInt(1))
+    def __init__(self):
+        super().__init__(data=Wire(UInt(8)), valid=Wire(UInt(1)))
 
 
 def test_sim_composite_elem_type_fifo():

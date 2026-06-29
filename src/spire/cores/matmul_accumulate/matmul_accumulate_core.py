@@ -6,7 +6,6 @@ from typing import Callable, Iterable, List, Literal, NamedTuple, Sequence
 
 from spire.composite.array import Array
 from spire.composite.record import CompositeRecord
-from spire.composite.record_dynamic import CompositeRecordDynamic
 from spire.arithmetic.int_arithmetic_config import (
     AdderConfig,
     MultiplierConfig,
@@ -32,7 +31,7 @@ def inner_product(
 
 
 @dataclass
-class MatmulAccumulateIO(CompositeRecordDynamic):
+class MatmulAccumulateIO(CompositeRecord):
     A: Array  # input
     B: Array  # input
     C: Array  # input

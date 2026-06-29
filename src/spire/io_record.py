@@ -23,26 +23,17 @@ explicit name carries the ``_io_autoname`` flag, and ``IORecord`` fills its name
 """
 from __future__ import annotations
 
-from spire.composite.record_dynamic import CompositeRecordDynamic
+from spire.composite.record import CompositeRecord
 from spire.expr import Input, Output, Signal  # re-exported for `from spire.io_record import ...`
 
 __all__ = ["IORecord", "Input", "Output"]
 
 
-class IORecord(CompositeRecordDynamic):
-    """Composite IO container; field names become signal names, direction is explicit.
+class IORecord(CompositeRecord):
+    """A Component's IO bundle — a :class:`CompositeRecord` used at the module boundary.
 
-    Extends :class:`CompositeRecordDynamic` (not ``CompositeRecord``, which rejects non-``wire``
-    kinds). Fields may be ``Signal`` ports (typically :class:`Input` / :class:`Output`) or nested
-    ``HDLComposite`` values (e.g. ``Array``).
+    Field names become signal names and direction is explicit via :class:`Input` /
+    :class:`Output`. Fields may be ``Signal`` ports or nested ``HDLComposite`` values
+    (e.g. ``Array``). Construction, field-key autonaming, and ``to_list`` flattening are
+    inherited from ``CompositeRecord``; ``IORecord`` exists to mark intent ("this is IO").
     """
-
-    def __init__(self, **fields: object) -> None:
-        for field_name, val in fields.items():
-            # A port built without an explicit name (`_io_autoname`) inherits the field key.
-            # Inside an `IORecord(a=Input(...))` call the signal can't self-name reliably, so the
-            # field key — actual data, not inspected source — is the robust source of truth.
-            if isinstance(val, Signal) and getattr(val, "_io_autoname", False):
-                val.name = field_name
-                val._io_autoname = False
-            setattr(self, field_name, val)

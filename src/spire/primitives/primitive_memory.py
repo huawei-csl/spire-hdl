@@ -14,8 +14,8 @@ Composite element types are supported via user-side pack / unpack at the port
 boundary. The port wires are always ``UInt(elem_w)``; callers do::
 
     class Bus(CompositeRecord):
-        data  = Wire(UInt(8))
-        valid = Wire(UInt(1))
+        def __init__(self):
+            super().__init__(data=Wire(UInt(8)), valid=Wire(UInt(1)))
 
     mem = MemoryPrimitive(Bus, depth=16).make_internal()
     # write

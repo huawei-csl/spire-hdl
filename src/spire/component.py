@@ -1,5 +1,5 @@
 import abc
-from dataclasses import dataclass, make_dataclass
+from dataclasses import make_dataclass
 import hashlib
 import random
 import time
@@ -30,12 +30,12 @@ from spire.visitor import ExprVisitor, expr_children
 from spire.ir import (Netlist, _PortGrouper, IOCollector, _SignalCollector, get_rand_hash)
 # IO normalization helpers live in the composite layer; re-exported here for back-compat
 # (e.g. `from spire.component import iter_values`).
-from spire.composite.record_dynamic import _to_composite, iter_values
+from spire.composite.record import CompositeRecord, _to_composite, iter_values
 
 
 class Component(abc.ABC):
 
-    io: dataclass | Dict
+    io: "CompositeRecord | Any"
 
     # define attribute name
     @property
@@ -51,7 +51,7 @@ class Component(abc.ABC):
         """
         ...
 
-    def get_ios(self) -> "CompositeRecordDynamic":
+    def get_ios(self) -> "CompositeRecord":
         """Return this component's IO as an composite record — the single IO normalization point.
 
         Default: normalize ``self.io`` (dataclass / dict / namedtuple / ``IORecord``) via
@@ -286,4 +286,3 @@ def gen_spec(class_instance: Component) -> Dict[str, UInt]:
     # normalization so dict / namedtuple / IORecord IO all work (the old io.__dict__ walk
     # silently broke for dict IO).
     return {sig.name: sig.typ for sig in iter_values(class_instance.io)}
-

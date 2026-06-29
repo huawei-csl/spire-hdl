@@ -5,14 +5,14 @@ from typing import Optional
 
 from spire.composite.array import Array
 from spire.composite.floating_point import FloatingPoint, FloatingPointType
-from spire.composite.record_dynamic import CompositeRecordDynamic
+from spire.composite.record import CompositeRecord
 from spire.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
 from spire.expr import Signal, UInt
 from spire.component import Component
 
 
 @dataclass
-class FpMMAcIO(CompositeRecordDynamic):
+class FpMMAcIO(CompositeRecord):
     A: Array  # dim_m x dim_k, FloatingPoint elements
     B: Array  # dim_k x dim_n, FloatingPoint elements
     C: Array  # dim_m x dim_n, FloatingPoint elements

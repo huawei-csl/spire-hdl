@@ -20,9 +20,11 @@ from spire.simulator import Simulator
 
 def test_composite_record_basic():
     class MyRecord(CompositeRecord):
-        a: Signal = Wire(UInt(8))
-        b: Signal = Wire(SInt(4))
-        c: Array = Array([Wire(UInt(8)) for _ in range(4)])
+        def __init__(self):
+            super().__init__(
+                a=Wire(UInt(8)), b=Wire(SInt(4)),
+                c=Array([Wire(UInt(8)) for _ in range(4)]),
+            )
 
     b0 = MyRecord()
     b1 = MyRecord()
@@ -41,32 +43,21 @@ def test_composite_record_basic():
 
 
 class MyRecord(CompositeRecord):
-    a: Signal = Wire(UInt(8))
-    b: Signal = Wire(UInt(4))
+    def __init__(self):
+        super().__init__(a=Wire(UInt(8)), b=Wire(UInt(4)))
 
 
 class RecordWithArray(CompositeRecord):
-    a: Signal = Wire(UInt(8))
-    vec: Array = Array([Wire(UInt(2)) for _ in range(3)])  # 3×2 bits
+    def __init__(self):
+        super().__init__(
+            a=Wire(UInt(8)),
+            vec=Array([Wire(UInt(2)) for _ in range(3)]),  # 3×2 bits
+        )
 
 
 # -------------------------------------------------------------------
 # Tests
 # -------------------------------------------------------------------
-
-
-def test_compositerecord_templates_collected():
-    reset_shared_cache()
-
-    # Templates should be captured on the class
-    tmpl = MyRecord._record_field_templates
-    assert set(tmpl.keys()) == {"a", "b"}
-    assert isinstance(tmpl["a"], Signal)
-    assert tmpl["a"].kind == "wire"
-    assert tmpl["a"].typ.width == 8
-    assert isinstance(tmpl["b"], Signal)
-    assert tmpl["b"].kind == "wire"
-    assert tmpl["b"].typ.width == 4
 
 
 def test_compositerecord_instance_clones_wires():
@@ -89,29 +80,6 @@ def test_compositerecord_instance_clones_wires():
     assert b0.b.typ.width == 4
     assert b0.a.kind == "wire"
     assert b0.b.kind == "wire"
-
-
-def test_compositerecord_override_field_in_ctor():
-    reset_shared_cache()
-
-    custom_a = Wire(UInt(8))
-    b = MyRecord(a=custom_a)
-
-    # 'a' is overridden
-    assert b.a is custom_a
-    # 'b' is still auto-cloned
-    assert isinstance(b.b, Signal)
-    assert b.b is not MyRecord._record_field_templates["b"]
-
-
-def test_compositerecord_unknown_override_raises():
-    reset_shared_cache()
-
-    try:
-        _ = MyRecord(x=Wire(UInt(8)))
-        assert False, "Expected AttributeError for unknown override"
-    except AttributeError:
-        pass
 
 
 def test_compositerecord_to_bits_and_width():
@@ -240,10 +208,7 @@ def _eval_expr(e: Expr) -> int:
 
 if __name__ == "__main__":
     test_composite_record_basic()
-    test_compositerecord_templates_collected()
     test_compositerecord_instance_clones_wires()
-    test_compositerecord_override_field_in_ctor()
-    test_compositerecord_unknown_override_raises()
     test_compositerecord_to_bits_and_width()
     test_compositerecord_assign_from_bits_slices_correctly()
     test_compositerecord_elementwise_assign_from_other_record()

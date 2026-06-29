@@ -19,7 +19,7 @@ from spire.expr import (Bool, Const, Expr, ExprLike, HDLType, Signal, UInt, cat,
 from spire.memory import _MemoryArray
 from spire.analyzer import _Analyzer, GraphReport
 from spire.visitor import ExprVisitor, expr_children
-from spire.composite.record_dynamic import iter_values  # used by _SignalCollector
+from spire.composite.record import iter_values  # used by _SignalCollector
 
 
 class Netlist:
@@ -543,8 +543,8 @@ class _PortGrouper:
         return agg
 
 
-# `_to_composite` / `iter_values` now live in spire.composite.record_dynamic
-# (the layer that owns CompositeRecordDynamic); `iter_values` is imported at the top of this module.
+# `_to_composite` / `iter_values` now live in spire.composite.record
+# (the layer that owns CompositeRecord); `iter_values` is imported at the top of this module.
 
 
 # ---------------------------------------------------------------------------

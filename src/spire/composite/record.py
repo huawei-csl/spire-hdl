@@ -1,111 +1,74 @@
-from typing import Any, Dict, List, Type, TypeVar, Union
+from __future__ import annotations
+
+from dataclasses import fields, is_dataclass, make_dataclass
+from typing import Any, Iterable, List
 
 from spire.composite.base import HDLComposite
-from spire.expr import Expr, Signal, Wire
-
-T_Record = TypeVar("T_Record", bound="CompositeRecord")
+from spire.expr import Expr, Signal
+from spire.hdl_traits import BitSerializable
 
 
 class CompositeRecord(HDLComposite):
+    """Record composite: field names become signal names, direction is explicit.
+
+    Fields may be ``Signal`` ports (typically :class:`~spire.expr.Input` /
+    :class:`~spire.expr.Output`) or nested ``HDLComposite`` values (``Array``,
+    fixed/float types, other records). Anything in the instance that is not a
+    ``BitSerializable`` (plain ints, bookkeeping, ...) is ignored, not rejected.
+
+    Construct one of three ways, all instance-based:
+      * inline / dynamic — ``CompositeRecord(a=Input(...), b=Output(...))``;
+      * a named/parameterized subclass with an ``__init__`` that calls
+        ``super().__init__(...)`` (e.g. a reusable ``Stream`` / ``Bus`` interface);
+      * a ``@dataclass`` subclass, for declarative fixed fields.
+
+    ``to_list()`` flattening, ``width``, ``to_bits``, and ``<<=`` / ``@=`` are all
+    inherited from :class:`HDLComposite`.
     """
-    Class-based record composite.
 
-    Usage:
+    def __init__(self, **field_values: object) -> None:
+        for field_name, val in field_values.items():
+            # A port built without an explicit name (`_io_autoname`) inherits the field key.
+            # Inside a ``Record(a=Input(...))`` call the signal can't self-name reliably, so the
+            # field key — actual data, not inspected source — is the robust source of truth.
+            if isinstance(val, Signal) and getattr(val, "_io_autoname", False):
+                val.name = field_name
+                val._io_autoname = False
+            setattr(self, field_name, val)
 
-        class MyRecord():
-            a: Signal = Wire(UInt(8))
-            b: Signal = Wire(SInt(4))
-            c: Array  = Array([Wire(UInt(8)) for _ in range(4)])
-
-    On subclass definition (__init_subclass__), we scan the class
-    attributes and treat any 'wire template' or HDLComposite as a field
-    template. On instance creation, these templates are cloned so that
-    each instance gets its own wires/composites (no sharing).
-    """
-
-    _record_field_templates: Dict[str, Union[Signal, HDLComposite]]
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-        templates: Dict[str, Union[Signal, HDLComposite]] = {}
-
-        for name, value in cls.__dict__.items():
-            # Skip private / dunder / methods / descriptors
-            if name.startswith("_"):
-                continue
-
-            # Only instances are interesting (class-level templates)
-            if isinstance(value, Signal):
-                if value.kind != "wire":
-                    raise TypeError(f"Record field '{name}' must be a wire Signal (kind='wire'), " f"got kind={value.kind!r}")
-                templates[name] = value
-            elif isinstance(value, HDLComposite):
-                # For composites, we expect they are wire-backed; cloning
-                # is done via type(value).wire_like(value).
-                templates[name] = value
-
-        cls._record_field_templates = templates
-
-    def __init__(self, **overrides: Union[Signal, HDLComposite]) -> None:
-        """
-        Instantiate a record.
-
-        - For each template field on the class, create a new instance:
-            * Signal (wire)   → new Wire with same HDLType
-            * HDLComposite    → type(template).wire_like(template)
-        - If a field is passed via keyword argument, use that instead.
-
-        Example:
-            b = MyRecord()
-            b2 = MyRecord(a=Wire(UInt(8)))  # override 'a'
-        """
-        # Clone all template fields
-        for name, tmpl in self._record_field_templates.items():
-            if name in overrides:
-                # todo: check that override type matches template width
-                val = overrides[name]
-            else:
-                if isinstance(tmpl, Signal):
-                    if tmpl.kind != "wire":
-                        raise TypeError(f"Record field '{name}' template must be a wire Signal, " f"got kind={tmpl.kind!r}")
-                    # Clone: new Wire with same type
-                    val = Wire(tmpl.typ)
-                elif isinstance(tmpl, HDLComposite):
-                    # Clone composite via its wire_like(template) API
-                    val = type(tmpl).wire_like(tmpl)
-                else:
-                    raise TypeError(f"Unsupported template type for record field '{name}': " f"{type(tmpl)}")
-
-            setattr(self, name, val)
-
-        # Check for unknown overrides
-        for k in overrides:
-            if k not in self._record_field_templates:
-                raise AttributeError(f"Unknown record field override '{k}' " f"for {self.__class__.__name__}")
-
-    # ---------------- HDLComposite API ----------------
+    def _raw_fields(self) -> list:
+        """Field values without flattening (avoids recursion into to_list)."""
+        if is_dataclass(self):
+            return [getattr(self, f.name) for f in fields(self)]
+        return list(vars(self).values())
 
     def to_list_first_level(self) -> List[Expr | HDLComposite]:
-        list_first_level: List[Expr | HDLComposite] = []
-        for name in self._record_field_templates.keys():
-            v = getattr(self, name)
-            list_first_level.append(v)
-        return list_first_level
+        return [v for v in self._raw_fields() if isinstance(v, BitSerializable)]
 
-    @classmethod
-    def wire_like(
-        cls: Type[T_Record],
-        *args: Any,
-        **kwargs: Any,
-    ) -> T_Record:
-        """
-        Create a 'wire-filled' instance.
 
-        For records, the shape is fully defined by the class, so we ignore
-        any template argument and simply construct a fresh instance.
-        """
-        return cls()
+# IO normalization — lives here (the composite layer) so the dependency points one way:
+# ir.py / component.py import these downward instead of importing the composite inside a
+# function body. ``_to_composite`` references CompositeRecord directly (same module, no import).
+def _to_composite(obj: Any) -> "CompositeRecord":
+    """Convert any IO container into a CompositeRecord for uniform handling.
 
-    def __repr__(self) -> str:
-        fields = ", ".join(self._record_field_templates.keys())
-        return f"{self.__class__.__name__}(fields=[{fields}], width={self.width})"
+    Accepts an existing composite (returned as-is), a ``@dataclass``, a namedtuple, a plain dict,
+    or a plain object with ``__dict__``. Single IO-normalization point behind ``Component.get_ios()``.
+    """
+    if isinstance(obj, CompositeRecord):  # already a composite — no conversion needed
+        return obj
+    if is_dataclass(obj):  # @dataclass IO
+        pairs = [(f.name, getattr(obj, f.name)) for f in fields(obj)]
+    elif hasattr(obj, "_fields"):  # namedtuple IO
+        pairs = [(n, getattr(obj, n)) for n in obj._fields]
+    elif isinstance(obj, dict):  # plain dict IO
+        pairs = list(obj.items())
+    else:  # plain object with __dict__
+        pairs = list(vars(obj).items())
+    DynIO = make_dataclass("DynIO", [(n, type(v)) for n, v in pairs], bases=(CompositeRecord,))
+    return DynIO(**{n: v for n, v in pairs})
+
+
+def iter_values(obj: Any) -> Iterable[Any]:
+    """Flatten an IO container (dataclass, namedtuple, dict, or HDLComposite) into leaf Signals."""
+    return _to_composite(obj).to_list()

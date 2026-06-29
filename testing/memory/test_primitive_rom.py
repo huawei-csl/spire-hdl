@@ -138,8 +138,8 @@ def test_rom_contents_are_immutable():
 # ---------------------------------------------------------------------------
 
 class _Bus(CompositeRecord):
-    data  = Wire(UInt(8))
-    valid = Wire(UInt(1))
+    def __init__(self):
+        super().__init__(data=Wire(UInt(8)), valid=Wire(UInt(1)))
 
 
 def test_composite_rom():
