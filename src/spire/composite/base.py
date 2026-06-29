@@ -12,6 +12,8 @@ from spire.hdl_traits import BitSerializable, Assignable
 T_Comp = TypeVar("T_Comp", bound="HDLComposite")
 SelfComp = TypeVar("SelfComp", bound="HDLComposite")
 
+_FLIP_KIND = {"input": "output", "output": "input"}  # wire / reg are direction-less
+
 
 class HDLComposite(BitSerializable, Assignable):
     """
@@ -60,6 +62,44 @@ class HDLComposite(BitSerializable, Assignable):
                 child._assign_port_names(full)
             elif isinstance(child, Signal):
                 child.name = full
+
+    def flip(self: SelfComp) -> SelfComp:
+        """Reverse the direction of every leaf in place (``input``<->``output``; ``wire``/``reg``
+        untouched), recursing through nested composites. An involution: ``x.flip().flip()`` == ``x``.
+        Derives a sink interface from a source one; see also :func:`spire.Flipped`."""
+        for child in self.to_list_first_level():
+            if isinstance(child, HDLComposite):
+                child.flip()
+            elif isinstance(child, Signal):
+                child.kind = _FLIP_KIND.get(child.kind, child.kind)
+        return self
+
+    def _directed_leaves(self) -> "List[Tuple[Signal, str]]":
+        """(leaf, direction) pairs — the view connect() consumes. A plain bundle reports each
+        leaf's own kind; a flipped view reports them reversed (see view_as_flipped)."""
+        return [(leaf, leaf.kind) for leaf in self.to_list()]
+
+    def view_as_flipped(self) -> "_FlippedView":
+        """A non-mutating, direction-reversed *view* for expressing 'inside' orientation at
+        connect time, without touching the real port directions. Reuses the bundle's actual
+        leaves, so connecting the view drives the real signals.
+
+        Distinct from :func:`spire.Flipped`, which *permanently* sets a sink polarity at
+        declaration. Feedthrough is then just ``connect(my_io.view_as_flipped(), other)`` —
+        the flip binds to the operand you call it on, so there's no ambiguity."""
+        return _FlippedView(self)
+
+    def connect(self, other: "Connectable") -> None:
+        """Bulk-connect two interfaces: per matching leaf the ``output`` side drives the ``input``
+        side (so a backward ``ready`` wires itself). Either side may be a bundle or a
+        ``view_as_flipped()`` view; leaves pair positionally and must match in width and resolve
+        to opposite directions.
+
+        Peer:        ``connect(consumer.io, producer.io)``
+        Feedthrough: ``connect(my_io.view_as_flipped(), child_io)`` (re-export) or
+                     ``connect(up.view_as_flipped(), down.view_as_flipped())`` (own passthrough).
+        """
+        _connect_directed(self, other)
 
     # -------- Assignment API shared by all composites --------
 
@@ -145,3 +185,50 @@ class HDLComposite(BitSerializable, Assignable):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(width={self.width})"
+
+
+# A "Connectable" is anything that can report (leaf, direction) pairs: an HDLComposite or a
+# _FlippedView of one. connect() programs against this, so orientation is expressed by *which*
+# operand you wrap with view_as_flipped(), never by a positional boolean flag.
+Connectable = Union[HDLComposite, "_FlippedView"]
+
+
+def _connect_directed(a: Connectable, b: Connectable) -> None:
+    al, bl = a._directed_leaves(), b._directed_leaves()
+    if len(al) != len(bl):
+        raise ValueError(f"connect: leaf-count mismatch ({len(al)} vs {len(bl)})")
+    for (la, ka), (lb, kb) in zip(al, bl):
+        if la.typ.width != lb.typ.width:
+            raise ValueError(
+                f"connect: width mismatch on '{la.name}'/'{lb.name}' ({la.typ.width} vs {lb.typ.width})"
+            )
+        if {ka, kb} != {"input", "output"}:
+            raise TypeError(
+                f"connect: leaves '{la.name}'/'{lb.name}' resolve to the same direction "
+                f"('{ka}'/'{kb}'). For a feedthrough, wrap your own boundary with .view_as_flipped()."
+            )
+        src, dst = (la, lb) if ka == "output" else (lb, la)
+        dst <<= src
+
+
+class _FlippedView:
+    """A non-mutating, direction-reversed view of a bundle (or of another view).
+
+    Reuses the underlying bundle's real leaves — so connecting the view drives the actual
+    signals — but reports every leaf's direction flipped. Created via ``HDLComposite.view_as_flipped()``;
+    used to express that an operand is the enclosing module's own boundary (reversed from inside)
+    without ever mutating the real port kinds.
+    """
+    __slots__ = ("_inner",)
+
+    def __init__(self, inner: Connectable) -> None:
+        self._inner = inner
+
+    def _directed_leaves(self) -> "List[Tuple[Signal, str]]":
+        return [(leaf, _FLIP_KIND.get(k, k)) for leaf, k in self._inner._directed_leaves()]
+
+    def view_as_flipped(self) -> "_FlippedView":
+        return _FlippedView(self)
+
+    def connect(self, other: Connectable) -> None:
+        _connect_directed(self, other)

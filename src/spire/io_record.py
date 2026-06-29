@@ -23,10 +23,27 @@ explicit name carries the ``_io_autoname`` flag, and ``IORecord`` fills its name
 """
 from __future__ import annotations
 
+from spire.composite.base import Connectable, HDLComposite
 from spire.composite.record import CompositeRecord
 from spire.expr import Input, Output, Signal  # re-exported for `from spire.io_record import ...`
 
-__all__ = ["IORecord", "Input", "Output"]
+__all__ = ["IORecord", "Input", "Output", "Flipped", "connect"]
+
+
+def Flipped(bundle: HDLComposite) -> HDLComposite:
+    """Return ``bundle`` with every leaf direction reversed (in place; safe on a freshly
+    constructed instance, which is the usual case). ``Flipped(Stream(UInt(8)))`` is the sink
+    view of a source ``Stream`` -- same type, mirrored directions."""
+    return bundle.flip()
+
+
+def connect(a: Connectable, b: Connectable) -> None:
+    """Bulk-connect two interfaces (``output`` drives ``input`` per leaf). Symmetric.
+
+    Either side may be a bundle or a ``.view_as_flipped()`` view. Peer: ``connect(consumer, producer)``.
+    Feedthrough: wrap your own boundary, e.g. ``connect(my_io.view_as_flipped(), child_io)``. See
+    :meth:`HDLComposite.connect`."""
+    a.connect(b)
 
 
 class IORecord(CompositeRecord):
