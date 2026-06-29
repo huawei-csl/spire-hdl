@@ -11,7 +11,7 @@ from spire.signal_name_inference import (
     mark_expr_name,
     resolve_shared_wire_name,
 )
-from spire.hdl_traits import BitSerializable, Assignable
+from spire.hdl_traits import BitSerializable, Assignable, BitSerializableLike
 
 
 # -----------------------------
@@ -354,8 +354,11 @@ class Signal(Expr, Assignable):
         self._no_emit_decl: bool = False   # skip `wire …;` / `reg …;` declaration
         self._no_emit_drive: bool = False  # skip the `assign` or always-block driver line
 
-    def assign(self, rhs: ExprLike) -> None:
-        """Connect combinational driver: y <<= expr (via Assignable.__ilshift__)."""
+    def assign(self, rhs: BitSerializableLike) -> None:
+        """Connect combinational driver: y <<= expr/composite (via Assignable.__ilshift__).
+        """
+        if isinstance(rhs, BitSerializable):
+            rhs = rhs.to_bits()
         self._driver = fit_width(as_expr(rhs), self.typ)
 
     def set_init(self, init: ExprLike):

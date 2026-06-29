@@ -5,8 +5,8 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import List, Tuple, Type, TypeVar, Union
 
-from spire.expr import Expr, ExprLike, Signal, as_expr, fit_width
-from spire.hdl_traits import BitSerializable, Assignable
+from spire.expr import Expr, Signal, as_expr, fit_width
+from spire.hdl_traits import BitSerializable, Assignable, BitSerializableLike
 
 
 T_Comp = TypeVar("T_Comp", bound="HDLComposite")
@@ -24,13 +24,13 @@ class HDLComposite(BitSerializable, Assignable):
     via ``to_list_first_level`` and the *drive* via ``assign``.
 
     Requirements for subclasses:
-      - to_list_first_level(self) -> List[Expr | HDLComposite]
+      - to_list_first_level(self) -> List[BitSerializable]
       - wire_like(cls, *shape_args, **shape_kwargs) -> instance
     """
 
     @abstractmethod
-    def to_list_first_level(self) -> List[Union[Expr, "HDLComposite"]]:
-        """Return the ordered list of Expr leaves (Signals, Consts, etc.)."""
+    def to_list_first_level(self) -> List[BitSerializable]:
+        """Return this composite's ordered first-level children (leaf ``Expr`` or nested ``HDLComposite``)."""
         ...
 
     def to_list(self) -> List[Expr]:
@@ -47,7 +47,7 @@ class HDLComposite(BitSerializable, Assignable):
 
     # width / to_bits are inherited from BitSerializable.
 
-    def _named_children(self) -> List[Tuple[str, Union[Expr, "HDLComposite"]]]:
+    def _named_children(self) -> List[Tuple[str, BitSerializable]]:
         """(local_key, child) pairs for one structural level. Default keys are positional
         indices (``Array`` and friends); records override this with field names."""
         return [(str(i), c) for i, c in enumerate(self.to_list_first_level())]
@@ -126,7 +126,7 @@ class HDLComposite(BitSerializable, Assignable):
                 f"used {bit_pos} of {bits.typ.width} bits"
             )
 
-    def _coerce_rhs_to_bits(self, rhs: Union["HDLComposite", ExprLike]) -> Expr:
+    def _coerce_rhs_to_bits(self, rhs: "BitSerializableLike") -> Expr:
         """
         Convert rhs into a bitvector Expr with the same width as self.
         - HDLComposite → rhs.to_bits()
@@ -144,7 +144,7 @@ class HDLComposite(BitSerializable, Assignable):
             raise ValueError(f"Width mismatch in composite assignment: " f"lhs width={t.width}, rhs width={rhs_bits.typ.width}")
         return rhs_bits
 
-    def assign(self, rhs: Union["HDLComposite", ExprLike]) -> None:
+    def assign(self, rhs: "BitSerializableLike") -> None:
         """
         Structural assignment: drive this composite from rhs.
 

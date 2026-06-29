@@ -3,17 +3,17 @@ from typing import Iterable, List, Sequence, Union, Tuple
 from spire.composite.base import HDLComposite
 from spire.expr import (
     Expr,
-    ExprLike,
     Signal,
     Wire,
     as_expr,
 )
+from spire.hdl_traits import BitSerializable, BitSerializableLike
 
 
 # Each element is either a plain Expr (Signal/Const/etc.)
 # or any higher-level composite (Bundle, FixedPoint, nested Array, ...)
-ArrayElem = Union[Expr, HDLComposite]
-InputElem = Union[ExprLike, HDLComposite]
+ArrayElem = BitSerializable          # an Array element: a leaf Expr or a nested composite
+InputElem = BitSerializableLike      # what Array accepts: an element, or an int/bool literal coercible to one
 
 
 class Array(HDLComposite):
@@ -181,8 +181,8 @@ class Array(HDLComposite):
 
         return cls(new_elems)
 
-    def to_list_first_level(self) -> List[Expr | HDLComposite]:
-        list_first_level: List[Expr | HDLComposite] = []
+    def to_list_first_level(self) -> List[BitSerializable]:
+        list_first_level: List[BitSerializable] = []
         for elem in self._elems:
             list_first_level.append(elem)
         return list_first_level

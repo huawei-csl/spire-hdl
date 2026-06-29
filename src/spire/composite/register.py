@@ -2,6 +2,7 @@ from typing import Generic, List, Optional
 from typing import Type, TypeVar, Union
 from spire.composite.base import HDLComposite, T_Comp
 from spire.expr import Expr, ExprLike, Signal, as_expr, fit_width
+from spire.hdl_traits import BitSerializable
 
 
 class CompositeRegister(HDLComposite, Generic[T_Comp]):
@@ -54,7 +55,7 @@ class CompositeRegister(HDLComposite, Generic[T_Comp]):
 
     # ---- HDLComposite API ----
 
-    def to_list_first_level(self) -> List[Expr | HDLComposite]:
+    def to_list_first_level(self) -> List[BitSerializable]:
         """Expose the underlying register as the sole leaf."""
         return [self._reg]
 

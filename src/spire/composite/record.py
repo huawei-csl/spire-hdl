@@ -46,10 +46,10 @@ class CompositeRecord(HDLComposite):
             return [getattr(self, f.name) for f in fields(self)]
         return list(vars(self).values())
 
-    def to_list_first_level(self) -> List[Expr | HDLComposite]:
+    def to_list_first_level(self) -> List[BitSerializable]:
         return [v for v in self._raw_fields() if isinstance(v, BitSerializable)]
 
-    def _named_children(self) -> List[Tuple[str, Union[Expr, HDLComposite]]]:
+    def _named_children(self) -> List[Tuple[str, BitSerializable]]:
         """Field (name, value) pairs — used to build hierarchical port names."""
         if is_dataclass(self):
             items = [(f.name, getattr(self, f.name)) for f in fields(self)]

@@ -206,6 +206,68 @@ def _eval_expr(e: Expr) -> int:
     return sim.peek(e)
 
 
+# -------------------------------------------------------------------
+# Signal <-> Composite assignment (BitSerializableLike: a composite is packed to a single
+# bitvector when it drives a signal, and sliced back across leaves in reverse).
+# MyRecord packs as: a = bits[0:8] (LSBs), b = bits[8:12].
+# -------------------------------------------------------------------
+
+
+def test_signal_assigned_from_composite_packs_bits():
+    # signal <<= composite : the composite is packed via to_bits() into the signal's driver.
+    reset_shared_cache()
+    rec = MyRecord()
+    rec.a <<= Const(0x5A, UInt(8))
+    rec.b <<= Const(0xC, UInt(4))
+
+    w = Wire(UInt(12))
+    w <<= rec
+
+    assert w._driver.typ.width == 12          # packed to the composite's total width
+    assert _eval_expr(w) == 0xC5A             # (b << 8) | a == (0xC << 8) | 0x5A
+
+
+def test_signal_assigned_from_composite_width_fits():
+    # A wider target zero-extends: fit_width is applied after to_bits().
+    reset_shared_cache()
+    rec = MyRecord()
+    rec.a <<= Const(0x5A, UInt(8))
+    rec.b <<= Const(0xC, UInt(4))
+
+    w = Wire(UInt(16))
+    w <<= rec
+
+    assert w._driver.typ.width == 16
+    assert _eval_expr(w) == 0xC5A             # high 4 bits zero-extended
+
+
+def test_composite_assigned_from_signal_unpacks_bits():
+    # composite <<= signal : the scalar bitvector is sliced across the composite's leaves.
+    reset_shared_cache()
+    src = Wire(UInt(12))
+    src <<= Const(0xC5A, UInt(12))
+
+    dst = MyRecord()
+    dst <<= src
+
+    assert _eval_expr(dst.a) == 0x5A          # bits[0:8]
+    assert _eval_expr(dst.b) == 0xC           # bits[8:12]
+
+
+def test_signal_composite_signal_roundtrip():
+    # signal -> composite -> signal preserves the bit pattern.
+    reset_shared_cache()
+    src = Wire(UInt(12))
+    src <<= Const(0xABC, UInt(12))
+
+    mid = MyRecord()
+    mid <<= src                               # unpack into the record's leaves
+    out = Wire(UInt(12))
+    out <<= mid                               # repack the record into a scalar
+
+    assert _eval_expr(out) == 0xABC
+
+
 if __name__ == "__main__":
     test_composite_record_basic()
     test_compositerecord_instance_clones_wires()
@@ -214,3 +276,7 @@ if __name__ == "__main__":
     test_compositerecord_elementwise_assign_from_other_record()
     test_compositerecord_with_nested_array_clone_and_width()
     test_compositerecord_with_nested_array_assign_from_bits()
+    test_signal_assigned_from_composite_packs_bits()
+    test_signal_assigned_from_composite_width_fits()
+    test_composite_assigned_from_signal_unpacks_bits()
+    test_signal_composite_signal_roundtrip()

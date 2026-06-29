@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Union
 
 from spire.composite.base import HDLComposite
+from spire.hdl_traits import BitSerializable
 from spire.arithmetic.floating_point.float_mult import FpMul
 from spire.arithmetic.floating_point.float_mult_sn import FpMulSN
 from spire.arithmetic.floating_point.float_add import FpAdd
@@ -87,7 +88,7 @@ class FloatingPoint(HDLComposite):
         return self._bits[self.width - 1]
 
     # ---- HDLComposite API ----
-    def to_list_first_level(self) -> List[Expr | HDLComposite]:
+    def to_list_first_level(self) -> List[BitSerializable]:
         return [self._bits]
 
     @classmethod

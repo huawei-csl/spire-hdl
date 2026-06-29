@@ -4,10 +4,10 @@
 # to_bits() to avoid a cycle (expr.py and composite/base.py both sit ABOVE this).
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import List, TYPE_CHECKING
+from typing import List, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
-    from spire.expr import Expr, ExprLike
+    from spire.expr import Expr
 
 
 class BitSerializable(ABC):
@@ -34,6 +34,11 @@ class BitSerializable(ABC):
         return parts[0] if len(parts) == 1 else Concat(parts)
 
 
+# Anything that can drive an l-value (the RHS of ``<<=`` / ``assign``). A composite RHS is packed to a
+# single bitvector via ``to_bits()`` at the assignment boundary; ``Expr`` is itself ``BitSerializable``.
+BitSerializableLike = Union[BitSerializable, int, bool]
+
+
 class Assignable(ABC):
     """Write side: anything that can be the target of ``<<=`` / driven.
 
@@ -43,9 +48,9 @@ class Assignable(ABC):
     """
 
     @abstractmethod
-    def assign(self, rhs: "ExprLike") -> None:
+    def assign(self, rhs: "BitSerializableLike") -> None:
         ...
 
-    def __ilshift__(self, rhs: "ExprLike"):
+    def __ilshift__(self, rhs: "BitSerializableLike"):
         self.assign(rhs)
         return self

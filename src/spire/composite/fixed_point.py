@@ -4,6 +4,7 @@ from typing import List, Optional, Union, Sequence, Type, TypeVar, Generic
 
 from spire.composite.base import HDLComposite
 from spire.expr import Const, Expr, ExprLike, HDLType, Resize, Wire, as_expr, fit_width
+from spire.hdl_traits import BitSerializable
 
 # -----------------------------
 # Fixed-point type description
@@ -125,7 +126,7 @@ class FixedPoint(HDLComposite):
 
     # ---- HDLComposite API ----
 
-    def to_list_first_level(self) -> List[Expr | HDLComposite]:
+    def to_list_first_level(self) -> List[BitSerializable]:
         return [self._bits]
 
     @classmethod
