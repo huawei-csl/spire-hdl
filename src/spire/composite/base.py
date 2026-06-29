@@ -2,25 +2,28 @@
 # High-level composites (Bundle, Array, FixedPoint, ...)
 # -----------------------------
 from __future__ import annotations
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import List, Type, TypeVar, Union
 
-from spire.expr import Concat, Expr, ExprLike, Signal, as_expr, fit_width
+from spire.expr import Expr, ExprLike, as_expr, fit_width
+from spire.hdl_traits import BitSerializable, Assignable
 
 
 T_Comp = TypeVar("T_Comp", bound="HDLComposite")
 SelfComp = TypeVar("SelfComp", bound="HDLComposite")
 
 
-class HDLComposite(ABC):
+class HDLComposite(BitSerializable, Assignable):
     """
     Base class for structured HDL values (Bundle, Array, FixedPoint, ...).
 
+    Inherits the read side (``to_bits`` / ``width``) from :class:`BitSerializable` and the
+    write side (``<<=``) from :class:`Assignable`; subclasses supply only the *structure*
+    via ``to_list_first_level`` and the *drive* via ``assign``.
+
     Requirements for subclasses:
-      - to_list(self) -> List[Expr]
-          Flatten the structure into an ordered list of Expr leaves.
+      - to_list_first_level(self) -> List[Expr | HDLComposite]
       - wire_like(cls, *shape_args, **shape_kwargs) -> instance
-          Create a 'wire-filled' instance of this structure (all leaves are wires).
     """
 
     @abstractmethod
@@ -31,39 +34,21 @@ class HDLComposite(ABC):
     def to_list(self) -> List[Expr]:
         flat_list: List[Expr] = []
         for elem in self.to_list_first_level():
-            if isinstance(elem, Expr):
-                flat_list.append(elem)
-            elif isinstance(elem, HDLComposite):
-                flat_list.extend(elem.to_list())
-            else:
+            if not isinstance(elem, BitSerializable):
                 raise TypeError(
                     f"Unsupported field type in {self.__class__.__name__}.to_list(): {elem} -> {type(elem)}"
                 )
+            flat_list.extend(elem.to_list())  # Expr -> [self]; composite -> recurse
         if not flat_list:
             raise ValueError(f"CompositeRecord {self.__class__.__name__} has no fields")
         return flat_list
 
-    # -------- Convenience API shared by all composites --------
-
-    @property
-    def width(self) -> int:
-        """Total bit-width of this composite."""
-        return self.to_bits().typ.width
-
-    def to_bits(self) -> Expr:
-        """
-        Flatten this composite into a single Expr bitvector using the leaf list.
-        """
-        parts = self.to_list()
-        if not parts:
-            raise ValueError(f"{self.__class__.__name__}.to_list() returned no leaves")
-        if len(parts) == 1:
-            return parts[0]
-        return Concat(parts)
+    # width / to_bits are inherited from BitSerializable.
+    # -------- Assignment API shared by all composites --------
 
     def _assign_from_bits(self, bits: Expr) -> None:
         """
-        Default packed assignment: slice the incoming bits across Signal leaves.
+        Default packed assignment: slice the incoming bits across assignable leaves.
         """
         leaves = self.to_list()
         bit_pos = 0
@@ -72,9 +57,9 @@ class HDLComposite(ABC):
             slice_bits = bits[bit_pos : bit_pos + width]
             bit_pos += width
 
-            if not isinstance(leaf, Signal):
+            if not isinstance(leaf, Assignable):
                 raise TypeError(
-                    f"Composite assignment expects Signal leaves, got {type(leaf)} in {self.__class__.__name__}"
+                    f"Composite assignment expects assignable leaves, got {type(leaf)} in {self.__class__.__name__}"
                 )
             leaf <<= slice_bits
 
@@ -115,7 +100,7 @@ class HDLComposite(ABC):
 
     def __imatmul__(self: SelfComp, rhs: "HDLComposite") -> SelfComp:
         """
-        Element-wise assignment across Signal leaves:
+        Element-wise assignment across assignable leaves:
           lhs @= rhs
         """
         if not isinstance(rhs, HDLComposite):
@@ -130,24 +115,16 @@ class HDLComposite(ABC):
             )
 
         for lhs_leaf, rhs_leaf in zip(lhs_leaves, rhs_leaves):
-            if not isinstance(lhs_leaf, Signal):
+            if not isinstance(lhs_leaf, Assignable):
                 raise TypeError(
-                    f"Composite element-wise assignment expects Signal leaves, got {type(lhs_leaf)} "
+                    f"Composite element-wise assignment expects assignable leaves, got {type(lhs_leaf)} "
                     f"in {self.__class__.__name__}"
                 )
             lhs_leaf <<= rhs_leaf
 
         return self
 
-    def __ilshift__(self: SelfComp, rhs: Union["HDLComposite", ExprLike]) -> SelfComp:
-        """
-        Sugar:  agg <<= rhs
-
-        Mirrors Magma/Spinal semantics:
-            my_bundle <<= other
-        """
-        self.assign(rhs)
-        return self
+    # __ilshift__ (<<=) is inherited from Assignable.
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(width={self.width})"

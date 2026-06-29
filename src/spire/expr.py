@@ -11,6 +11,7 @@ from spire.signal_name_inference import (
     mark_expr_name,
     resolve_shared_wire_name,
 )
+from spire.hdl_traits import BitSerializable, Assignable
 
 
 # -----------------------------
@@ -161,8 +162,12 @@ def SInt(w: int) -> HDLType:
 # -----------------------------
 
 
-class Expr:
+class Expr(BitSerializable):
     typ: HDLType
+
+    # BitSerializable: a bare Expr is a single leaf.
+    def to_list(self) -> list["Expr"]:
+        return [self]
 
     # Prevent accidental use in Python control flow.
     def __bool__(self):
@@ -326,7 +331,7 @@ class Const(Expr):
         return f"{self.typ.width}'{base}{val}"
 
 
-class Signal(Expr):
+class Signal(Expr, Assignable):
     def __init__(self, typ: Optional[HDLType] = None, kind: Optional[str] = None, name: Optional[str] = None): #, module: "Netlist"):
         if isinstance(typ, str):
             # Guard against the old argument order Signal(name, typ, kind) — `name` is now last.
@@ -348,11 +353,9 @@ class Signal(Expr):
         self._no_emit_decl: bool = False   # skip `wire …;` / `reg …;` declaration
         self._no_emit_drive: bool = False  # skip the `assign` or always-block driver line
 
-    def __ilshift__(self, rhs: ExprLike) -> "Signal":
-        """Connect combinational driver: y <<= expr"""
-        rhs_e = fit_width(as_expr(rhs), self.typ)
-        self._driver = rhs_e
-        return self
+    def assign(self, rhs: ExprLike) -> None:
+        """Connect combinational driver: y <<= expr (via Assignable.__ilshift__)."""
+        self._driver = fit_width(as_expr(rhs), self.typ)
 
     def set_init(self, init: ExprLike):
         if self.kind != "reg":

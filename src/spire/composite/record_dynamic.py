@@ -3,6 +3,7 @@ from typing import Any, Dict, Iterable, List, Type, TypeVar, Union
 
 from spire.composite.base import HDLComposite
 from spire.expr import Expr, Signal, Wire
+from spire.hdl_traits import BitSerializable
 
 T_Record = TypeVar("T_Record", bound="CompositeRecordDynamic")
 
@@ -17,7 +18,7 @@ class CompositeRecordDynamic(HDLComposite):
 
     def to_list_first_level(self) -> List[Expr | HDLComposite]:
         return [v for v in self._raw_fields()
-                if isinstance(v, (Expr, HDLComposite))]
+                if isinstance(v, BitSerializable)]
 
 
 # IO normalization — lives here (the composite layer) so the dependency points one way:
