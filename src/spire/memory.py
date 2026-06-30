@@ -1,10 +1,9 @@
 """Sim-only memory storage for the memory primitives (Middle path B).
 
-Holds `_MemoryArray` — the shape-agnostic, O(1)-simulation array with a port factory — and
-the `_ArrayIndex` read leaf, plus the small port records. Kept out of `spire.py` so the
-core stays lean: everything synthesis-side (Verilog emission, read-under-write, masks,
-registered-read pipelining) lives in `spire/primitives/`. Designs use `MemoryPrimitive` /
-`RamPrimitive` / `FIFOPrimitive`, never these classes directly.
+Holds `_MemoryArray` (the shape-agnostic, O(1)-simulation array with a port factory), the `_ArrayIndex`
+read leaf, and the small port records. It is kept out of `spire.py` so the core stays lean: everything
+synthesis-side (Verilog emission, read-under-write, masks, registered-read pipelining) lives in
+`spire/primitives/`. Designs use `MemoryPrimitive` / `RamPrimitive` / `FIFOPrimitive`, never these classes directly.
 """
 
 from __future__ import annotations
@@ -62,13 +61,12 @@ class _MemoryArray(Signal):
     Verilog** — synthesis comes from the wrapping primitive's `custom_verilog()`. Ports are
     created on demand via `write_port()` / `read_port()` / `rw_port()` (+ optional
     `reset_arm()`) and wired with `<<=` inside a primitive's `elaborate()` — no scalar
-    sugar. Not user-facing; designs use `MemoryPrimitive` / `RamPrimitive` / `FIFOPrimitive`.
+    sugar. It is not user-facing; designs use `MemoryPrimitive` / `RamPrimitive` / `FIFOPrimitive`.
 
-    Lean by design: this module holds only array state, the port records above, the `*_port()`
-    appenders, `_ArrayIndex`, `init_sim_state`, and `step`. Read-under-write policy, mask
-    *emission*, registered-read pipelining, and all `custom_verilog` live in `primitives/`.
-    The reset arm stays here only because a broadcast clear is a storage-`step()` op that a
-    primitive cannot compose in sim.
+    This class holds only the array state, the port records, the `*_port()` appenders, `_ArrayIndex`,
+    `init_sim_state`, and `step`; read-under-write policy, mask emission, registered-read pipelining,
+    and all `custom_verilog` live in `primitives/`. The reset arm stays here only because a broadcast
+    clear is a storage-`step()` operation that a primitive cannot compose in simulation.
     """
 
     def __init__(self, elem_type: HDLType, depth: int, *,

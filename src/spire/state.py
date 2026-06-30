@@ -116,14 +116,8 @@ class State:
         return f"{type(self).__name__}({', '.join(self.names)}, encoding={self.encoding!r}, width={self._width})"
 
 
-# ---------------------------------------------------------------------------
-# Re-export FSM-optimisation surface for a single canonical import site:
-#
-#   from spire.state import optimized_fsm, optimized_encoding, ...
-#
-# The implementation lives in `spire.optimize.fsm`. Importing lazily here avoids a
-# circular import on module load (spire.optimize.fsm imports from this module).
-# ---------------------------------------------------------------------------
+# Re-export the FSM-optimisation surface (optimized_fsm, optimized_encoding, ...) from
+# `spire.optimize.fsm`. The import is lazy to avoid a circular import, since that module imports this one.
 
 def __getattr__(name):  # PEP 562 module-level __getattr__
     _exports = {

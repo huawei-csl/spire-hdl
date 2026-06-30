@@ -1,21 +1,11 @@
 """Control structures for Spire using Python context managers.
 
-This module introduces `if_`/`elif_`/`else_` and `switch_`/`case_` style
-constructs that wrap signal assignments with conditional muxes.  When a
-signal assignment occurs inside one of the provided context managers, the
-assignment is guarded by the active condition.  If the condition evaluates to
-false, the signal retains its previous driver (for combinational signals) or
-its current value (for registers).
+This module introduces `if_`/`elif_`/`else_` and `switch_`/`case_` style constructs that wrap signal
+assignments with conditional muxes. When a signal assignment occurs inside one of these context
+managers, the assignment is guarded by the active condition. If the condition evaluates to false, the
+signal retains its previous driver (for combinational signals) or its current value (for registers).
 
-Usage example::
-
-    from spire.expr import Bool, UInt
-    from spire.component import Netlist
-    from spire.control_structures import case_, default, if_, elif_, else_, switch_
-
-    m = Netlist("Example", with_clock=False, with_reset=False)
-    sel = m.input(Bool(), "sel")
-    y = m.output(UInt(8), "y")
+Usage::
 
     y <<= 0
     with if_(sel):
