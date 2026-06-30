@@ -11,23 +11,32 @@ The legacy O(depth) register-bank model is preserved as ``MemoryPrimitive_via_re
 (``primitive_memory_via_reg.py``) for comparison / fallback.
 
 Composite element types are supported via user-side pack / unpack at the port
-boundary. The port wires are always ``UInt(elem_w)``; callers do::
+boundary. The port wires are always ``UInt(elem_w)``; store the structured payload
+and keep control bits (e.g. ``valid``) out of the array::
 
-    class Bus(CompositeRecord):
+    class Sample(CompositeRecord):              # the stored payload — itself a composite
         def __init__(self):
-            super().__init__(data=Wire(UInt(8)), valid=Wire(UInt(1)))
+            super().__init__(re=Wire(SInt(12)), im=Wire(SInt(12)))
 
-    mem = MemoryPrimitive(Bus, depth=16)
-    # write
+    class Bus(CompositeRecord):                 # payload + a handshake bit that is NOT stored
+        def __init__(self):
+            super().__init__(data=Sample(), valid=Wire(UInt(1)))
+
+    mem = MemoryPrimitive(Sample, depth=16)     # element width = Sample().width = 24
+    # write: pack only the data payload; `valid` gates the write, it isn't stored
     bus_in = Bus()
-    bus_in.data  <<= some_data
-    bus_in.valid <<= some_valid
-    mem.io.write_data <<= bus_in.to_bits()
-    # read
-    out_bus = Bus()
-    out_bus <<= mem.io.read_data
-    data_out  <<= out_bus.data
-    valid_out <<= out_bus.valid
+    bus_in.data.re <<= some_re
+    bus_in.data.im <<= some_im
+    bus_in.valid   <<= some_valid
+    mem.io.write_addr   <<= wr_addr
+    mem.io.write_enable <<= bus_in.valid
+    mem.io.write_data   <<= bus_in.data.to_bits()
+    # read: address the array, then unpack the word back into a Sample
+    out = Sample()
+    mem.io.read_addr <<= rd_addr
+    out <<= mem.io.read_data
+    re_out <<= out.re
+    im_out <<= out.im
 """
 
 from __future__ import annotations
@@ -75,6 +84,21 @@ def _elem_bit_width(elem_type) -> int:
     )
 
 
+class MemoryIO(IORecord):
+    """Typed IO bundle for the memory primitives — the field annotations give IDE autocomplete on
+    ``io.write_data`` / ``io.read_data`` / ...; the concrete ports are built per config, so the
+    annotated ``write_mask`` / ``reset_enable`` / ``read_enable`` exist only when those are enabled."""
+
+    write_addr:   Input
+    write_data:   Input
+    write_enable: Input
+    read_addr:    Input
+    read_data:    Output
+    write_mask:   Input    # only with masked writes
+    reset_enable: Input    # only with a reset arm
+    read_enable:  Input    # only with registered_read
+
+
 class MemoryPrimitive(CustomVerilogComponent):
     """Component-based memory primitive (replacement candidate for built-in ``Memory``).
 
@@ -100,6 +124,8 @@ class MemoryPrimitive(CustomVerilogComponent):
       | ``reset_enable`` | in  | with_reset_arm      |
       | ``read_enable``  | in  | registered_read     |
     """
+
+    io: MemoryIO
 
     def __init__(
         self,
@@ -155,7 +181,7 @@ class MemoryPrimitive(CustomVerilogComponent):
         if registered_read:
             kwargs["read_enable"] = Input(Bool())
 
-        self.io = IORecord(**kwargs)
+        self.io = MemoryIO(**kwargs)
         self.elaborate()
 
     @property

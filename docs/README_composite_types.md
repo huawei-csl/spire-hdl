@@ -11,8 +11,7 @@ Source: [`src/spire/composite/`](../src/spire/composite).
 |---|---|---|
 | `HDLComposite` | Abstract base — `to_bits`, `assign`, `<<=`, `@=` (see [Common API](#common-api)) | [`base.py`](../src/spire/composite/base.py) |
 | [`Array`](#array) | N-dimensional vector of `Expr` or nested composites | [`array.py`](../src/spire/composite/array.py) |
-| [`CompositeRecord`](#compositerecord) | Declarative bundle with named fields (class attributes) | [`record.py`](../src/spire/composite/record.py) |
-| [`CompositeRecordDynamic`](#compositerecorddynamic) | Bundle defined from instance attributes / `@dataclass` | [`record_dynamic.py`](../src/spire/composite/record_dynamic.py) |
+| [`CompositeRecord`](#compositerecord) | Bundle of named fields — inline, subclass `__init__`, or `@dataclass` | [`record.py`](../src/spire/composite/record.py) |
 | [`FixedPoint`](#fixedpoint) | Fixed-point view of a bitvector with arithmetic + quantization | [`fixed_point.py`](../src/spire/composite/fixed_point.py) |
 | [`FloatingPoint`](#floatingpoint) | Floating-point view with `add` / `mul` helpers | [`floating_point.py`](../src/spire/composite/floating_point.py) |
 | [`CompositeRegister`](#compositeregister) | Single register holding any packed composite | [`register.py`](../src/spire/composite/register.py) |
@@ -64,60 +63,64 @@ dst @= src
 
 ## `CompositeRecord`
 
-Declarative, class-based bundle.  Fields are declared as class attributes; each instance gets
-its own freshly cloned wires (no sharing between instances).
+A bundle of named fields. Field names become signal names and direction is explicit
+(`Input` / `Output`); fields may be `Signal` ports or nested composites (`Array`, fixed/float,
+other records). `width`, `to_bits`, `<<=` (packed) and `@=` (element-wise) come from `HDLComposite`.
 
-```python
-from spire.composite.record import CompositeRecord
-from spire.composite.array import Array
-from spire.expr import UInt, SInt, Wire, Signal
-
-class Packet(CompositeRecord):
-    addr:    Signal = Wire(UInt(8))
-    payload: Signal = Wire(SInt(16))
-    lanes:   Array  = Array([Wire(UInt(4)) for _ in range(4)])   # nested composite
-
-p0 = Packet()
-p1 = Packet()
-
-assert p0.addr is not p1.addr          # each instance has its own wires
-assert p0.width == 8 + 16 + 4 * 4      # = 40 bits
-
-p0 @= p1                # element-wise (field-by-field) copy
-p0 <<= p1.to_bits()     # packed: slice the 40-bit vector across all leaves
-```
-
----
-
-## `CompositeRecordDynamic`
-
-Bundle defined from *instance* attributes (typically via `@dataclass`).  Use this when the
-field set is built at construction time rather than declared statically on the class — for
-example, when generating IO records for parameterized cores.
+There is a single record type — build it whichever way fits:
 
 ```python
 from dataclasses import dataclass
+from spire.composite.record import CompositeRecord
 from spire.composite.array import Array
-from spire.composite.record_dynamic import CompositeRecordDynamic
-from spire.expr import UInt, Wire
+from spire.expr import UInt, SInt, Wire, Input, Output
 
+# 1. inline / dynamic — the field set is decided at the call site
+io = CompositeRecord(addr=Input(UInt(8)), data=Output(SInt(16)))
+
+# 2. a subclass whose __init__ calls super().__init__(...) — reusable / parameterized
+class Packet(CompositeRecord):
+    def __init__(self, n=4):
+        super().__init__(
+            addr=Wire(UInt(8)),
+            payload=Wire(SInt(16)),
+            lanes=Array([Wire(UInt(4)) for _ in range(n)]),   # nested composite
+        )
+
+# 3. a @dataclass subclass — declarative; fields are passed at construction
 @dataclass
-class MMAcIO(CompositeRecordDynamic):
+class MMAcIO(CompositeRecord):
     A: Array
-    B: Array
     Y: Array
 
-io = MMAcIO(
-    A=Array([Wire(UInt(8)) for _ in range(4)]),
-    B=Array([Wire(UInt(8)) for _ in range(4)]),
-    Y=Array([Wire(UInt(20)) for _ in range(1)]),
-)
-
-assert io.width == 4*8 + 4*8 + 1*20
+p0, p1 = Packet(), Packet()
+assert p0.addr is not p1.addr          # each instance builds its own wires
+assert p0.width == 8 + 16 + 4 * 4      # = 40 bits
+p0 @= p1                                # element-wise (field-by-field) copy
+p0 <<= p1.to_bits()                     # packed: slice the 40-bit vector across all leaves
 ```
 
-Unlike `CompositeRecord`, fields are read directly from the instance via `vars(self)` (or
-dataclass `fields()`), so the same class can hold arbitrarily different shapes per instance.
+### Autocomplete / type hints
+
+Fields set through `super().__init__(**kwargs)` are invisible to the IDE. To autocomplete
+`rec.<field>`, *declare* the fields as class-level **annotations** (type hints only — not values,
+so nothing is shared between instances) and build them in `__init__`:
+
+```python
+class Packet(CompositeRecord):
+    addr:    Wire          # annotations -> autocomplete on packet.addr / packet.payload
+    payload: Wire
+    def __init__(self):
+        super().__init__(addr=Wire(UInt(8)), payload=Wire(SInt(16)))
+```
+
+The `@dataclass` form gives the same autocomplete for free (its fields are declared). To also
+autocomplete `component.io.<field>`, annotate the attribute on the component class (`io: Packet`) —
+see `FifoIO` / `MemoryIO` in `spire/primitives` for the pattern.
+
+> **Deprecated:** declaring fields as class-attribute *values* (`addr = Wire(UInt(8))`) is the old
+> `TemplateRecord`, kept only for its tests — it reads as shared class state but silently clones per
+> instance. Prefer the forms above.
 
 ---
 

@@ -74,6 +74,7 @@ In its simplest form, Spire only needs these core files. This is intentional —
 Deeper guides for specific features:
 
 - **[Type system](docs/README_type_system.md)** — values, the `BitSerializable` / `Assignable` traits, the `Expr` vs `HDLComposite` hierarchy, and the `…Like` coercion aliases (class diagram + philosophy)
+- **[Composite data types](docs/README_composite_types.md)** — structured bit-packable values (`Array`, `CompositeRecord`, `FixedPoint`, `FloatingPoint`, `CompositeRegister`) with `to_bits` / `<<=` / `@=`
 - **[Interfaces](docs/README_interfaces.md)** — reusable IO bundles (`Stream`, `Flow`, `MemPort`) with `Flipped` / `connect` / `view_as_flipped` and on-interface behaviour
 - **[State machines](docs/README_state_machines.md)** — declaration with the `State` / `Encoding` API and `switch_` / `case_` bodies
 - **[Control structures](docs/README_control_structures.md)** — `if_` / `elif_` / `else_` and `switch_` / `case_` / `default` context managers
@@ -176,9 +177,26 @@ print(sim.peek_outputs())   # {'sum': 0x15c, 'mask': 0x3, 'out': 0x81}
 
 The simulator keeps track of inputs, wires, outputs, and registers, supports `eval()` for combinational updates, `step()` for clocked designs, and exposes helpers such as `peek`, `peek_next`, and signal watching for deeper inspection ([`simulator.py`](src/spire/simulator.py)).
 
-### 3. Integrate with external tooling
+### 3. Export, import & equivalence-check
 
-Designs can be exported to Verilog or AIG for downstream synthesis, equivalence checking, or integration into larger verification environments. Import helpers then let you bring optimized or third-party netlists back into Spire for continued composition and simulation (see [`component.py`](src/spire/component.py) and [`multipliers_ext_optimized.py`](src/spire/arithmetic/int_multipliers/multipliers/multipliers_ext_optimized.py)).
+A `Component` converts to Verilog, AIGER, or the flat netlist IR — and re-imports the same formats — so you can hand a design to synthesis, optimize it externally, and check the result is still equivalent:
+
+```python
+from spire import Component
+from spire.aig.aig_aigerverse import conv_aag_into_aig
+from aigverse import Aig, equivalence_checking
+
+verilog = demo.to_verilog(name="LogicDemo")   # synthesizable Verilog (str)
+aag     = demo.to_aag(name="LogicDemo")        # AIGER ASCII lines (list[str])
+net     = demo.to_netlist(name="LogicDemo")    # flat netlist IR (Netlist)
+
+demo2 = Component.from_netlist(net)            # re-import the IR (also: .from_verilog / .from_aag_lines)
+
+# equivalence-check the original against the re-imported design (aigverse, on their AIGs)
+a1 = conv_aag_into_aig(demo.to_aag(name="LogicDemo"), Aig())
+a2 = conv_aag_into_aig(demo2.to_aag(name="LogicDemo"), Aig())
+assert equivalence_checking(a1, a2)
+```
 
 ## Components and the netlist IR
 
@@ -236,8 +254,7 @@ Spire includes structured, bit-packable composites for cleaner interfaces and bu
 
 - `HDLComposite` defines the base "pack to bits" API that powers all composites ([`base.py`](src/spire/composite/base.py)).
 - `Array` offers N-dimensional indexing, packed assignment (`<<=`), and element-wise assignment (`@=`) for nested vectors or composites ([`array.py`](src/spire/composite/array.py)).
-- `CompositeRecord` lets you declare bundle-like classes with named fields that remain packable to a flat bitvector ([`record.py`](src/spire/composite/record.py)).
-- `CompositeRecordDynamic` is the dataclass-friendly variant whose fields are defined per-instance, ideal for parameterized IO records ([`record_dynamic.py`](src/spire/composite/record_dynamic.py)).
+- `CompositeRecord` is the bundle of named fields that stays packable to a flat bitvector — build it inline (`CompositeRecord(a=Input(...), ...)`), via a subclass `__init__` calling `super().__init__(...)`, or as a `@dataclass`; declare fields as annotations for IDE autocomplete ([`record.py`](src/spire/composite/record.py)).
 - `FixedPoint` wraps a `Wire` or view with explicit total/frac widths and quantization helpers, keeping arithmetic readable while staying hardware-friendly ([`fixed_point.py`](src/spire/composite/fixed_point.py)).
 - `FloatingPoint` provides an IEEE-style view with `add`/`mul` helpers parameterized by exponent / fraction widths ([`floating_point.py`](src/spire/composite/floating_point.py)).
 - `CompositeRegister` stores any composite in a single register while preserving a structured view via `.value`/`.Q` ([`register.py`](src/spire/composite/register.py)).

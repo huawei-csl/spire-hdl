@@ -1,5 +1,8 @@
 
-from spire.composite.record import CompositeRecord
+# NOTE: these tests exercise the DEPRECATED class-template record (`TemplateRecord`) — fields
+# declared as class attributes and cloned per instance. Kept to cover that behaviour; new code
+# should use `CompositeRecord` with an explicit `__init__`. See spire/composite/record.py.
+from spire.composite.record import TemplateRecord
 from spire.composite.array import Array
 from spire.expr import SInt, UInt, Wire, Signal
 
@@ -8,6 +11,9 @@ from spire.expr import (
     UInt,
     Wire,
     Signal,
+    Input,
+    Output,
+    Register,
     Expr,
     Const,
     reset_shared_cache,
@@ -19,12 +25,10 @@ from spire.simulator import Simulator
 
 
 def test_composite_record_basic():
-    class MyRecord(CompositeRecord):
-        def __init__(self):
-            super().__init__(
-                a=Wire(UInt(8)), b=Wire(SInt(4)),
-                c=Array([Wire(UInt(8)) for _ in range(4)]),
-            )
+    class MyRecord(TemplateRecord):
+        a = Wire(UInt(8))
+        b = Wire(SInt(4))
+        c = Array([Wire(UInt(8)) for _ in range(4)])
 
     b0 = MyRecord()
     b1 = MyRecord()
@@ -42,17 +46,14 @@ def test_composite_record_basic():
 # -------------------------------------------------------------------
 
 
-class MyRecord(CompositeRecord):
-    def __init__(self):
-        super().__init__(a=Wire(UInt(8)), b=Wire(UInt(4)))
+class MyRecord(TemplateRecord):
+    a = Wire(UInt(8))
+    b = Wire(UInt(4))
 
 
-class RecordWithArray(CompositeRecord):
-    def __init__(self):
-        super().__init__(
-            a=Wire(UInt(8)),
-            vec=Array([Wire(UInt(2)) for _ in range(3)]),  # 3×2 bits
-        )
+class RecordWithArray(TemplateRecord):
+    a   = Wire(UInt(8))
+    vec = Array([Wire(UInt(2)) for _ in range(3)])  # 3×2 bits
 
 
 # -------------------------------------------------------------------
@@ -80,6 +81,59 @@ def test_compositerecord_instance_clones_wires():
     assert b0.b.typ.width == 4
     assert b0.a.kind == "wire"
     assert b0.b.kind == "wire"
+
+
+def test_compositerecord_templates_collected():
+    # Class-level fields are captured as per-class templates. They also remain class attributes,
+    # which is what gives IDE autocomplete on the field names.
+    tmpl = MyRecord._record_field_templates
+    assert set(tmpl.keys()) == {"a", "b"}
+    assert tmpl["a"].kind == "wire" and tmpl["a"].typ.width == 8
+    assert tmpl["b"].kind == "wire" and tmpl["b"].typ.width == 4
+
+
+def test_compositerecord_override_field_in_ctor():
+    reset_shared_cache()
+
+    custom_a = Wire(UInt(8))
+    b = MyRecord(a=custom_a)
+
+    # 'a' is the override; 'b' is still auto-cloned (distinct from the class template).
+    assert b.a is custom_a
+    assert isinstance(b.b, Signal)
+    assert b.b is not MyRecord._record_field_templates["b"]
+
+
+def test_compositerecord_unknown_kwarg_adds_field():
+    # Lenient: an undeclared kwarg adds a field rather than raising.
+    reset_shared_cache()
+
+    extra = Wire(UInt(3))
+    b = MyRecord(x=extra)
+
+    assert b.x is extra
+    # The new field participates in flattening / width (a=8, b=4, x=3 -> 15).
+    assert b.width == 8 + 4 + 3
+
+
+def test_compositerecord_clone_preserves_kind():
+    # Templates may carry any direction/kind (not wire-only); clones preserve it and take the
+    # field-key as the port name.
+    reset_shared_cache()
+
+    class Bundle(TemplateRecord):
+        i = Input(UInt(8))
+        o = Output(UInt(4))
+        r = Register(UInt(2))
+
+    b0 = Bundle()
+    b1 = Bundle()
+
+    assert b0.i.kind == "input"
+    assert b0.o.kind == "output"
+    assert b0.r.kind == "reg"
+    assert b0.i is not b1.i              # cloned per instance
+    assert b0.i.name == "i" and b0.o.name == "o" and b0.r.name == "r"
 
 
 def test_compositerecord_to_bits_and_width():
@@ -271,6 +325,10 @@ def test_signal_composite_signal_roundtrip():
 if __name__ == "__main__":
     test_composite_record_basic()
     test_compositerecord_instance_clones_wires()
+    test_compositerecord_templates_collected()
+    test_compositerecord_override_field_in_ctor()
+    test_compositerecord_unknown_kwarg_adds_field()
+    test_compositerecord_clone_preserves_kind()
     test_compositerecord_to_bits_and_width()
     test_compositerecord_assign_from_bits_slices_correctly()
     test_compositerecord_elementwise_assign_from_other_record()

@@ -12,18 +12,29 @@ class CompositeRecord(HDLComposite):
     """Record composite: field names become signal names, direction is explicit.
 
     Fields may be ``Signal`` ports (typically :class:`~spire.expr.Input` /
-    :class:`~spire.expr.Output`) or nested ``HDLComposite`` values (``Array``,
-    fixed/float types, other records). Anything in the instance that is not a
-    ``BitSerializable`` (plain ints, bookkeeping, ...) is ignored, not rejected.
+    :class:`~spire.expr.Output`) or nested ``HDLComposite`` values (``Array``, fixed/float
+    types, other records); non-``BitSerializable`` instance attributes are ignored, not rejected.
+    ``to_list()`` flattening, ``width``, ``to_bits`` and ``<<=`` / ``@=`` all come from
+    :class:`HDLComposite`.
 
-    Construct one of three ways, all instance-based:
-      * inline / dynamic — ``CompositeRecord(a=Input(...), b=Output(...))``;
-      * a named/parameterized subclass with an ``__init__`` that calls
-        ``super().__init__(...)`` (e.g. a reusable ``Stream`` / ``Bus`` interface);
-      * a ``@dataclass`` subclass, for declarative fixed fields.
+    Build it whichever way fits::
 
-    ``to_list()`` flattening, ``width``, ``to_bits``, and ``<<=`` / ``@=`` are all
-    inherited from :class:`HDLComposite`.
+        # 1. inline / dynamic — the field set is decided at the call site
+        io = CompositeRecord(addr=Input(UInt(8)), data=Output(SInt(16)))
+
+        # 2. a subclass whose __init__ calls super().__init__(...) — reusable / parameterized
+        class Packet(CompositeRecord):
+            def __init__(self, n=4):
+                super().__init__(addr=Wire(UInt(8)),
+                                 lanes=Array([Wire(UInt(4)) for _ in range(n)]))
+
+    Autocomplete / type hints:
+
+        class Packet(CompositeRecord):
+            addr:    Wire          # annotations -> autocomplete on packet.addr / packet.payload
+            payload: Wire
+            def __init__(self):
+                super().__init__(addr=Wire(UInt(8)), payload=Wire(SInt(16)))
     """
 
     def __init__(self, **field_values: object) -> None:
@@ -84,3 +95,77 @@ def _to_composite(obj: Any) -> "CompositeRecord":
 def iter_values(obj: Any) -> Iterable[Any]:
     """Flatten an IO container (dataclass, namedtuple, dict, or HDLComposite) into leaf Signals."""
     return _to_composite(obj).to_list()
+
+
+# ===========================================================================
+# DEPRECATED — class-template record (`TemplateRecord`) and its cloning helper.
+# Kept only for the tests that exercise the cloning behaviour; not used anywhere
+# else. Prefer `CompositeRecord` with an explicit `__init__` (plus field
+# annotations for autocomplete). See the `TemplateRecord` docstring for why.
+# ===========================================================================
+
+def _clone_template(tmpl: BitSerializable, key: str) -> BitSerializable:
+    """Clone a class-level field template so each instance gets its own leaves.
+
+    A ``Signal`` is rebuilt fresh, preserving ``kind`` (wire/input/output/reg) and any reg
+    ``init`` and taking ``key`` as its port name; a nested composite clones via its
+    ``wire_like`` factory (``Array`` / fixed / float / nested record).
+    """
+    if isinstance(tmpl, Signal):
+        clone = Signal(typ=tmpl.typ, kind=tmpl.kind, name=key)
+        if tmpl.kind == "reg" and tmpl._init is not None:
+            clone._init = tmpl._init
+        return clone
+    if isinstance(tmpl, HDLComposite):
+        return type(tmpl).wire_like(tmpl)
+    raise TypeError(f"Unsupported record field template for {key!r}: {type(tmpl)}")
+
+
+class TemplateRecord(CompositeRecord):
+    """**Deprecated.** Class-template record: declare fields as class attributes and they are
+    cloned per instance (preserving ``kind`` and taking the field name as the port name)::
+
+        class Bus(TemplateRecord):
+            data  = Wire(UInt(8))
+            valid = Output(UInt(1))
+
+    .. deprecated::
+        Bare class attributes read as state *shared across instances* in normal Python, but this
+        class silently clones them per instance instead — which misleads anyone who hasn't read the
+        implementation. Prefer :class:`CompositeRecord` with an explicit ``__init__`` (plus field
+        annotations for autocomplete). Kept only for the tests that exercise the cloning behaviour;
+        not used anywhere else.
+    """
+
+    # Class-level field templates captured from a subclass body by __init_subclass__.
+    _record_field_templates: "dict[str, BitSerializable]" = {}
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        templates = {
+            name: value
+            for name, value in cls.__dict__.items()
+            if not name.startswith("_") and isinstance(value, BitSerializable)
+        }
+        if templates:
+            cls._record_field_templates = templates
+
+    def __init__(self, **field_values: object) -> None:
+        templates = self._record_field_templates
+        if templates:
+            # Clone each declared field (an override kwarg wins), preserving declaration order; any
+            # remaining kwargs are appended as extra fields (lenient). The base __init__ then does
+            # the actual port-naming + setattr.
+            merged = {
+                key: field_values.pop(key) if key in field_values else _clone_template(tmpl, key)
+                for key, tmpl in templates.items()
+            }
+            merged.update(field_values)
+            field_values = merged
+        super().__init__(**field_values)
+
+    @classmethod
+    def wire_like(cls, template: "TemplateRecord" = None) -> "TemplateRecord":
+        """Clone factory used when a record is itself a field template: the shape is fixed by the
+        class, so build a fresh default instance (``template`` is ignored)."""
+        return cls()

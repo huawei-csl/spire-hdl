@@ -24,7 +24,7 @@ from spire.expr import (
 )
 from spire.component import CustomVerilogComponent
 from spire.io_record import IORecord, Input, Output
-from spire.primitives.primitive_memory import _elem_bit_width, _next_uid
+from spire.primitives.primitive_memory import _elem_bit_width, _next_uid, MemoryIO
 
 
 class MemoryPrimitive_via_reg(CustomVerilogComponent):
@@ -33,6 +33,8 @@ class MemoryPrimitive_via_reg(CustomVerilogComponent):
     Same constructor and ``.io`` surface as ``MemoryPrimitive``; only the sim
     model differs.
     """
+
+    io: MemoryIO
 
     def __init__(
         self,
@@ -75,7 +77,7 @@ class MemoryPrimitive_via_reg(CustomVerilogComponent):
         if registered_read:
             kwargs["read_enable"] = Input(Bool())
 
-        self.io = IORecord(**kwargs)
+        self.io = MemoryIO(**kwargs)
         self.elaborate()
 
     @property

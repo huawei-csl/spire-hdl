@@ -40,6 +40,19 @@ from spire.io_record import IORecord, Input, Output
 from spire.primitives.primitive_memory import _elem_bit_width, _next_uid
 
 
+class FifoIO(IORecord):
+    """Typed IO bundle for :class:`FIFOPrimitive` — the field annotations give IDE autocomplete on
+    ``io.push`` / ``io.dout`` / ...; the width-dependent fields are filled when the primitive builds it."""
+
+    push:  Input
+    pop:   Input
+    din:   Input
+    dout:  Output
+    full:  Output
+    empty: Output
+    count: Output
+
+
 class FIFOPrimitive(CustomVerilogComponent):
     """Standard sync FIFO with registered output (one-cycle read latency).
 
@@ -59,6 +72,8 @@ class FIFOPrimitive(CustomVerilogComponent):
       | ``empty``   | out | 1                            |
       | ``count``   | out | ``log2(depth)+1``            |
     """
+
+    io: FifoIO
 
     def __init__(
         self,
@@ -80,7 +95,7 @@ class FIFOPrimitive(CustomVerilogComponent):
         self._uid = _next_uid()
         self._instance_name = name or f"fifo_{self._uid}"
 
-        self.io = IORecord(
+        self.io = FifoIO(
             push  = Input(Bool()),
             pop   = Input(Bool()),
             din   = Input(UInt(self._elem_w)),

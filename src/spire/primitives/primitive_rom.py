@@ -24,6 +24,15 @@ from spire.primitives.primitive_memory import _elem_bit_width, _next_uid
 from spire.primitives._ram_template import ram_block
 
 
+class RomIO(IORecord):
+    """Typed IO bundle for :class:`RomPrimitive` — the field annotations give IDE autocomplete on
+    the ROM ports; ``read_enable`` exists only with ``registered_read``."""
+
+    read_addr:   Input
+    read_data:   Output
+    read_enable: Input    # only with registered_read
+
+
 class RomPrimitive(CustomVerilogComponent):
     """Read-only memory.
 
@@ -42,6 +51,8 @@ class RomPrimitive(CustomVerilogComponent):
       | ``read_data`` | out | always             |
       | ``read_enable`` | in | ``registered_read`` |
     """
+
+    io: RomIO
 
     def __init__(
         self,
@@ -75,7 +86,7 @@ class RomPrimitive(CustomVerilogComponent):
         if registered_read:
             kwargs["read_enable"] = Input(Bool())
 
-        self.io = IORecord(**kwargs)
+        self.io = RomIO(**kwargs)
         self.elaborate()
 
     @property

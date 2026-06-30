@@ -25,10 +25,13 @@ from spire.expr import (
 from spire.component import CustomVerilogComponent
 from spire.io_record import IORecord, Input, Output
 from spire.primitives.primitive_memory import _elem_bit_width, _next_uid
+from spire.primitives.primitive_fifo import FifoIO
 
 
 class FIFOPrimitive_via_reg(CustomVerilogComponent):
     """Register-bank sync FIFO (O(depth) sim). Same ``.io`` as ``FIFOPrimitive``."""
+
+    io: FifoIO
 
     def __init__(
         self,
@@ -50,7 +53,7 @@ class FIFOPrimitive_via_reg(CustomVerilogComponent):
         self._uid = _next_uid()
         self._instance_name = name or f"fifo_{self._uid}"
 
-        self.io = IORecord(
+        self.io = FifoIO(
             push  = Input(Bool()),
             pop   = Input(Bool()),
             din   = Input(UInt(self._elem_w)),
