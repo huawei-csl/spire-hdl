@@ -1,8 +1,8 @@
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import SubtractorTestVectors, Encoding, is_signed
-from spirehdl.arithmetic.prefix_adders.adders import RippleCarryFinalAdder, StageBasedSubtractor
-from spirehdl.arithmetic.int_multipliers.stages.fsa_stages import BrentKungPrefixFinalStage
-from spirehdl.helpers import run_vectors_on_simulator
-from spirehdl.spirehdl_simulator import Simulator
+from spire.arithmetic.int_multipliers.eval.testvector_generation import SubtractorTestVectors, Encoding, is_signed
+from spire.arithmetic.prefix_adders.adders import RippleCarryFinalAdder, StageBasedSubtractor
+from spire.arithmetic.int_multipliers.stages.fsa_stages import BrentKungPrefixFinalStage
+from spire.helpers import run_vectors_on_simulator
+from spire.simulator import Simulator
 
 
 def int_subtractor_tb_sim():

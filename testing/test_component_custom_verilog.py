@@ -5,7 +5,7 @@ this, the signals/expressions produced by ``elaborate()`` are tagged so the Veri
 custom string is emitted alongside the rest of the module's auto-emitted Verilog. Python simulation still uses
 ``elaborate()``'s logic.
 
-This is the option B / per-signal tagging design (see ``/workspaces/rtl_scout/component_custom_verilog.md``).
+This is a per-signal tagging design.
 Blackboxes (Components with empty ``elaborate()``) are intentionally not supported by this implementation — the
 walker still needs a sim model to evaluate.
 """
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from spirehdl.spirehdl import (
+from spire.expr import (
     Bool,
     Register,
     Signal,
@@ -24,15 +24,15 @@ from spirehdl.spirehdl import (
     Wire,
     reset_shared_cache,
 )
-from spirehdl.spirehdl_module import Component, Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.component import Component, CustomVerilogComponent, Netlist
+from spire.simulator import Simulator
 
 
 # ---------------------------------------------------------------------------
 # Fixture: a tiny adder that has both a Python sim model and a custom Verilog
 # ---------------------------------------------------------------------------
 
-class CustomAdder(Component):
+class CustomAdder(CustomVerilogComponent):
     """8-bit + 8-bit -> 9-bit adder.
 
     ``elaborate()`` builds a non-trivial reference model that goes through an intermediate wire (``tmp_sum``) —
@@ -170,7 +170,7 @@ class TopWithCustomInner(Component):
         self.elaborate()
 
     def elaborate(self):
-        inner = CustomAdder().make_internal()
+        inner = CustomAdder()
         inner.io.a <<= self.io.a
         inner.io.b <<= self.io.b
         self.io.result <<= inner.io.sum + self.io.c
@@ -231,11 +231,11 @@ def test_embedded_multiple_instances():
             )
             self.elaborate()
         def elaborate(self):
-            ab = CustomAdder().make_internal()
+            ab = CustomAdder()
             ab.io.a <<= self.io.a
             ab.io.b <<= self.io.b
             self.io.ab_sum <<= ab.io.sum
-            cd = CustomAdder().make_internal()
+            cd = CustomAdder()
             cd.io.a <<= self.io.c
             cd.io.b <<= self.io.d
             self.io.cd_sum <<= cd.io.sum
@@ -257,7 +257,7 @@ def test_embedded_multiple_instances():
 # Sequential logic inside the Component — Registers in elaborate are tagged
 # ---------------------------------------------------------------------------
 
-class CustomCounter(Component):
+class CustomCounter(CustomVerilogComponent):
     """Accumulator with both Python sim (using a Register) and custom Verilog."""
 
     def __init__(self):

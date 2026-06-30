@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.spirehdl import Const, UInt
-from spirehdl.spirehdl_state import Encoding, State, state
+from spire.expr import Const, UInt
+from spire.state import Encoding, State, state
 
 
 class Demo(State, encoding=Encoding.BINARY):

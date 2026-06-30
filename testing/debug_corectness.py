@@ -1,12 +1,12 @@
 from aigverse import equivalence_checking
-from spirehdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import run_vectors_aby
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
-from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
-from spirehdl.arithmetic.floating_point.fp_mul_testvectors import build_f16_subnormal_ext_vectors, build_f16_subnormal_vectors
-from spirehdl.spirehdl_module import IOCollector
+from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig
+from spire.expr import UInt
+from spire.aiger import AigerExporter, AigerImporter
+from spire.arithmetic.floating_point.float_mult import run_vectors_aby
+from spire.arithmetic.floating_point.float_mult_sn import build_fp_mul_sn
+from spire.arithmetic.floating_point.fp_encoding import fp_decode
+from spire.arithmetic.floating_point.fp_mul_testvectors import build_f16_subnormal_ext_vectors, build_f16_subnormal_vectors
+from spire.component import IOCollector
 
 
 def main():
@@ -21,7 +21,7 @@ def main():
     aig = conv_aag_into_aig(aag)
 
     aag_sym = _get_aag_sym(aag)
-    m2 = AigerImporter(aag[:-2]+aag_sym).get_spirehdl_module()
+    m2 = AigerImporter(aag[:-2]+aag_sym).get_spire_module()
 
     aag2 = AigerExporter(m2).get_aag()
     aig2 = conv_aag_into_aig(aag2)

@@ -2,12 +2,12 @@
 import random
 from math import ceil, log2
 
-from spirehdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig
-from spirehdl.spirehdl import UInt, mux, fit_width
-from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_module import IOCollector
+from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig
+from spire.expr import UInt, mux, fit_width
+from spire.aiger import AigerExporter, AigerImporter
+from spire.component import Netlist
+from spire.simulator import Simulator
+from spire.component import IOCollector
 
 
 
@@ -46,7 +46,7 @@ def build_pick_probe(W: int):
       robust_idx, robust_idxm1, robust_idxm2
     """
     IW = max(1, ceil(log2(W + 2)))  # enough to represent 0..W+1 safely
-    m = Module(f"PickProbe_W{W}", with_clock=False, with_reset=False)
+    m = Netlist(f"PickProbe_W{W}", with_clock=False, with_reset=False)
 
     vec = m.input(UInt(W), "vec")
     idx = m.input(UInt(IW), "idx")
@@ -87,7 +87,7 @@ def run_random(W=11, trials=5000, seed=123):
     aig = conv_aag_into_aig(aag)
 
     aag_sym = _get_aag_sym(aag)
-    m2 = AigerImporter(aag[:-2]+aag_sym).get_spirehdl_module()
+    m2 = AigerImporter(aag[:-2]+aag_sym).get_spire_module()
 
     collector = IOCollector()
     collector.group(m2, {

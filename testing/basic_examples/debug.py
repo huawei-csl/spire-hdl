@@ -2,17 +2,17 @@
 import random
 from math import ceil, log2
 
-from spirehdl.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig
-from spirehdl.spirehdl import Const, UInt, mux
+from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig
+from spire.expr import Const, UInt, mux
 
 
-from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_module import IOCollector
+from spire.aiger import AigerExporter, AigerImporter
+from spire.simulator import Simulator
+from spire.component import Netlist
+from spire.component import IOCollector
 
 
-def build_round_probe(FW: int) -> Module:
+def build_round_probe(FW: int) -> Netlist:
     """
     Build a tiny module that computes:
       sig_shiftN = sig_pre >> shift_amt
@@ -30,7 +30,7 @@ def build_round_probe(FW: int) -> Module:
     W = FW + 1
     SAW = max(1, ceil(log2(FW + 2)))  # need to represent 0..FW+1
 
-    m = Module(f"RoundProbe_F{FW}", with_clock=False, with_reset=False)
+    m = Netlist(f"RoundProbe_F{FW}", with_clock=False, with_reset=False)
     sig_pre = m.input(UInt(W), "sig_pre")
     sh = m.input(UInt(SAW), "sh")
 
@@ -124,7 +124,7 @@ def run_random(FW=10, trials=2000, seed=1):
     aig = conv_aag_into_aig(aag)
 
     aag_sym = _get_aag_sym(aag)
-    m2 = AigerImporter(aag[:-2]+aag_sym).get_spirehdl_module()
+    m2 = AigerImporter(aag[:-2]+aag_sym).get_spire_module()
 
     collector = IOCollector()
     collector.group(m2, {

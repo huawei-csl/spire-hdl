@@ -2,12 +2,12 @@
 from collections import OrderedDict
 from typing import Dict, Tuple
 
-from spirehdl.aig.aig_aigerverse import _get_aag_sym
-from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
-from spirehdl.spirehdl_module import IOCollector
+from spire.aig.aig_aigerverse import _get_aag_sym
+from spire.aiger import AigerExporter, AigerImporter
+from spire.component import IOCollector
 
 # If these live elsewhere, fix the imports:
-# from spire_hdl import UInt, Bool, Module
+# from spire import UInt, Bool, Netlist
 # from your_aiger_bindings import AigerExporter, AigerImporter
 # from your_aag_helpers import conv_aag_into_aig, _get_aag_sym
 # from your_collectors import IOCollector
@@ -15,7 +15,7 @@ from spirehdl.spirehdl_module import IOCollector
 
 def _as_uint_width(w: int):
     # map Bool → UInt(1), UInt/SInt(w) → UInt(w)
-    from spirehdl.spirehdl import UInt
+    from spire.expr import UInt
 
     return UInt(int(w))
 
@@ -65,8 +65,8 @@ def roundtrip_and_group(
             # _get_aag_sym not available; proceed without it
             pass
 
-    # 4) Import back to SpireHDL
-    m2 = AigerImporter(aag_for_import).get_spirehdl_module()
+    # 4) Import back to Spire
+    m2 = AigerImporter(aag_for_import).get_spire_module()
 
     # 5) Build grouping spec from original ports
     group_spec = _build_group_spec_from_ports(m)

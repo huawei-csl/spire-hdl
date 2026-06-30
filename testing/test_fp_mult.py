@@ -13,10 +13,10 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(os.path.join(ROOT, "src"))
 sys.path.append(ROOT)
 
-from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode, fp_encode, fp_unpack
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import FpMul, build_fp_mul, run_vectors_aby
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.arithmetic.floating_point.fp_mul_testvectors import (
+from spire.arithmetic.floating_point.fp_encoding import fp_decode, fp_encode, fp_unpack
+from spire.arithmetic.floating_point.float_mult import FpMul, build_fp_mul, run_vectors_aby
+from spire.simulator import Simulator
+from spire.arithmetic.floating_point.fp_mul_testvectors import (
     build_bf16_vectors,
     build_f16_vectors,
 )

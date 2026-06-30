@@ -1,19 +1,19 @@
 # Control Structures
 
-SpireHDL provides `if_`/`elif_`/`else_` and `switch_`/`case_`/`default` as Python
+Spire provides `if_`/`elif_`/`else_` and `switch_`/`case_`/`default` as Python
 context managers, so conditional hardware reads like ordinary control flow. Any
 signal assignment (`<<=`) inside one of these blocks is guarded by the active
 condition and lowered to a mux. When no branch matches, a combinational signal
 keeps its previous driver and a register holds its current value.
 
 > **Note:** this is a convenience layer. Everything here can also be written
-> directly with `mux` from SpireHDL's core ([`spirehdl/spirehdl.py`](../src/spirehdl/spirehdl.py));
+> directly with `mux` from Spire's core ([`spire/expr.py`](../src/spire/expr.py));
 > the context managers lower to exactly those muxes.
 
-The constructs live in [`spirehdl/spirehdl_control_structures.py`](../src/spirehdl/spirehdl_control_structures.py).
+The constructs live in [`spire/control_structures.py`](../src/spire/control_structures.py).
 
 ```python
-from spirehdl.spirehdl_control_structures import if_, elif_, else_, switch_, case_, default
+from spire.control_structures import if_, elif_, else_, switch_, case_, default
 ```
 
 ## `if_` / `elif_` / `else_`
@@ -23,21 +23,22 @@ signal a default driver *before* the chain; a combinational signal that is only
 assigned inside conditional blocks has no fallback and raises `RuntimeError`.
 
 ```python
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_module import Module
+from spire import Component, IORecord, Input, Output, Bool, UInt
 
-m = Module("Priority", with_clock=False, with_reset=False)
-sel_a = m.input(Bool(), "sel_a")
-sel_b = m.input(Bool(), "sel_b")
-out = m.output(UInt(2), "out")
+class Priority(Component):
+    def __init__(self):
+        self.io = IORecord(sel_a=Input(Bool()), sel_b=Input(Bool()), out=Output(UInt(2)))
+        self.elaborate()
 
-out <<= 0                       # default driver (required)
-with if_(sel_a):
-    out <<= 1
-with elif_(sel_b):
-    out <<= 2
-with else_():
-    out <<= 3
+    def elaborate(self):
+        out = self.io.out
+        out <<= 0                       # default driver (required)
+        with if_(self.io.sel_a):
+            out <<= 1
+        with elif_(self.io.sel_b):
+            out <<= 2
+        with else_():
+            out <<= 3
 
 # (sel_a, sel_b) -> out :  (0,0)->3   (0,1)->2   (1,0)->1   (1,1)->1
 ```
@@ -48,21 +49,23 @@ with else_():
 everything else.
 
 ```python
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_module import Module
+from spire import Component, IORecord, Input, Output, UInt
 
-m = Module("Decode", with_clock=False, with_reset=False)
-op = m.input(UInt(2), "op")
-y = m.output(UInt(4), "y")
+class Decode(Component):
+    def __init__(self):
+        self.io = IORecord(op=Input(UInt(2)), y=Output(UInt(4)))
+        self.elaborate()
 
-y <<= 0xF
-with switch_(op):
-    with case_(0):
-        y <<= 1
-    with case_(1, 2):           # one body for several values
-        y <<= 2
-    with default():
-        y <<= 3
+    def elaborate(self):
+        y = self.io.y
+        y <<= 0xF
+        with switch_(self.io.op):
+            with case_(0):
+                y <<= 1
+            with case_(1, 2):           # one body for several values
+                y <<= 2
+            with default():
+                y <<= 3
 
 # op -> y :  0->1   1->2   2->2   3->3
 ```
@@ -77,25 +80,26 @@ under a condition holds its value when the condition is false — i.e. a clock
 enable.
 
 ```python
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire import Component, IORecord, Input, Output, Bool, UInt, Simulator
+from spire.expr import Register
 
-m = Module("EnReg", with_clock=True, with_reset=False)
-en = m.input(Bool(), "en")
-d = m.input(UInt(4), "d")
-r = m.reg(UInt(4), "r")
-r.set_init(0)
+class EnReg(Component):
+    def __init__(self):
+        self.io = IORecord(en=Input(Bool()), d=Input(UInt(4)), q=Output(UInt(4)))
+        self.elaborate()
 
-with if_(en):
-    r <<= d                     # updates only when en == 1, holds otherwise
+    def elaborate(self):
+        r = Register(UInt(4), init=0, name="r")
+        with if_(self.io.en):
+            r <<= self.io.d             # updates only when en == 1, holds otherwise
+        self.io.q <<= r
 
-sim = Simulator(m)
+sim = Simulator(EnReg())
 sim.eval()
 for enable, data in [(1, 5), (0, 9), (1, 7)]:
     sim.set("en", enable).set("d", data)
     sim.step()
-    print(sim.get("r"))         # 5, then 5 (held), then 7
+    print(sim.get("q"))         # 5, then 5 (held), then 7
 ```
 
 ## Composing with state machines

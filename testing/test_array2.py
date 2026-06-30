@@ -1,10 +1,10 @@
 from typing import Optional
 
 import numpy as np
-from spirehdl.aggregate.aggregate_array import Array  # your renamed class
-from spirehdl.spirehdl import Expr, ExprLike, Const, UInt, Wire, fit_width, reset_shared_cache
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.composite.array import Array  # your renamed class
+from spire.expr import Expr, ExprLike, Const, UInt, Wire, fit_width, reset_shared_cache
+from spire.component import Netlist
+from spire.simulator import Simulator
 
 
 def inner_product(vec_a: Array, vec_b: Array) -> Expr:
@@ -143,14 +143,14 @@ def extract_C_from_bits(bits_expr: Expr, acc_w: int) -> Array:
 
 def build_matmul_accum_reg_module():
     """
-    Build a Module that implements:
+    Build a Netlist that implements:
 
         c_next = c_prev + A*B
 
     with constant A,B and C_init. C is stored in a register as bits,
     and unpacked/packed via Array.to_bits/from_bits.
     """
-    m = Module("matmul_accum_reg")
+    m = Netlist("matmul_accum_reg")
 
     w = 8
     acc_w = 16
@@ -280,7 +280,7 @@ def eval_expr(expr: Expr) -> int:
     """
     sig = Wire(expr.typ)
     sig <<= expr
-    sim = Simulator(Module("eval_expr"))
+    sim = Simulator(Netlist("eval_expr"))
     return sim.peek(sig)
 
 

@@ -1,9 +1,9 @@
-from spirehdl.spirehdl import Register, UInt, Wire
-from spirehdl.spirehdl_module import Module
+from spire.expr import Register, UInt, Wire
+from spire.component import Netlist
 
 
 def test_unnamed_wire_and_register_infer_python_variable_names():
-    m = Module("AutoNames")
+    m = Netlist("AutoNames")
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     y = m.output(UInt(9), "y")
@@ -26,7 +26,7 @@ def test_unnamed_wire_and_register_infer_python_variable_names():
 
 
 def test_bound_expression_name_is_used_for_generated_shared_signal():
-    m = Module("ExprNames")
+    m = Netlist("ExprNames")
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     y = m.output(UInt(9), "y")

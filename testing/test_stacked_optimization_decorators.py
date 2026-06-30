@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import random
 
-from spirehdl.spirehdl import UInt, reset_shared_cache
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_aiger import AigerExporter
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.optimize import (
+from spire.expr import UInt, reset_shared_cache
+from spire.component import Netlist
+from spire.aiger import AigerExporter
+from spire.simulator import Simulator
+from spire.optimize import (
     abc_optimized,
     arithmetic_optimized,
     clear_optimization_cache,
@@ -48,9 +48,9 @@ def abc_only_mac(a, b, c):
     return a * b + c
 
 
-def _build_module(fn, name: str) -> Module:
+def _build_module(fn, name: str) -> Netlist:
     reset_shared_cache()
-    m = Module(name, with_clock=False, with_reset=False)
+    m = Netlist(name, with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
     c = m.input(UInt(16), "c")
@@ -60,11 +60,11 @@ def _build_module(fn, name: str) -> Module:
     return m
 
 
-def _gate_count(m: Module) -> int:
+def _gate_count(m: Netlist) -> int:
     return int(AigerExporter(m).get_aag()[0].split()[5])
 
 
-def _check_functional(m: Module, n_vectors: int = 20) -> None:
+def _check_functional(m: Netlist, n_vectors: int = 20) -> None:
     rng = random.Random(0)
     mask = 0x1FFFF
     sim = Simulator(m)

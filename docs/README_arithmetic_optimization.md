@@ -1,6 +1,6 @@
 # Automatic arithmetic optimization
 
-SpireHDL ships a library of configurable arithmetic building blocks: prefix adders (Kogge-Stone, Brent-Kung, Sklansky, ...), multipliers (stage-based with PPG/PPA/FSA selection), and subtractors.  Rather than requiring the user to pick the right topology, `replace_arithmetic_ops` can **automatically select the best configuration** for every `+`, `-`, and `*` operator in a design, guided by a pre-computed evaluation database.
+Spire ships a library of configurable arithmetic building blocks: prefix adders (Kogge-Stone, Brent-Kung, Sklansky, ...), multipliers (stage-based with PPG/PPA/FSA selection), and subtractors.  Rather than requiring the user to pick the right topology, `replace_arithmetic_ops` can **automatically select the best configuration** for every `+`, `-`, and `*` operator in a design, guided by a pre-computed evaluation database.
 
 Three optimization objectives are available:
 
@@ -40,9 +40,9 @@ The area objective achieves a **51% transistor reduction** over default synthesi
 
 ```python
 from dataclasses import dataclass
-from spirehdl.spirehdl import Signal, UInt
-from spirehdl.spirehdl_module import Component
-from spirehdl.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
+from spire.expr import Signal, UInt
+from spire.component import Component
+from spire.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
 
 @dataclass
 class ALUIO:
@@ -73,7 +73,7 @@ alu = ALU(w=8)
 # Replace all +, -, * operators with optimized hardware — one line
 replace_arithmetic_ops(alu, ArithmeticAutoConfig(objective="adp"))
 
-module = alu.to_module("OptimizedALU")
+module = alu.to_netlist("OptimizedALU")
 print(module.to_verilog())
 ```
 
@@ -88,7 +88,7 @@ If you'd rather construct optimized arithmetic directly instead of writing Pytho
 - `adder_tree(values, cfg)` — reduces a sequence of expressions with a balanced binary tree of optimized adders.
 
 ```python
-from spirehdl.arithmetic.int_arithmetic_config import (
+from spire.arithmetic.int_arithmetic_config import (
     ArithmeticAutoConfig, build_adder, build_multiplier, adder_tree,
 )
 
@@ -128,10 +128,10 @@ A common DSP pattern where MAC fusion shines — each tap is `coeff[i] * x[i]` a
 
 ```python
 from dataclasses import dataclass
-from spirehdl.spirehdl import UInt, Signal
-from spirehdl.spirehdl_module import Component
-from spirehdl.aggregate.aggregate_array import Array
-from spirehdl.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
+from spire.expr import UInt, Signal
+from spire.component import Component
+from spire.composite.array import Array
+from spire.arithmetic.int_arithmetic_config import ArithmeticAutoConfig, replace_arithmetic_ops
 
 @dataclass
 class FIRIO:
@@ -159,7 +159,7 @@ class FIR(Component):
 
 fir = FIR(n_taps=4, w=8)
 replace_arithmetic_ops(fir, ArithmeticAutoConfig(objective="adp"))
-module = fir.to_module("FIR4_optimized")
+module = fir.to_netlist("FIR4_optimized")
 print(module.to_verilog())
 ```
 

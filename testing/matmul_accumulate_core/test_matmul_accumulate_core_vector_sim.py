@@ -4,21 +4,21 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel, TestVectors
-from spirehdl.helpers import refactor_module_to_aig, run_vectors_on_simulator, sim_and_switch_count
-from spirehdl.spirehdl import Op2
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_verilog_testbench import TestbenchGenSimulator, write_vector_data_file
-from spirehdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
-from spirehdl.cores.matmul_accumulate.matmul_accumulate_core import (
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel, TestVectors
+from spire.helpers import refactor_module_to_aig, run_vectors_on_simulator, sim_and_switch_count
+from spire.expr import Op2
+from spire.component import Netlist
+from spire.simulator import Simulator
+from spire.verilog_testbench import TestbenchGenSimulator, write_vector_data_file
+from spire.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
+from spire.cores.matmul_accumulate.matmul_accumulate_core import (
     MMAcCfg,
     MMAcDims,
     MMAcWidths,
@@ -169,7 +169,7 @@ def test_mmac_core_vector_simulation():
         vectors,
         decoder=None,
         print_on_pass=False,
-        test_name="SpireHDL Simulation, MMAC vectors",
+        test_name="Spire Simulation, MMAC vectors",
     )
 
     sim_tb = TestbenchGenSimulator(core.module)

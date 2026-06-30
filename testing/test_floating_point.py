@@ -9,36 +9,36 @@ repo_root = pathlib.Path(__file__).resolve().parents[1]
 sys.path.append(str(repo_root / "src"))
 sys.path.append(str(repo_root))
 
-from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
-from spirehdl.arithmetic.floating_point.fp_mul_testvectors import (
+from spire.arithmetic.floating_point.fp_encoding import fp_decode
+from spire.arithmetic.floating_point.fp_mul_testvectors import (
     build_f16_subnormal_vectors,
     build_f16_vectors,
 )
 
-from spirehdl.aggregate.aggregate_floating_point import FloatingPoint, FloatingPointType
-from spirehdl.aggregate.aggregate_register import AggregateRegister
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spire.composite.floating_point import FloatingPoint, FloatingPointType
+from spire.composite.register import CompositeRegister
+from spire.arithmetic.floating_point.float_mult import build_f16_mul
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
-from spirehdl.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
-from spirehdl.spirehdl import Const, Expr, UInt, as_expr, reset_shared_cache
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spire.arithmetic.int_arithmetic_config import AdderConfig, MultiplierConfig
+from spire.expr import Const, Expr, UInt, as_expr, reset_shared_cache
+from spire.component import Netlist
+from spire.simulator import Simulator
 
 
 def _eval_expr(e: Expr) -> int:
-    m = Module("Eval", with_clock=False, with_reset=False)
+    m = Netlist("Eval", with_clock=False, with_reset=False)
     sim = Simulator(m)
     return sim.peek(e)
 
 
-def _find_signal(mod: Module, name: str):
+def _find_signal(mod: Netlist, name: str):
     return next(sig for sig in mod._signals if sig.name == name)
 
 
@@ -68,13 +68,13 @@ def _assert_fp_match(got_bits: int, expected_bits: int, *, require_bit_exact: bo
         assert got_bits == expected_bits
 
 
-def test_sim_aggregate_register_floating_point():
+def test_sim_composite_register_floating_point():
     ft = FloatingPointType(exponent_width=5, fraction_width=10)
-    m = Module("FpAggReg", with_clock=True, with_reset=False)
+    m = Netlist("FpAggReg", with_clock=True, with_reset=False)
 
     x = m.input(UInt(ft.width_total), "x")
 
-    acc = AggregateRegister(FloatingPoint, ft, name="fp_reg", init=0)
+    acc = CompositeRegister(FloatingPoint, ft, name="fp_reg", init=0)
     m._signals.append(acc.bits)
 
     x_view = FloatingPoint(ft, bits=as_expr(x))
@@ -188,9 +188,9 @@ def test_floating_point_mul_matches_subnormal_vectors():
             raise AssertionError(f"Vector '{name}' failed: got 0x{got_bits:04x}, expected 0x{expected_bits:04x}") from exc
 
 
-def _build_fp_binop_module(op_name: str) -> Module:
+def _build_fp_binop_module(op_name: str) -> Netlist:
     ft = FloatingPointType(exponent_width=5, fraction_width=10)
-    m = Module(f"FpAgg{op_name.title()}", with_clock=False, with_reset=False)
+    m = Netlist(f"FpAgg{op_name.title()}", with_clock=False, with_reset=False)
 
     a_bits = m.input(UInt(ft.width_total), "a")
     b_bits = m.input(UInt(ft.width_total), "b")
@@ -211,7 +211,7 @@ def _build_fp_binop_module(op_name: str) -> Module:
     return m
 
 
-def test_aggregate_floating_point_add():
+def test_composite_floating_point_add():
     reset_shared_cache()
     mod = _build_fp_binop_module("add")
     sim = Simulator(mod)
@@ -235,7 +235,7 @@ def test_aggregate_floating_point_add():
             ) from exc
 
 
-def test_aggregate_floating_point_mul():
+def test_composite_floating_point_mul():
     reset_shared_cache()
     mod = _build_fp_binop_module("mul")
     sim = Simulator(mod)
@@ -265,9 +265,9 @@ _FP16_ADD_VECTORS = [(1.0, 2.0), (0.5, 0.5), (1.5, -1.25), (-2.0, 3.0)]
 _FP16_MUL_VECTORS = [(1.5, 2.0), (1.25, -0.5), (-2.0, -2.0), (0.5, 0.5)]
 
 
-def _build_fp_binop_module_with_cfg(op_name: str, adder_cfg=None, mult_cfg=None) -> Module:
+def _build_fp_binop_module_with_cfg(op_name: str, adder_cfg=None, mult_cfg=None) -> Netlist:
     ft = FloatingPointType(exponent_width=5, fraction_width=10)
-    m = Module(f"FpAgg{op_name.title()}Cfg", with_clock=False, with_reset=False)
+    m = Netlist(f"FpAgg{op_name.title()}Cfg", with_clock=False, with_reset=False)
 
     a_bits = m.input(UInt(ft.width_total), "a")
     b_bits = m.input(UInt(ft.width_total), "b")

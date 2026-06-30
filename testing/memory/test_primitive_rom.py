@@ -11,11 +11,11 @@ from dataclasses import make_dataclass
 
 import pytest
 
-from spirehdl.spirehdl import Bool, Signal, UInt, Wire, reset_shared_cache
-from spirehdl.spirehdl_module import Component
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.primitives import RomPrimitive
-from spirehdl.aggregate.aggregate_record import AggregateRecord
+from spire.expr import Bool, Signal, UInt, Wire, reset_shared_cache
+from spire.component import Component
+from spire.simulator import Simulator
+from spire.primitives import RomPrimitive
+from spire.composite.record import CompositeRecord
 
 
 def _build_rom(init, *, depth, width, registered=False, name="rom"):
@@ -35,7 +35,7 @@ def _build_rom(init, *, depth, width, registered=False, name="rom"):
 
         def elaborate(self):
             rom = RomPrimitive(UInt(width), depth, init=init,
-                               registered_read=registered, name=name).make_internal()
+                               registered_read=registered, name=name)
             rom.io.read_addr <<= self.io.addr
             if registered:
                 rom.io.read_enable <<= self.io.re
@@ -134,16 +134,16 @@ def test_rom_contents_are_immutable():
 
 
 # ---------------------------------------------------------------------------
-# Aggregate element type
+# Composite element type
 # ---------------------------------------------------------------------------
 
-class _Bus(AggregateRecord):
-    data  = Wire(UInt(8))
-    valid = Wire(UInt(1))
+class _Bus(CompositeRecord):
+    def __init__(self):
+        super().__init__(data=Wire(UInt(8)), valid=Wire(UInt(1)))
 
 
-def test_aggregate_rom():
-    """Element type is an HDLAggregate; init entries are packed bit-patterns."""
+def test_composite_rom():
+    """Element type is an HDLComposite; init entries are packed bit-patterns."""
     bus_w = _Bus().width  # 9 bits
     # pack (data, valid) → bits: valid is the MSB given field order (data low, valid high).
     init = [0x42 | (1 << 8), 0x7E | (0 << 8), 0x00, 0xFF | (1 << 8)]
@@ -160,7 +160,7 @@ def test_aggregate_rom():
             self.elaborate()
 
         def elaborate(self):
-            rom = RomPrimitive(_Bus, depth=4, init=init, name="brom").make_internal()
+            rom = RomPrimitive(_Bus, depth=4, init=init, name="brom")
             rom.io.read_addr <<= self.io.addr
             out = _Bus()
             out <<= rom.io.read_data

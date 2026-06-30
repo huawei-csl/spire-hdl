@@ -15,17 +15,17 @@ from dataclasses import dataclass
 
 import pytest
 
-from spirehdl.spirehdl import (
+from spire.expr import (
     Bool,
     Signal,
     UInt,
     Wire,
     reset_shared_cache,
 )
-from spirehdl.spirehdl_module import Component
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.primitives import FIFOPrimitive
-from spirehdl.aggregate.aggregate_record import AggregateRecord
+from spire.component import Component
+from spire.simulator import Simulator
+from spire.primitives import FIFOPrimitive
+from spire.composite.record import CompositeRecord
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ from spirehdl.aggregate.aggregate_record import AggregateRecord
 # ---------------------------------------------------------------------------
 
 def _build_fifo(*, depth: int = 4, elem_w: int = 8, name: str = "myfifo"):
-    """Wraps a FIFOPrimitive in a parent Component so it sits as the top of a Module."""
+    """Wraps a FIFOPrimitive in a parent Component so it sits as the top of a Netlist."""
     count_w = (depth - 1).bit_length() + 1
 
     class TopFifo(Component):
@@ -59,7 +59,7 @@ def _build_fifo(*, depth: int = 4, elem_w: int = 8, name: str = "myfifo"):
             self.elaborate()
 
         def elaborate(self):
-            fifo = FIFOPrimitive(UInt(elem_w), depth=depth, name=name).make_internal()
+            fifo = FIFOPrimitive(UInt(elem_w), depth=depth, name=name)
             fifo.io.push <<= self.io.push
             fifo.io.pop  <<= self.io.pop
             fifo.io.din  <<= self.io.din
@@ -223,16 +223,16 @@ def test_sim_underflow_and_overflow_safety():
 
 
 # ---------------------------------------------------------------------------
-# Aggregate element type
+# Composite element type
 # ---------------------------------------------------------------------------
 
-class _Bus(AggregateRecord):
-    data  = Wire(UInt(8))
-    valid = Wire(UInt(1))
+class _Bus(CompositeRecord):
+    def __init__(self):
+        super().__init__(data=Wire(UInt(8)), valid=Wire(UInt(1)))
 
 
-def test_sim_aggregate_elem_type_fifo():
-    """Element type is an HDLAggregate. User packs / unpacks at the port boundary."""
+def test_sim_composite_elem_type_fifo():
+    """Element type is an HDLComposite. User packs / unpacks at the port boundary."""
 
     class TopAggFifo(Component):
         def __init__(self):
@@ -255,7 +255,7 @@ def test_sim_aggregate_elem_type_fifo():
             self.elaborate()
 
         def elaborate(self):
-            fifo = FIFOPrimitive(_Bus, depth=4, name="bfifo").make_internal()
+            fifo = FIFOPrimitive(_Bus, depth=4, name="bfifo")
             bus_in = _Bus()
             bus_in.data  <<= self.io.din_data
             bus_in.valid <<= self.io.din_valid
@@ -269,7 +269,7 @@ def test_sim_aggregate_elem_type_fifo():
 
     reset_shared_cache()
     m = TopAggFifo().to_module(name="aggfifo", with_clock=True, with_reset=True)
-    # Sanity: storage width matches the packed aggregate.
+    # Sanity: storage width matches the packed composite.
     v = m.to_verilog()
     assert "reg [8:0] bfifo__mem[0:3];" in v
 

@@ -1,6 +1,6 @@
 import os
-from testing.low_level_arithmetic.compressor_tree.compressor_tree_spire_hdl import gen_compressor_tree_graph_and_spirehdl_module
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from testing.low_level_arithmetic.compressor_tree.compressor_tree import gen_compressor_tree_graph_and_spire_module
+from spire.arithmetic.floating_point.float_mult_sn import build_fp_mul_sn
 
 from flowy.flows.reinforce.data_collection.lib.definitions import Encodings, Policy, RecipeSelection, SelectionMetric, SimMode, StrategyName, Operations
 from flowy.flows.reinforce.run.statistical.run_flow import run_flow
@@ -36,7 +36,7 @@ def main():
     elif source_design == "int_multiplier":
         n_bits = 4
         total_bits = n_bits
-        g, m = gen_compressor_tree_graph_and_spirehdl_module(n_bits, policy="wallace")
+        g, m = gen_compressor_tree_graph_and_spire_module(n_bits, policy="wallace")
         m.name = "mydesign_comb"
         verilog_code = m.to_verilog()
         filename = f"compressor_tree_{n_bits}bits.v"

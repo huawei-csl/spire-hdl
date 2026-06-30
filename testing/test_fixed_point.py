@@ -1,25 +1,25 @@
 from __future__ import annotations
-from spirehdl.aggregate.aggregate_register import AggregateRegister
-from spirehdl.aggregate.aggregate_fixed_point import ARITHQuant, FixedPoint, FixedPointType
-from spirehdl.spirehdl import HDLType, UInt, as_expr, fit_width
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.composite.register import CompositeRegister
+from spire.composite.fixed_point import ARITHQuant, FixedPoint, FixedPointType
+from spire.expr import HDLType, UInt, as_expr, fit_width
+from spire.component import Netlist
+from spire.simulator import Simulator
 
 
-from spirehdl.spirehdl import (
+from spire.expr import (
     Expr,
     Const,
     reset_shared_cache,
 )
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.component import Netlist
+from spire.simulator import Simulator
 
 
-def test_sim_aggregate_register():
+def test_sim_composite_register():
     # ---------------------------------------------
     # Build module
     # ---------------------------------------------
-    m = Module("AggRegDemo", with_clock=True, with_reset=False)
+    m = Netlist("AggRegDemo", with_clock=True, with_reset=False)
 
     # Integer input (8-bit unsigned)
     x = m.input(UInt(8), "x")
@@ -27,8 +27,8 @@ def test_sim_aggregate_register():
     # Fixed-point type for accumulator: Q8.8 unsigned
     acc_ftype = FixedPointType(width_total=16, width_frac=8, signed=False)
 
-    # Aggregate register that stores a FixedPoint(acc_ftype)
-    acc = AggregateRegister(
+    # Composite register that stores a FixedPoint(acc_ftype)
+    acc = CompositeRegister(
         FixedPoint,
         acc_ftype,  # passed into FixedPoint.wire_like(...)
         name="acc_reg",
@@ -36,7 +36,7 @@ def test_sim_aggregate_register():
     )
 
     # Ensure the underlying reg is visible to the module/simulator
-    # (until AggregateRegister integrates with Module more tightly)
+    # (until CompositeRegister integrates with Netlist more tightly)
     m._signals.append(acc.bits)
 
     # Structured view of accumulator register
@@ -55,7 +55,7 @@ def test_sim_aggregate_register():
         out_type=acc_ftype,
     )
 
-    # Packed assignment into aggregate register
+    # Packed assignment into composite register
     acc <<= next_acc
 
     # Output: raw accumulator bits
@@ -103,7 +103,7 @@ def test_sim_aggregate_register():
 
 # Small helper: evaluate an Expr to an integer using the simulator
 def _eval_expr(e: Expr) -> int:
-    m = Module("FPTest", with_clock=False, with_reset=False)
+    m = Netlist("FPTest", with_clock=False, with_reset=False)
     sim = Simulator(m)
     return sim.peek(e)
 
@@ -323,7 +323,7 @@ def test_fixedpoint_resize_truncate_to_smaller_total_width():
 
 
 if __name__ == "__main__":
-    test_sim_aggregate_register()
+    test_sim_composite_register()
     test_fixedpoint_add_full_precision_unsigned()
     test_fixedpoint_add_quantized_back_to_same_type()
     test_fixedpoint_quantize_truncate_vs_round()

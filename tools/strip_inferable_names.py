@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove redundant Signal/Wire/Register names that SpireHDL can infer.
+"""Remove redundant Signal/Wire/Register names that Spire can infer.
 
 A name argument is removed only when name inference would reproduce *exactly*
 the same name at that call site, i.e. all of:

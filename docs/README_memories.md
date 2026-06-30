@@ -1,18 +1,18 @@
 # Memories
 
-Memory in SpireHDL is provided by **Component primitives** — you instantiate one,
-wire its `.io` ports, and embed it with `.make_internal()`. Four primitives cover
+Memory in Spire is provided by **Component primitives** — you instantiate one,
+wire its `.io` ports, and embedding into the parent is handled automatically. Four primitives cover
 the common cases:
 
 | Primitive | Use for | Shape |
 |---|---|---|
-| [`MemoryPrimitive`](../src/spirehdl/primitives/primitive_memory.py) | scratchpad RAM, single-port BRAM | 1 write + 1 read (async or registered), optional reset arm / write mask |
-| [`RamPrimitive`](../src/spirehdl/primitives/primitive_ram.py) | multi-port RAM, true dual-port, register files | N write + N read + N read/write (`rw`) ports over one array |
-| [`RomPrimitive`](../src/spirehdl/primitives/primitive_rom.py) | read-only memory, lookup tables | init-backed, 1 read (async or registered), no write port |
-| [`FIFOPrimitive`](../src/spirehdl/primitives/primitive_fifo.py) | ready-made synchronous FIFO | push / pop / full / empty / count |
+| [`MemoryPrimitive`](../src/spire/primitives/primitive_memory.py) | scratchpad RAM, single-port BRAM | 1 write + 1 read (async or registered), optional reset arm / write mask |
+| [`RamPrimitive`](../src/spire/primitives/primitive_ram.py) | multi-port RAM, true dual-port, register files | N write + N read + N read/write (`rw`) ports over one array |
+| [`RomPrimitive`](../src/spire/primitives/primitive_rom.py) | read-only memory, lookup tables | init-backed, 1 read (async or registered), no write port |
+| [`FIFOPrimitive`](../src/spire/primitives/primitive_fifo.py) | ready-made synchronous FIFO | push / pop / full / empty / count |
 
 ```python
-from spirehdl.primitives import MemoryPrimitive, RamPrimitive, RomPrimitive, FIFOPrimitive
+from spire.primitives import MemoryPrimitive, RamPrimitive, RomPrimitive, FIFOPrimitive
 ```
 
 Each primitive emits its storage as a Verilog `reg [W-1:0] name[0:D-1];` array plus a
@@ -30,9 +30,9 @@ directly). The two paths describe the same hardware; the tests pin the equivalen
 
 ```python
 from dataclasses import dataclass
-from spirehdl.spirehdl import Bool, Signal, UInt
-from spirehdl.spirehdl_module import Component
-from spirehdl.primitives import MemoryPrimitive
+from spire.expr import Bool, Signal, UInt
+from spire.component import Component
+from spire.primitives import MemoryPrimitive
 
 
 class Scratch(Component):
@@ -50,14 +50,14 @@ class Scratch(Component):
         self.elaborate()
 
     def elaborate(self):
-        mem = MemoryPrimitive(UInt(9), depth=16, name="ram").make_internal()
+        mem = MemoryPrimitive(UInt(9), depth=16, name="ram")
         mem.io.write_addr   <<= self.io.aw
         mem.io.write_data   <<= self.io.din
         mem.io.write_enable <<= self.io.we
         mem.io.read_addr    <<= self.io.ar
         self.io.dout        <<= mem.io.read_data
 
-module = Scratch().to_module(name="scratch", with_clock=True, with_reset=True)
+module = Scratch().to_netlist(name="scratch", with_clock=True, with_reset=True)
 ```
 
 ### Constructor
@@ -73,8 +73,8 @@ MemoryPrimitive(elem_type, depth, *,
                 name=None)
 ```
 
-`elem_type` is an `HDLType` (`UInt`/`SInt`/`Bool`) **or** an `HDLAggregate` — see
-[Aggregate element types](#aggregate-element-types).
+`elem_type` is an `HDLType` (`UInt`/`SInt`/`Bool`) **or** an `HDLComposite` — see
+[Composite element types](#composite-element-types).
 
 ### Ports (`mem.io.*`)
 
@@ -94,7 +94,7 @@ MemoryPrimitive(elem_type, depth, *,
 ```python
 rom = MemoryPrimitive(UInt(8), depth=8, registered_read=True,
                       init=[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80],
-                      name="rom").make_internal()
+                      name="rom")
 rom.io.read_addr   <<= self.io.addr
 rom.io.read_enable <<= self.io.re      # hold the registered output when low
 self.io.dout       <<= rom.io.read_data
@@ -113,7 +113,7 @@ gives one cycle of read latency; `read_enable` low holds the previous output.
 (read-modify-write — unmasked chunks keep their old value).
 
 ```python
-mem = MemoryPrimitive(UInt(16), depth=4, mask_chunks=2, name="mr").make_internal()
+mem = MemoryPrimitive(UInt(16), depth=4, mask_chunks=2, name="mr")
 mem.io.write_mask <<= self.io.byte_en   # 2-bit: bit0=low byte, bit1=high byte
 ```
 
@@ -150,14 +150,14 @@ resolve last-write-wins (registration order), matching Verilog NBA.
 
 ```python
 # Simple dual-port: 1 write + 2 independent reads
-ram = RamPrimitive(UInt(8), depth=4, num_write_ports=1, num_read_ports=2).make_internal()
+ram = RamPrimitive(UInt(8), depth=4, num_write_ports=1, num_read_ports=2)
 ram.io.w0_addr <<= wa; ram.io.w0_data <<= wd; ram.io.w0_en <<= we
 ram.io.r0_addr <<= ra0; d0 <<= ram.io.r0_data
 ram.io.r1_addr <<= ra1; d1 <<= ram.io.r1_data
 
 # True dual-port (2RW): two ports that each read or write per cycle
 dp = RamPrimitive(UInt(8), depth=4, rw_ports=2,
-                  num_read_ports=0, num_write_ports=0).make_internal()
+                  num_read_ports=0, num_write_ports=0)
 for p, (addr, din, wr, en, dout) in (("rw0", a_sigs), ("rw1", b_sigs)):
     addr_p = getattr(dp.io, f"{p}_addr");  addr_p <<= addr   # bind first; `getattr(...) <<= x` is a syntax error
     din_p  = getattr(dp.io, f"{p}_din");   din_p  <<= din
@@ -177,7 +177,7 @@ RomPrimitive(elem_type, depth, init, *, registered_read=False, name=None)
 # ports: read_addr, read_data (+ read_enable if registered_read)
 
 rom = RomPrimitive(UInt(8), depth=8,
-                   init=[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80]).make_internal()
+                   init=[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80])
 rom.io.read_addr <<= self.io.addr
 self.io.dout     <<= rom.io.read_data        # async: combinational lookup, no step() needed
 ```
@@ -191,7 +191,7 @@ A complete sync FIFO (pointers + count + flags), one-cycle registered read laten
 must be a power of two ≥ 2.
 
 ```python
-fifo = FIFOPrimitive(UInt(8), depth=4, name="fifo").make_internal()
+fifo = FIFOPrimitive(UInt(8), depth=4, name="fifo")
 fifo.io.push <<= self.io.push
 fifo.io.pop  <<= self.io.pop
 fifo.io.din  <<= self.io.din
@@ -204,17 +204,17 @@ self.io.count <<= fifo.io.count
 Ports: `push`, `pop`, `din` (in); `dout`, `full`, `empty`, `count` (out). Simultaneous
 push+pop on a non-empty/non-full FIFO leaves `count` unchanged; underflow/overflow self-gate.
 
-## Aggregate element types
+## Composite element types
 
-Any primitive's `elem_type` may be an `HDLAggregate` (record). Boundary ports are flat
+Any primitive's `elem_type` may be an `HDLComposite` (record). Boundary ports are flat
 `UInt(width)`; pack/unpack at the edge with `to_bits()` / `from_bits()`:
 
 ```python
-class Bus(AggregateRecord):
+class Bus(CompositeRecord):
     data  = Wire(UInt(8))
     valid = Wire(UInt(1))
 
-mem = MemoryPrimitive(Bus, depth=16).make_internal()      # 9-bit storage
+mem = MemoryPrimitive(Bus, depth=16)               # 9-bit storage
 bus_in = Bus(); bus_in.data <<= d; bus_in.valid <<= v
 mem.io.write_data <<= bus_in.to_bits()
 out = Bus(); out <<= mem.io.read_data                     # from_bits view
@@ -226,7 +226,7 @@ data_out <<= out.data; valid_out <<= out.valid
 Primitives simulate with the built-in `Simulator` — no setup beyond building the module.
 
 ```python
-from spirehdl.spirehdl_simulator import Simulator
+from spire.simulator import Simulator
 
 sim = Simulator(module)
 sim.deassert_reset()
@@ -259,7 +259,7 @@ sim.get_mem("ram")     # → [0, 0, 0, 0xAB, …]   (length == depth, unsigned b
   drop-in variants whose sim model is an explicit register file (O(depth), no array
   inference) — kept for comparison/debug. The synthesised Verilog is the same array idiom.
 - **Internal store is not user-facing.** `_MemoryArray` (in
-  `src/spirehdl/spirehdl_memory.py`) is the sim backend the primitives wire up via a port
+  `src/spire/memory.py`) is the sim backend the primitives wire up via a port
   factory; designs always go through the primitives' `.io`.
 
 ## See also

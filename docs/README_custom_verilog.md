@@ -1,6 +1,6 @@
 # Custom Verilog Components
 
-SpireHDL's `Component` can opt to emit a hand-written Verilog block instead of
+Spire's `CustomVerilogComponent` can opt to emit a hand-written Verilog block instead of
 the auto-generated logic derived from its `elaborate()`. Two flavours are
 supported:
 
@@ -8,14 +8,14 @@ supported:
   model) and a `custom_verilog()` (hand-tuned Verilog). Simulation runs the
   Python; synthesis sees the user-supplied Verilog. Useful for hand-tuned
   RTL, external tool output, or anything where you want a different
-  Verilog shape than SpireHDL would generate.
+  Verilog shape than Spire would generate.
 - **Blackbox**: the Component has only `custom_verilog()` — `elaborate()`
   is empty. There's no Python sim model, so the simulator stubs the
   outputs to 0. Useful for vendor IP, opaque macros (PLLs, SerDes, RAM
   macros), or any block where a Python model isn't practical.
 
-The mechanism lives in [`spirehdl/spirehdl_module.py`](../src/spirehdl/spirehdl_module.py)
-(Component-side tagging) and [`spirehdl/spirehdl_simulator.py`](../src/spirehdl/spirehdl_simulator.py)
+The mechanism lives in [`spire/component.py`](../src/spire/component.py)
+(Component-side tagging) and [`spire/simulator.py`](../src/spire/simulator.py)
 (sim stub for blackboxes).
 
 ## Quick start — Component with both sim model and custom Verilog
@@ -25,34 +25,28 @@ a Python reference model (used by `Simulator`); `custom_verilog()` returns
 a hand-written Verilog block (used by `to_verilog`).
 
 ```python
-from dataclasses import dataclass
-from spirehdl.spirehdl import Bool, Signal, UInt, Wire
-from spirehdl.spirehdl_module import Component
+from spire import CustomVerilogComponent, IORecord, Input, Output, UInt
+from spire.expr import Wire
 
 
-class CustomAdder(Component):
+class CustomAdder(CustomVerilogComponent):
     def __init__(self):
-        @dataclass
-        class IO:
-            a: Signal
-            b: Signal
-            sum: Signal
-        self.io = IO(
-            a   = Signal(typ=UInt(8), kind="input"),
-            b   = Signal(typ=UInt(8), kind="input"),
-            sum = Signal(typ=UInt(9), kind="output"),
+        self.io = IORecord(
+            a=Input(UInt(8)),
+            b=Input(UInt(8)),
+            sum=Output(UInt(9)),
         )
         self.elaborate()
 
     def elaborate(self):
-        # Python sim model — used by Simulator(m). Free to use any spire-hdl
+        # Python sim model — used by Simulator(comp). Free to use any spire
         # primitives (Registers, Wires, Memory, etc.).
         tmp = Wire(UInt(9))
         tmp <<= self.io.a + self.io.b
         self.io.sum <<= tmp
 
     def custom_verilog(self) -> str:
-        # Hand-written Verilog — used by m.to_verilog(). The Signal names are
+        # Hand-written Verilog — used by comp.to_verilog(). The Signal names are
         # resolved at emit time, so uniquification (e.g. `a_1` if `a` collides
         # with a parent port) is already applied.
         return (
@@ -64,16 +58,15 @@ class CustomAdder(Component):
 Compile and simulate:
 
 ```python
-from spirehdl.spirehdl_simulator import Simulator
+from spire import Simulator
 
 comp = CustomAdder()
-m    = comp.to_module(name="CustomAdder", with_clock=False, with_reset=False)
 
 # Verilog: the elaborate's `tmp` wire is suppressed; the hand-tuned block emits.
-print(m.to_verilog())
+print(comp.to_verilog(name="CustomAdder"))
 
-# Simulation: uses elaborate's Python model.
-sim = Simulator(m)
+# Simulation: uses elaborate's Python model — same instance, no IR to manage.
+sim = Simulator(comp)
 sim.set("a", 5).set("b", 7).eval()
 assert sim.get("sum") == 12
 ```
@@ -90,28 +83,24 @@ endmodule
 ```
 
 No `tmp` wire — the framework tagged it `_no_emit_decl + _no_emit_drive` at
-`to_module` time so the emitter skips it.
+`to_netlist` time so the emitter skips it.
 
 ## Quick start — blackbox (only Verilog, no Python model)
 
 For vendor IP or opaque macros, leave `elaborate()` empty:
 
 ```python
-class VendorRAM(Component):
+from spire import Component, CustomVerilogComponent, IORecord, Input, Output, Bool, UInt
+
+class VendorRAM(CustomVerilogComponent):
     def __init__(self):
-        @dataclass
-        class IO:
-            clk: Signal
-            addr: Signal
-            data_in: Signal
-            we: Signal
-            data_out: Signal
-        self.io = IO(
-            clk      = Signal(typ=Bool(), kind="input"),
-            addr     = Signal(typ=UInt(10), kind="input"),
-            data_in  = Signal(typ=UInt(32), kind="input"),
-            we       = Signal(typ=Bool(), kind="input"),
-            data_out = Signal(typ=UInt(32), kind="output"),
+        # `clk` is not an IO field — it's the implicit clock added by `with_clock=True`
+        # at emit time, which the Verilog body below references directly.
+        self.io = IORecord(
+            addr     = Input(UInt(10)),
+            data_in  = Input(UInt(32)),
+            we       = Input(Bool()),
+            data_out = Output(UInt(32)),
         )
         self.elaborate()
 
@@ -132,48 +121,44 @@ Compile and use:
 
 ```python
 ram = VendorRAM()
-m   = ram.to_module(name="VendorRAM", with_clock=True)
-print(m.to_verilog())   # contains the hand-written RAM macro
+print(ram.to_verilog(name="VendorRAM", with_clock=True))   # contains the hand-written RAM macro
 
 # Simulation: the blackbox has no Python model — outputs read as 0.
-sim = Simulator(m)
+sim = Simulator(ram)
 sim.set("addr", 5).set("data_in", 0xDEADBEEF).set("we", 1).step()
 assert sim.get("data_out") == 0   # stub
 ```
 
 ## Embedding inside a larger Component
 
-A custom-Verilog or blackbox Component slots into a parent Component via
-`make_internal()` — same pattern as any other sub-Component:
+A custom-Verilog or blackbox Component slots into a parent Component the same
+way as any other sub-Component: instantiate it and wire its IO. Embedding is
+handled automatically:
 
 ```python
+from spire import Component, IORecord, Input, Output, UInt
+
 class TopWithVendorRAM(Component):
     def __init__(self):
-        @dataclass
-        class IO:
-            clk: Signal
-            x: Signal
-            y: Signal
-            result: Signal
-        self.io = IO(
-            clk    = Signal(typ=Bool(), kind="input"),
-            x      = Signal(typ=UInt(10), kind="input"),
-            y      = Signal(typ=UInt(32), kind="input"),
-            result = Signal(typ=UInt(32), kind="output"),
+        self.io = IORecord(
+            x      = Input(UInt(10)),
+            y      = Input(UInt(32)),
+            result = Output(UInt(32)),
         )
         self.elaborate()
 
     def elaborate(self):
-        ram = VendorRAM().make_internal()
-        ram.io.clk      <<= self.io.clk
+        ram = VendorRAM()
         ram.io.addr     <<= self.io.x
         ram.io.data_in  <<= self.io.y
         ram.io.we       <<= 1
         self.io.result  <<= ram.io.data_out
+        # The implicit clock (with_clock=True) is shared across the flat module,
+        # so the inlined RAM's `posedge clk` binds to it — no explicit wiring needed.
 ```
 
-`m.to_verilog()` produces a single flat module containing both the parent's
-auto-emitted glue and the vendor RAM's custom block. The parent's `assign`
+`TopWithVendorRAM().to_verilog(with_clock=True)` produces a single flat module
+containing both the parent's auto-emitted glue and the vendor RAM's custom block. The parent's `assign`
 lines connect the parent inputs to the RAM's port wires; the vendor block
 provides the RAM's behaviour.
 
@@ -184,9 +169,8 @@ Two flags on `Signal`:
 - `_no_emit_decl`: skip the wire/reg/mem declaration.
 - `_no_emit_drive`: skip the `assign` or always-block update.
 
-When `Component.to_module` (top-level) or `Component.make_internal`
-(embedded) detects a `custom_verilog` method, it runs
-`_apply_custom_verilog_tags()`:
+When `CustomVerilogComponent` finalizes after `elaborate()`, it runs
+`_apply_custom_verilog_tags()` in addition to the normal Component IO ownership tagging:
 
 1. Walks from each IO output through `_driver` chains.
 2. Tags every reachable internal Signal with both flags (those drop out of
@@ -197,7 +181,7 @@ When `Component.to_module` (top-level) or `Component.make_internal`
    driver — used by the collector to decide whether the parent's
    input-side wiring needs explicit peer-seeding.
 
-At emit time, `Module.to_verilog_lines`:
+At emit time, `Netlist.to_verilog_lines`:
 
 - Skips signals tagged `_no_emit_decl` in the wire/reg/mem decl loops.
 - Skips signals tagged `_no_emit_drive` in the combinational-assigns loop
@@ -247,22 +231,22 @@ simulation, regardless of inputs."
 
 ## Real-world examples: the primitives library
 
-The `src/spirehdl/primitives/` package contains production-style uses of
+The `src/spire/primitives/` package contains production-style uses of
 the custom-with-sim pattern — both with non-trivial `elaborate()` reference
 models and Yosys-friendly `custom_verilog()` outputs:
 
-- [`MemoryPrimitive`](../src/spirehdl/primitives/primitive_memory.py) —
+- [`MemoryPrimitive`](../src/spire/primitives/primitive_memory.py) —
   array-of-registers RAM with optional registered read, reset arm, and
-  init values. Supports aggregate element types via user-side
+  init values. Supports composite element types via user-side
   `to_bits`/`from_bits` at the port boundary. Emits the standard Yosys-
   inferable `reg [W-1:0] mem[0:D-1];` idiom in `custom_verilog()`.
-- [`FIFOPrimitive`](../src/spirehdl/primitives/primitive_fifo.py) — standard
+- [`FIFOPrimitive`](../src/spire/primitives/primitive_fifo.py) — standard
   synchronous FIFO (push/pop/full/empty/count, registered head). Inlines
   its storage and pointer/count logic in a single `custom_verilog()`
   block.
 
 Both are good templates for new custom-Verilog Components: they exercise
-sequential state in `elaborate()` (Registers + mux trees), aggregate-type
+sequential state in `elaborate()` (Registers + mux trees), composite-type
 support, and per-instance internal-name uniquification so multiple
 instances inside the same parent don't collide on inlined names.
 
@@ -277,6 +261,6 @@ instances inside the same parent don't collide on inlined names.
   fix is exercised in `test_embedded_blackbox_parent_helper_is_reachable`).
 - Primitives tests:
   [`testing/memory/test_primitive_memory.py`](../testing/memory/test_primitive_memory.py)
-  (10 cases including an `AggregateRecord` element-type round-trip) and
+  (10 cases including an `CompositeRecord` element-type round-trip) and
   [`testing/memory/test_primitive_fifo.py`](../testing/memory/test_primitive_fifo.py)
-  (8 cases including underflow/overflow safety and aggregate element types).
+  (8 cases including underflow/overflow safety and composite element types).

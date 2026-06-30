@@ -1,6 +1,6 @@
 # Circuit Optimization Decorators
 
-SpireHDL provides two decorators that optimize combinational logic at the AIG level.  Decorate any Python function that builds logic from `Expr` arguments, and the framework automatically converts it to a circuit, runs the chosen optimizer, caches the result, and splices the optimized logic back into your design.
+Spire provides two decorators that optimize combinational logic at the AIG level.  Decorate any Python function that builds logic from `Expr` arguments, and the framework automatically converts it to a circuit, runs the chosen optimizer, caches the result, and splices the optimized logic back into your design.
 
 ## `@abc_optimized` -- ABC via Yosys
 
@@ -12,7 +12,7 @@ matters: ABC has no rewriter for coarse cells like `$mul`/`$add`, so the script 
 where it was essentially inert.)
 
 ```python
-from spirehdl.optimize import abc_optimized, ABC_RECIPES
+from spire.optimize import abc_optimized, ABC_RECIPES
 
 @abc_optimized                                    # bare -> ABC_RECIPES["balanced"]
 def my_mult(a, b):
@@ -108,20 +108,20 @@ multiplier and the adder).
 | `cache_dir` | `None` | Override cache directory |
 
 > A standalone `abc` binary enables the effective out-of-process optimization. Discovery
-> order: `$SPIREHDL_ABC`, then `abc` on `PATH`, then `yosys-abc`. If none is found,
+> order: `$SPIRE_ABC`, then `abc` on `PATH`, then `yosys-abc`. If none is found,
 > `abc_optimize` automatically falls back to an in-process pyosys path (legacy ordering,
 > largely inert on coarse cells) and emits a `RuntimeWarning` — so it still runs on a
 > pure-pyosys install, just without the gains.
 
 ### Lower-level function
 
-`abc_optimize(module, abc_script=..., prep_script=...)` takes a `Module` or `Component`
+`abc_optimize(design, abc_script=..., prep_script=...)` takes a `Component` or `Netlist`
 and returns optimized AAG lines directly, without the decorator/caching machinery.
 
 ```python
-from spirehdl.optimize import abc_optimize, ABC_RECIPES
+from spire.optimize import abc_optimize, ABC_RECIPES
 
-aag_lines = abc_optimize(my_module, abc_script=ABC_RECIPES["area"])
+aag_lines = abc_optimize(my_component, abc_script=ABC_RECIPES["area"])
 ```
 
 ### Iterative optimization (nested + cached)
@@ -151,7 +151,7 @@ def my_mult(a, b):
 Uses the Flowy with MockTurtle. Supports multi-run optimization and Pareto-front design selection.
 
 ```python
-from spirehdl.optimize import flowy_optimized
+from spire.optimize import flowy_optimized
 
 @flowy_optimized(direct=True, iterations=1, mockturtle_chains=1,
                  mockturtle_chain_len=2, mockturtle_chain_workers=1)
@@ -176,7 +176,7 @@ def optimized_mult(a, b):
 ### Lower-level function
 
 ```python
-from spirehdl.optimize import flowy_optimize
+from spire.optimize import flowy_optimize
 
 optimized_module = flowy_optimize(my_module, nb_runs=10, direct=True)
 ```
@@ -188,12 +188,12 @@ optimized_module = flowy_optimize(my_module, nb_runs=10, direct=True)
 Both decorators above share the same two-level cache:
 
 1. **In-memory** -- keyed by a SHA-256 hash of the Verilog content + non-logic arguments + optimizer parameters.  Instant on repeated calls within the same process.
-2. **Disk** -- stored in `.spirehdl_cache/v1/` as JSON files containing the optimized AAG lines and port spec.  Survives across runs.
+2. **Disk** -- stored in `.spire_cache/v1/` as JSON files containing the optimized AAG lines and port spec.  Survives across runs.
 
-Use `clear_optimization_cache()` to reset the in-memory cache, or delete `.spirehdl_cache/` for the disk cache.
+Use `clear_optimization_cache()` to reset the in-memory cache, or delete `.spire_cache/` for the disk cache.
 
 ```python
-from spirehdl.optimize import set_cache_dir, clear_optimization_cache
+from spire.optimize import set_cache_dir, clear_optimization_cache
 
 set_cache_dir("/my/cache/path")   # override default location
 clear_optimization_cache()         # clear in-memory cache
@@ -217,21 +217,23 @@ Reads and writes are independently gated by `cache_read` and `cache_write`.  Eac
 For local reuse of a small arithmetic block, the `@arithmetic_optimized` decorator offers the same one-liner ergonomics as `@abc_optimized` but without going through an external synthesizer — the body of the decorated function is wrapped into a `Component`, `replace_arithmetic_ops` is run on it, and the optimized sub-graph is spliced back into the caller's design:
 
 ```python
-from spirehdl.spirehdl import UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.optimize import arithmetic_optimized
+from spire import Component, IORecord, Input, Output, UInt
+from spire.optimize import arithmetic_optimized
 
 @arithmetic_optimized(objective="adp")
 def opt_mac(a, b, c):
     return a * b + c
 
-m = Module("Top", with_clock=False, with_reset=False)
-a = m.input(UInt(8), "a")
-b = m.input(UInt(8), "b")
-c = m.input(UInt(16), "c")
-y = m.output(UInt(17), "y")
-y <<= opt_mac(a, b, c)    # MAC fusion happens inside the decorator
-print(m.to_verilog())
+class Top(Component):
+    def __init__(self):
+        self.io = IORecord(a=Input(UInt(8)), b=Input(UInt(8)), c=Input(UInt(16)), y=Output(UInt(17)))
+        self.elaborate()
+
+    def elaborate(self):
+        io = self.io
+        io.y <<= opt_mac(io.a, io.b, io.c)    # MAC fusion happens inside the decorator
+
+print(Top().to_verilog(name="Top"))
 ```
 
 MAC / inner-product fusion, bit-width-aware configuration lookup, and `==`/`!=` lowering all work the same as with `replace_arithmetic_ops` on a hand-built component, because the decorator just calls `replace_arithmetic_ops` under the hood.

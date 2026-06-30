@@ -1,10 +1,10 @@
 """Round-trip tests for ``build_adder`` / ``build_multiplier`` through the
 AIG bit-level simulator.
 
-These tests were added after a bug where ``spirehdl_aiger.visit_op2`` did
+These tests were added after a bug where ``spire_aiger.visit_op2`` did
 not sign-extend operands for ``+``/``-`` when the result width exceeded
 the operand widths. The existing adder/multiplier tests exercised only the
-SpireHDL ``Simulator`` (which carries HDLType metadata through the graph),
+Spire ``Simulator`` (which carries HDLType metadata through the graph),
 so the AIG path stayed silent even though downstream flows
 (``sim_and_switch_count``, PPA sweeps) relied on it being correct.
 
@@ -12,7 +12,7 @@ The matrix below deliberately covers both axes that the bug lived on:
 
     build fn    × {use_operator=True, use_operator=False}
                 × {unsigned, twos_complement}
-                × {SpireHDL Simulator, AIG sim}
+                × {Spire Simulator, AIG sim}
 
 Adding to any of these alone would not have caught the original bug. All
 four together would — and the ``test_signed_add_sext_in_aig`` focused case
@@ -23,26 +23,26 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.arithmetic.int_arithmetic_config import (
+from spire.arithmetic.int_arithmetic_config import (
     AdderConfig,
     MultiplierConfig,
     build_adder,
     build_multiplier,
 )
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     PPAOption,
     PPGOption,
     MultiplierOption,
     TwoInputAritEncodings,
 )
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
     StageBasedMultiplierIO,
 )
-from spirehdl.helpers import refactor_module_to_aig, run_vectors
-from spirehdl.spirehdl import Signal, SInt, UInt, reset_shared_cache
-from spirehdl.spirehdl_module import Component
+from spire.helpers import refactor_module_to_aig, run_vectors
+from spire.expr import Signal, SInt, UInt, reset_shared_cache
+from spire.component import Component
 
 
 N_BITS = 8
@@ -70,6 +70,9 @@ def _make_adder_component(adder_cfg: AdderConfig, signed: bool):
             # build_adder always returns UInt(N_BITS+1); assign directly
             self.io.y <<= y_val
 
+        def elaborate(self):  # logic built in __init__; no-op to satisfy the abstract method
+            pass
+
     return AdderWrap()
 
 
@@ -87,6 +90,9 @@ def _make_multiplier_component(mult_cfg: MultiplierConfig, signed: bool):
             )
             y_val = build_multiplier(self.io.a, self.io.b, mult_cfg)
             self.io.y <<= y_val
+
+        def elaborate(self):  # logic built in __init__; no-op to satisfy the abstract method
+            pass
 
     return MulWrap()
 
@@ -198,8 +204,8 @@ def _mul_vectors(signed: bool):
 
 # ---------------------------------------------------------------------------
 # Parametrised matrix: {adder, mul} × {operator, structural} × {unsigned, signed}
-# Each test runs both on the SpireHDL Simulator AND on the AIG (post
-# ``refactor_module_to_aig``). Before this test, only the SpireHDL path was
+# Each test runs both on the Spire Simulator AND on the AIG (post
+# ``refactor_module_to_aig``). Before this test, only the Spire path was
 # covered — which is why the signed AIG zero-extension bug survived.
 # ---------------------------------------------------------------------------
 
@@ -236,8 +242,8 @@ def _mult_cfg(use_operator: bool, enc: Encoding) -> MultiplierConfig:
 
 @pytest.mark.parametrize("use_operator", USE_OPERATOR, ids=lambda v: "operator" if v else "structural")
 @pytest.mark.parametrize("enc", ENCODINGS, ids=lambda e: e.name)
-def test_build_adder_spirehdl_and_aig(use_operator: bool, enc: Encoding):
-    """``build_adder`` must produce correct bits in both SpireHDL and AIG sims."""
+def test_build_adder_spire_and_aig(use_operator: bool, enc: Encoding):
+    """``build_adder`` must produce correct bits in both Spire and AIG sims."""
     reset_shared_cache()
     signed = enc == Encoding.twos_complement
     cfg = _adder_cfg(use_operator, enc)
@@ -248,7 +254,7 @@ def test_build_adder_spirehdl_and_aig(use_operator: bool, enc: Encoding):
     )
     vecs = _adder_vectors(signed)
 
-    # SpireHDL-level simulation (already well-covered by the existing suite,
+    # Spire-level simulation (already well-covered by the existing suite,
     # but we keep it here so a failure tells you *which* path broke).
     run_vectors(module, vecs, use_signed=False)
 
@@ -259,7 +265,7 @@ def test_build_adder_spirehdl_and_aig(use_operator: bool, enc: Encoding):
 
 @pytest.mark.parametrize("use_operator", USE_OPERATOR, ids=lambda v: "operator" if v else "structural")
 @pytest.mark.parametrize("enc", ENCODINGS, ids=lambda e: e.name)
-def test_build_multiplier_spirehdl_and_aig(use_operator: bool, enc: Encoding):
+def test_build_multiplier_spire_and_aig(use_operator: bool, enc: Encoding):
     """``build_multiplier`` must produce correct bits in both sim paths."""
     reset_shared_cache()
     signed = enc == Encoding.twos_complement
@@ -326,6 +332,9 @@ def test_signed_sub_sext_in_aig():
                 y=Signal(typ=UInt(N_BITS + 1), kind="output"),
             )
             self.io.y <<= self.io.a - self.io.b
+
+        def elaborate(self):  # logic built in __init__; no-op to satisfy the abstract method
+            pass
 
     comp = SubWrap()
     module = comp.to_module("SignedSubSext", with_clock=True, with_reset=True)

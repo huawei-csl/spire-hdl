@@ -1,8 +1,8 @@
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator  # your simulator with peek/watch
+from spire.expr import Bool, UInt
+from spire.component import Netlist
+from spire.simulator import Simulator  # your simulator with peek/watch
 
-m = Module("VecBits", with_clock=False, with_reset=False)
+m = Netlist("VecBits", with_clock=False, with_reset=False)
 v = m.input(UInt(8), "v")
 low4 = m.output(UInt(4), "low4"); low4 <<= v[3:0]
 sim = Simulator(m)

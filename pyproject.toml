@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "spire-hdl"
-version = "0.1.0"
-description = "Spire is a hardware description language for digital circuits."
+version = "0.2.0"
+description = "Spire HDL is a hardware description language for digital circuits."
 authors = [{ name = "Felix Arnold", email = "felix.arnold@h-partners.com" }]
 readme = "README.md"
 requires-python = ">=3.12"
@@ -19,20 +19,20 @@ dynamic = [
 
 # Tell hatchling what to put into the wheel
 [tool.hatch.build.targets.wheel]
-packages = ["src/spirehdl"]
+packages = ["src/spire"]
 include = [
-    "src/spirehdl/arithmetic/int_multipliers/data/**",
-    "src/spirehdl/arithmetic/eval/*.json",
-    "src/spirehdl/arithmetic/eval/*.csv",
+    "src/spire/arithmetic/int_multipliers/data/**",
+    "src/spire/arithmetic/eval/*.json",
+    "src/spire/arithmetic/eval/*.csv",
 ]
 
 # Optional but nice: also define sdist the same way
 [tool.hatch.build.targets.sdist]
-packages = ["src/spirehdl"]
+packages = ["src/spire"]
 include = [
-    "src/spirehdl/arithmetic/int_multipliers/data/**",
-    "src/spirehdl/arithmetic/eval/*.json",
-    "src/spirehdl/arithmetic/eval/*.csv",
+    "src/spire/arithmetic/int_multipliers/data/**",
+    "src/spire/arithmetic/eval/*.json",
+    "src/spire/arithmetic/eval/*.csv",
 ]
 
 [tool.hatch.metadata.hooks.requirements_txt]

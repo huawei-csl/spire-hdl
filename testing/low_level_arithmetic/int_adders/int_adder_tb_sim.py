@@ -1,9 +1,9 @@
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import AdderTestVectors, Encoding, is_signed
-from spirehdl.arithmetic.prefix_adders.adders import RippleCarryFinalAdder, StageBasedPrefixAdder
-from spirehdl.helpers import run_vectors, run_vectors_on_simulator
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_verilog_testbench import TestbenchGenSimulator, write_vector_data_file
-from spirehdl.various.vcd_writer import write_vcd
+from spire.arithmetic.int_multipliers.eval.testvector_generation import AdderTestVectors, Encoding, is_signed
+from spire.arithmetic.prefix_adders.adders import RippleCarryFinalAdder, StageBasedPrefixAdder
+from spire.helpers import run_vectors, run_vectors_on_simulator
+from spire.simulator import Simulator
+from spire.verilog_testbench import TestbenchGenSimulator, write_vector_data_file
+from spire.various.vcd_writer import write_vcd
 
 
 def int_adders_tb_sim():
@@ -44,7 +44,7 @@ def int_adders_tb_sim():
 
     sim = Simulator(module)
     sim.trace_enabled = True
-    run_vectors_on_simulator(sim, vecs, use_signed=use_signed, print_on_pass=True, with_clk=False, test_name="SpireHDL Simulation      , Int Adder Test")
+    run_vectors_on_simulator(sim, vecs, use_signed=use_signed, print_on_pass=True, with_clk=False, test_name="Spire Simulation      , Int Adder Test")
 
     trace_by_names = sim.get_trace_by_names()
 

@@ -1,4 +1,4 @@
-"""Regression tests for the AIGER barrel shifter (``spirehdl_aiger``).
+"""Regression tests for the AIGER barrel shifter (``spire_aiger``).
 
 These tests were added after a subtle bug in ``bv_shift_left`` / ``bv_shift_right``:
 the mux-based barrel shifter iterated over the shift-amount bits and simply
@@ -25,10 +25,10 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.spirehdl_aiger import _AIG, lit_const0
-from spirehdl.spirehdl import UInt, Const, cat, reset_shared_cache
-from spirehdl.spirehdl_module import Module
-from spirehdl.helpers import refactor_module_to_aig, run_vectors
+from spire.aiger import _AIG, lit_const0
+from spire.expr import UInt, Const, cat, reset_shared_cache
+from spire.component import Netlist
+from spire.helpers import refactor_module_to_aig, run_vectors
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ def test_variable_shift_handles_overshift(op: str, width: int):
     """``x << s`` / ``x >> s`` with a variable amount ``s`` that can exceed the
     output width must zero-fill, not alias to ``s`` modulo a power of two."""
     reset_shared_cache()
-    w_out = width                       # SpireHDL keeps source width for variable shifts
+    w_out = width                       # Spire keeps source width for variable shifts
     mask = (1 << w_out) - 1
 
     aig = _AIG()
@@ -224,10 +224,10 @@ def test_shift_module_end_to_end():
     style) shifts, export it through the AIGER back-end and check the bits.
 
     ``shl32`` reproduces the Verilog auto-widen idiom from the cpu_pipe ALU:
-    ``reg [31:0] shl; shl <= src << tgt;`` -- in SpireHDL the source must be
+    ``reg [31:0] shl; shl <= src << tgt;`` -- in Spire the source must be
     widened explicitly first via ``cat`` before the variable shift."""
     reset_shared_cache()
-    m = Module("ShiftAlu", with_clock=False, with_reset=False)
+    m = Netlist("ShiftAlu", with_clock=False, with_reset=False)
     src = m.input(UInt(16), "src")
     tgt = m.input(UInt(16), "tgt")
     shl16 = m.output(UInt(16), "shl16")   # truncating 16-bit left shift
@@ -252,7 +252,7 @@ def test_shift_module_end_to_end():
                 },
             ))
 
-    # 1) SpireHDL Simulator -- confirms the golden vectors match the DSL semantics.
+    # 1) Spire Simulator -- confirms the golden vectors match the DSL semantics.
     run_vectors(m, vecs)
     # 2) AIGER back-end -- the path the bug lived on.
     m_aig = refactor_module_to_aig(m, optimize=False)

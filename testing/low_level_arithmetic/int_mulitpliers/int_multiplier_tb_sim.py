@@ -1,13 +1,13 @@
 from enum import Enum
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption, TwoInputAritEncodings, PPAOption, PPGOption
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, MultiplierTestVectors
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import MultiplierTestVectorsInt, StageBasedMultiplierBasic
-from spirehdl.arithmetic.int_multipliers.multipliers.multipliers_ext_optimized import OptimizedMultiplier, OptimizedMultiplierFrom4BitBlocksStrong
-from spirehdl.arithmetic.int_multipliers.multipliers.multipliers_ext import StarMultiplier
-from spirehdl.helpers import extract_yosys_metrics_from_verilog_file, get_yosys_metrics, run_vectors, run_vectors_on_simulator
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_verilog_testbench import TestbenchGenSimulator, write_vector_data_file
-from spirehdl.various.vcd_writer import write_vcd
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption, TwoInputAritEncodings, PPAOption, PPGOption
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding, MultiplierTestVectors
+from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import MultiplierTestVectorsInt, StageBasedMultiplierBasic
+from spire.arithmetic.int_multipliers.multipliers.multipliers_ext_optimized import OptimizedMultiplier, OptimizedMultiplierFrom4BitBlocksStrong
+from spire.arithmetic.int_multipliers.multipliers.multipliers_ext import StarMultiplier
+from spire.helpers import extract_yosys_metrics_from_verilog_file, get_yosys_metrics, run_vectors, run_vectors_on_simulator
+from spire.simulator import Simulator
+from spire.verilog_testbench import TestbenchGenSimulator, write_vector_data_file
+from spire.various.vcd_writer import write_vcd
 
 
 def int_tb_sim():

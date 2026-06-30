@@ -1,7 +1,7 @@
 """Tests for ``MemoryPrimitive`` — the Component-based memory built via ``custom_verilog``.
 
 Mirrors ``testing/test_memory.py`` (built-in ``Memory``) so the two can be compared
-side-by-side, plus an aggregate-element-type test that the built-in ``Memory``
+side-by-side, plus an composite-element-type test that the built-in ``Memory``
 cannot express.
 """
 
@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from spirehdl.spirehdl import (
+from spire.expr import (
     Bool,
     Const,
     Signal,
@@ -19,10 +19,10 @@ from spirehdl.spirehdl import (
     Wire,
     reset_shared_cache,
 )
-from spirehdl.spirehdl_module import Component, Module
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.primitives import MemoryPrimitive
-from spirehdl.aggregate.aggregate_record import AggregateRecord
+from spire.component import Component, Netlist
+from spire.simulator import Simulator
+from spire.primitives import MemoryPrimitive
+from spire.composite.record import CompositeRecord
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ from spirehdl.aggregate.aggregate_record import AggregateRecord
 def _build_fifo16(*, registered_read: bool = False, with_reset_arm: bool = True, init=None):
     """Reset-armed, async-read RAM, depth=16, width=9.
 
-    Returns the constructed ``Module`` and the inner ``MemoryPrimitive`` instance
+    Returns the constructed ``Netlist`` and the inner ``MemoryPrimitive`` instance
     name (always ``"fifo"``).
     """
 
@@ -63,7 +63,7 @@ def _build_fifo16(*, registered_read: bool = False, with_reset_arm: bool = True,
                 with_reset_arm=with_reset_arm,
                 init=init,
                 name="fifo",
-            ).make_internal()
+            )
             mem.io.write_addr   <<= self.io.addr_w
             mem.io.write_data   <<= self.io.din
             mem.io.write_enable <<= self.io.we
@@ -99,7 +99,7 @@ def _build_rom8(init):
                 registered_read=True,
                 init=init,
                 name="rom",
-            ).make_internal()
+            )
             rom.io.read_addr   <<= self.io.addr
             rom.io.read_enable <<= self.io.re
             # write port is required at the boundary but tied off here (ROM behavior).
@@ -220,16 +220,16 @@ def test_sim_rom_init_and_registered_read():
 
 
 # ---------------------------------------------------------------------------
-# Aggregate element type — the capability the built-in Memory lacks.
+# Composite element type — the capability the built-in Memory lacks.
 # ---------------------------------------------------------------------------
 
-class _Bus(AggregateRecord):
-    data  = Wire(UInt(8))
-    valid = Wire(UInt(1))
+class _Bus(CompositeRecord):
+    def __init__(self):
+        super().__init__(data=Wire(UInt(8)), valid=Wire(UInt(1)))
 
 
-def test_sim_aggregate_elem_type():
-    """Element type is an HDLAggregate. User packs / unpacks at the port boundary."""
+def test_sim_composite_elem_type():
+    """Element type is an HDLComposite. User packs / unpacks at the port boundary."""
 
     bus_width = _Bus().width  # 9 bits
 
@@ -256,7 +256,7 @@ def test_sim_aggregate_elem_type():
             self.elaborate()
 
         def elaborate(self):
-            mem = MemoryPrimitive(_Bus, depth=4, name="busmem").make_internal()
+            mem = MemoryPrimitive(_Bus, depth=4, name="busmem")
             # Pack input bus into UInt(9) for the write port.
             bus_in = _Bus()
             bus_in.data  <<= self.io.din_data
@@ -275,7 +275,7 @@ def test_sim_aggregate_elem_type():
     m = TopAgg().to_module(name="aggmem", with_clock=True, with_reset=True)
     # Sanity: width is what we expect.
     assert bus_width == 9
-    # Storage array width matches the packed aggregate.
+    # Storage array width matches the packed composite.
     v = m.to_verilog()
     assert "reg [8:0] busmem[0:3];" in v
 

@@ -3,14 +3,14 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.optimize.fsm._emit import restore_encoding
-from spirehdl.optimize.fsm._table import (
+from spire.optimize.fsm._emit import restore_encoding
+from spire.optimize.fsm._table import (
     MAX_INPUT_COMBINATIONS, TooLargeForExhaustiveExtraction, extract_transition_table,
 )
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_control_structures import case_, default, if_, else_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_state import Encoding, State, state
+from spire.expr import Bool, UInt
+from spire.control_structures import case_, default, if_, else_, switch_
+from spire.component import Netlist
+from spire.state import Encoding, State, state
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ def _restore_case10():
 def _build_case10():
     """Build the case10 FSM exactly as in the RTLRewriter benchmark.
     Returns (module, reg, out, x) for downstream tests."""
-    m = Module("case10", with_clock=True, with_reset=False)
+    m = Netlist("case10", with_clock=True, with_reset=False)
     x = m.input(Bool(), "x")
     out = m.output(UInt(1), "out")
     reg = m.reg(Case10.typ, "reg", init=Case10.S0)
@@ -104,7 +104,7 @@ def test_extract_with_no_outputs():
 
 
 def test_extract_raises_when_input_domain_too_large():
-    m = Module("t", with_clock=True, with_reset=False)
+    m = Netlist("t", with_clock=True, with_reset=False)
     big = m.input(UInt(8), "big_input")
     big2 = m.input(UInt(10), "big_input2")
     reg = m.reg(Case10.typ, "reg", init=Case10.S0)
@@ -119,7 +119,7 @@ def test_extract_raises_when_input_domain_too_large():
 
 
 def test_extract_raises_when_reg_has_no_driver():
-    m = Module("t", with_clock=True, with_reset=False)
+    m = Netlist("t", with_clock=True, with_reset=False)
     reg = m.reg(Case10.typ, "reg", init=Case10.S0)
     # Note: no <<= assignment to reg.
     with pytest.raises(ValueError, match="no driver"):

@@ -15,17 +15,17 @@ sys.path.append(ROOT)
 
 import numpy as np
 
-from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode, fp_encode
-from spirehdl.arithmetic.floating_point.fp_mul_testvectors import (
+from spire.arithmetic.floating_point.fp_encoding import fp_decode, fp_encode
+from spire.arithmetic.floating_point.fp_mul_testvectors import (
     FpMulTestVectors,
     FpMulTestVectorsExhaustive,
     _should_skip,
 )
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import run_vectors_aby
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import FpMulSN, build_fp_mul_sn
-from spirehdl.helpers import run_vectors_on_simulator
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.arithmetic.floating_point.fp_mul_testvectors import (
+from spire.arithmetic.floating_point.float_mult import run_vectors_aby
+from spire.arithmetic.floating_point.float_mult_sn import FpMulSN, build_fp_mul_sn
+from spire.helpers import run_vectors_on_simulator
+from spire.simulator import Simulator
+from spire.arithmetic.floating_point.fp_mul_testvectors import (
     build_bf16_subnormal_ext_vectors,
     build_bf16_subnormal_vectors,
     build_bf16_vectors,
@@ -36,7 +36,7 @@ from spirehdl.arithmetic.floating_point.fp_mul_testvectors import (
 
 
 def _sn_normal_vectors(EW, FW):
-    from spirehdl.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors
+    from spire.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors
     return build_fp_vectors(EW, FW, subnormals=True)
 
 

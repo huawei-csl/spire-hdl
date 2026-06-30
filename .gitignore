@@ -30,3 +30,4 @@ benchmarks/*
 tests/*/*.v
 issue/*
 internal_docs/*
+metadocs/*

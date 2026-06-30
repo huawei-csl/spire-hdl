@@ -6,17 +6,17 @@ from typing import Callable, Dict, List, Tuple
 
 # --- your libs (adjust paths as needed) ---
 from aigverse import equivalence_checking, simulate, write_aiger
-from spirehdl.aig.aig_aigerverse import _get_aag_sym, file_to_lines, read_aag_into_aig, conv_aag_into_aig
-from spirehdl.helpers import run_vectors
-from spirehdl.spirehdl import UInt, Bool, reset_shared_cache
-from spirehdl.spirehdl_aiger import AigerExporter, AigerImporter
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_module import IOCollector
-from spirehdl.aig.aig_yosys import verilog_to_aag_via_yosys
-from spirehdl.arithmetic.floating_point.fp_encoding import fp_decode
-from spirehdl.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors  # generic EW,FW vectors/decoder
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
+from spire.aig.aig_aigerverse import _get_aag_sym, file_to_lines, read_aag_into_aig, conv_aag_into_aig
+from spire.helpers import run_vectors
+from spire.expr import UInt, Bool, reset_shared_cache
+from spire.aiger import AigerExporter, AigerImporter
+from spire.component import Netlist
+from spire.simulator import Simulator
+from spire.component import IOCollector
+from spire.aig.aig_yosys import verilog_to_aag_via_yosys
+from spire.arithmetic.floating_point.fp_encoding import fp_decode
+from spire.arithmetic.floating_point.fp_mul_testvectors import build_fp_vectors  # generic EW,FW vectors/decoder
+from spire.arithmetic.floating_point.float_mult_sn import build_fp_mul_sn
 
 # Pyosys
 
@@ -25,7 +25,7 @@ from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_
 # -----------------------------
 
 
-def write_temp_verilog(m: Module, top_name: str | None = None) -> str:
+def write_temp_verilog(m: Netlist, top_name: str | None = None) -> str:
     """Write module Verilog to a temporary file and return the path."""
     if top_name and m.name != top_name:
         # rename for convenience
@@ -39,8 +39,8 @@ def write_temp_verilog(m: Module, top_name: str | None = None) -> str:
     return path
 
 
-def spirehdl_to_aig_via_exporter(m: Module):
-    """SpireHDL → AAGER lines (ASCII) and AIG object (via read_aag_into_aig)."""
+def spire_to_aig_via_exporter(m: Netlist):
+    """Spire → AAGER lines (ASCII) and AIG object (via read_aag_into_aig)."""
     aag_lines = AigerExporter(m).get_aag()
     # If you want an AIG object as well:
     fd, tmp = tempfile.mkstemp(suffix=".aag")
@@ -51,12 +51,12 @@ def spirehdl_to_aig_via_exporter(m: Module):
     return aag_lines, aig
 
 
-def roundtrip_aiger_back_to_spirehdl(aag_lines: List[str], *, name="Imported") -> Module:
-    """Import AAG (with symbols kept) back into SpireHDL."""
+def roundtrip_aiger_back_to_spire(aag_lines: List[str], *, name="Imported") -> Netlist:
+    """Import AAG (with symbols kept) back into Spire."""
     # Keep symbol table (last lines); leave as-is if already present
     aag_sym = _get_aag_sym(aag_lines)
     aag_for_import = aag_lines[:-2] + aag_sym if aag_sym else aag_lines
-    return AigerImporter(aag_for_import).get_spirehdl_module(name)
+    return AigerImporter(aag_for_import).get_spire_module(name)
 
 
 # -----------------------------
@@ -64,9 +64,9 @@ def roundtrip_aiger_back_to_spirehdl(aag_lines: List[str], *, name="Imported") -
 # -----------------------------
 
 
-def build_logic3() -> Tuple[Module, Dict[str, UInt]]:
+def build_logic3() -> Tuple[Netlist, Dict[str, UInt]]:
     """y = x0 & (x1 | x2)"""
-    m = Module("Logic3", with_clock=False, with_reset=False)
+    m = Netlist("Logic3", with_clock=False, with_reset=False)
     x0 = m.input(Bool(), "x0")
     x1 = m.input(Bool(), "x1")
     x2 = m.input(Bool(), "x2")
@@ -82,8 +82,8 @@ def build_logic3() -> Tuple[Module, Dict[str, UInt]]:
     return m, spec, vecs
 
 
-def build_adder(W: int = 8) -> Tuple[Module, Dict[str, UInt], List]:
-    m = Module(f"Add{W}", with_clock=False, with_reset=False)
+def build_adder(W: int = 8) -> Tuple[Netlist, Dict[str, UInt], List]:
+    m = Netlist(f"Add{W}", with_clock=False, with_reset=False)
     a = m.input(UInt(W), "a")
     b = m.input(UInt(W), "b")
     y = m.output(UInt(W + 1), "y")
@@ -264,18 +264,18 @@ def permute_aag_lines_by_pi_order(
 # -----------------------------
 
 
-def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=None, equivalence_check=True) -> None:
+def run_test_one_module(m: Netlist, spec: Dict[str, UInt], vectors, *, decoder=None, equivalence_check=True) -> None:
     print(f"\n=== {m.name} ===")
 
     # 1) Original sim
     print("Sim (original) …")
     run_vectors(m, vectors, decoder=decoder)
 
-    # 2) SpireHDL → AIGER (exporter) → AIG
-    aag_lines, aig_exp = spirehdl_to_aig_via_exporter(m)
+    # 2) Spire → AIGER (exporter) → AIG
+    aag_lines, aig_exp = spire_to_aig_via_exporter(m)
 
-    # optional agi to SpireHDL module
-    # m2 = roundtrip_aiger_back_to_spirehdl(aag_lines, name=m.name+"_exp")
+    # optional agi to Spire module
+    # m2 = roundtrip_aiger_back_to_spire(aag_lines, name=m.name+"_exp")
 
     # 3) Verilog → Pyosys → AIGER → AIG
     vpath = write_temp_verilog(m, top_name=m.name)
@@ -289,13 +289,13 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
 
     # after you produced aag_path with yosys:
     aag_back_lines = file_to_lines(aag_path)
-    m_back_raw = AigerImporter(aag_back_lines).get_spirehdl_module("BackRaw")
+    m_back_raw = AigerImporter(aag_back_lines).get_spire_module("BackRaw")
     # exporter AIG from the raw imported module (no IOCollector yet)
-    aag_from_raw, aig_from_raw = spirehdl_to_aig_via_exporter(m_back_raw)
+    aag_from_raw, aig_from_raw = spire_to_aig_via_exporter(m_back_raw)
     # yosys AIG
     aig_yosys = read_aag_into_aig(aag_path)
 
-    assert equivalence_checking(aig_from_raw, aig_yosys), "Importer produced a non-equivalent SpireHDL netlist BEFORE regrouping"
+    assert equivalence_checking(aig_from_raw, aig_yosys), "Importer produced a non-equivalent Spire netlist BEFORE regrouping"
 
     # Normalize PI order (by name) before equivalence
     order_exp, po_order_exp = build_io_order(aag_lines)  # e.g., ["a[0]",...,"b[0]",...]
@@ -313,10 +313,10 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
         print("AIG equivalence (exporter vs pyosys) …")
         assert equivalence_checking(aig_exp, aig_pyo), "AIGs not equivalent!"
 
-    # 5) AAG (with symbols) → SpireHDL
+    # 5) AAG (with symbols) → Spire
     aag_back = file_to_lines(aag_path)
-    m_back = AigerImporter(aag_back).get_spirehdl_module(m.name + "_back")
-    # m_back = roundtrip_aiger_back_to_spirehdl(aag_back, name=m.name + "_back")
+    m_back = AigerImporter(aag_back).get_spire_module(m.name + "_back")
+    # m_back = roundtrip_aiger_back_to_spire(aag_back, name=m.name + "_back")
 
     # 6) Regroup I/Os to match original port widths
     IOCollector().group(m_back, spec)
@@ -326,7 +326,7 @@ def run_test_one_module(m: Module, spec: Dict[str, UInt], vectors, *, decoder=No
     run_vectors(m_back, vectors, decoder=decoder)
 
 
-def gen_m_case(i: int) -> Tuple[Module, Dict[str, UInt], List, Callable | None]:
+def gen_m_case(i: int) -> Tuple[Netlist, Dict[str, UInt], List, Callable | None]:
     reset_shared_cache()
     if i == 0:
         return build_logic3() + (None,)

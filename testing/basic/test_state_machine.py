@@ -1,8 +1,8 @@
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_state import Encoding, State, state
-from spirehdl.spirehdl_control_structures import case_, default, if_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator, _sid
+from spire.expr import Bool, UInt
+from spire.state import Encoding, State, state
+from spire.control_structures import case_, default, if_, switch_
+from spire.component import Netlist
+from spire.simulator import Simulator, _sid
 
 
 class BinaryFSM(State, encoding=Encoding.BINARY):
@@ -51,7 +51,7 @@ def test_state_gray_encoding():
 
 def test_state_machine_simulation():
     """Simple 3-state FSM: IDLE -> RUN -> DONE -> IDLE, controlled by 'go' input."""
-    m = Module("FSM", with_clock=True, with_reset=False)
+    m = Netlist("FSM", with_clock=True, with_reset=False)
     go = m.input(Bool(), "go")
     reg = m.reg(BinaryFSM.typ, "state", init=BinaryFSM.IDLE)
     out = m.output(UInt(2), "out")

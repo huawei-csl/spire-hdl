@@ -1,7 +1,7 @@
 # FSM and State-Encoding Optimization
 
 Two opt-in context managers in
-[`spirehdl/optimize/fsm/`](../src/spirehdl/optimize/fsm/) add automatic optimization passes on
+[`spire/optimize/fsm/`](../src/spire/optimize/fsm/) add automatic optimization passes on
 top of the basic [`State`](README_state_machines.md) API:
 
 | Wrapper | What it does | When to use it |
@@ -14,8 +14,15 @@ wanted. Critically, the user's FSM body inside the wrapper is *byte-identical*
 to the un-optimised version — same `switch_/case_/if_/else_` you already
 write. The optimization happens on `__exit__`.
 
+> **Note — these two passes operate on the lowered `Netlist` IR.** Unlike the rest of
+> Spire (where you author a `Component` and never touch the IR), `optimized_fsm` /
+> `optimized_encoding` take a `module=` netlist handle and rewrite `module._signals` in
+> place, so the examples below build a `Netlist` directly. The FSM body itself — the
+> `State` declaration and the `switch_`/`case_`/`if_` block — is exactly what you'd write
+> inside a `Component.elaborate()`.
+
 ```python
-from spirehdl.spirehdl_state import (
+from spire.state import (
     State, Encoding, state,
     optimized_fsm, optimized_encoding,
 )
@@ -52,16 +59,16 @@ every state in a class shares its representative's value, and runs
 ### Worked example — case10 (the canonical 7→4 case)
 
 ```python
-from spirehdl.spirehdl_state import State, Encoding, state, optimized_fsm
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_control_structures import case_, default, if_, else_, switch_
+from spire.state import State, Encoding, state, optimized_fsm
+from spire.expr import Bool, UInt
+from spire.ir import Netlist
+from spire.control_structures import case_, default, if_, else_, switch_
 
 class S(State, encoding=Encoding.BINARY):
     S0 = state(); S1 = state(); S2 = state()
     S3 = state(); S4 = state(); S5 = state(); S6 = state()
 
-m = Module("example", with_clock=True, with_reset=False)
+m = Netlist("example", with_clock=True, with_reset=False)
 x   = m.input(Bool(), "x")
 out = m.output(UInt(1), "out")
 reg = m.reg(S.typ, "state_reg", init=S.S0)
@@ -94,7 +101,7 @@ collapses the now-redundant duplicates so synthesis sees a tight 4-state FSM.
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `reg` | — | The FSM state register (an `m.reg(...)` instance). |
-| `module` | — | The `Module` containing `reg`. Required so `apply_simplify` can run after rewriting. |
+| `module` | — | The `Netlist` containing `reg`. Required so `apply_simplify` can run after rewriting. |
 | `minimize` | `True` | Master switch. When `False`, the wrapper is a no-op marker. |
 | `outputs` | `()` | Moore outputs whose drivers participate in the equivalence-class signature (initial Hopcroft partition keys on outputs). |
 | `state_cls` | auto-inferred | Override the State subclass driving `reg`. Inference walks `reg._driver` for the first tagged Const. |
@@ -118,14 +125,14 @@ not just FSMs.
 ### Worked example — ALU opcode dispatch (no FSM)
 
 ```python
-from spirehdl.spirehdl_state import State, Encoding, state, optimized_encoding
-from spirehdl.spirehdl import UInt, mux
-from spirehdl.spirehdl_module import Module
+from spire.state import State, Encoding, state, optimized_encoding
+from spire.expr import UInt, mux
+from spire.ir import Netlist
 
 class Op(State, encoding=Encoding.BINARY):
     ADD = state(); SUB = state(); AND = state(); OR = state(); XOR = state()
 
-m = Module("alu", with_clock=False, with_reset=False)
+m = Netlist("alu", with_clock=False, with_reset=False)
 op = m.input(Op.typ, "op")
 a  = m.input(UInt(8), "a")
 b  = m.input(UInt(8), "b")
@@ -151,7 +158,7 @@ the design (and any subsequent uses).
 | `predefined` | `n ≤ 2` | Tries `BINARY` and `GRAY` codes (no widening). 2 cost-fn calls. |
 | `exhaustive` | `n! ≤ 5040` (so `n ≤ 7`) | All permutations of `n` codes from the universe of `2^width`. Up to ~5 040 cost-fn calls. |
 | `swap` | otherwise | Pair-swap accept-on-improvement, 4 random restarts × 200 iters. ~800 cost-fn calls. |
-| `adjacency` | never (opt-in) | Two-stage: synthesis-free weighted-Hamming screen over every encoding (sub-second), then verify the real `cost_fn` on the top `top_k` (default 64). Falls back to `swap` when nested `optimized_fsm` groups are present or the transition table can't be extracted. Faster than `exhaustive`; more robust than `swap` for noisy objectives (e.g. `adp_proxy`). See [`_adjacency.py`](../src/spirehdl/optimize/fsm/_adjacency.py). |
+| `adjacency` | never (opt-in) | Two-stage: synthesis-free weighted-Hamming screen over every encoding (sub-second), then verify the real `cost_fn` on the top `top_k` (default 64). Falls back to `swap` when nested `optimized_fsm` groups are present or the transition table can't be extracted. Faster than `exhaustive`; more robust than `swap` for noisy objectives (e.g. `adp_proxy`). See [`_adjacency.py`](../src/spire/optimize/fsm/_adjacency.py). |
 | `anneal` | never (future work) | Reserved name; currently raises `NotImplementedError`. |
 | `auto` | — | Meta-strategy: picks one of the above based on `n` (see column above). Default. |
 
@@ -173,7 +180,7 @@ with optimized_encoding(MyStates, module=m, search="adjacency", top_k=64):
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `state_cls` | — | The State subclass to re-encode. |
-| `module` | — | The `Module` whose Verilog gets synthesised for each candidate assignment. |
+| `module` | — | The `Netlist` whose Verilog gets synthesised for each candidate assignment. |
 | `objective` | `"cells"` | Synthesis metric to minimise. One of `cells`, `wires`, `transistors` (via in-process pyosys), `aig_gates`, `aig_depth`, `adp_proxy` (= `aig_gates × aig_depth`, a PDK-free area×delay proxy; AIG metrics via aigverse). AIG objectives require the combinational cone, so `adp_proxy` auto-enables `bit_level_emit`. |
 | `search` | `"auto"` | Strategy (see ladder above). One of `predefined`, `exhaustive`, `swap`, `adjacency`, `anneal`, `auto`. |
 | `width` | `state_cls._width` | Width of the encoding. Width-changing search (widen for `ONEHOT`, etc.) is **future work** — must equal the current width. |
@@ -328,7 +335,7 @@ DSL hooks.**
 is an `ExprVisitor[int]` that concretely evaluates an Expr DAG under a
 signal-binding environment. Used by `extract_transition_table` to
 enumerate `(state_value × input_combination) → (next_state, output)`
-tuples. The operator table mirrors `spirehdl_simplify._fold_op2` so
+tuples. The operator table mirrors `simplify._fold_op2` so
 symbolic eval never diverges from the peephole simplifier.
 
 **In-place State Const mutation.** `apply_encoding(state_cls, assignment)`
@@ -354,9 +361,9 @@ states that Hopcroft just merged.
 - **Input domain cap** on FSM transition-table extraction:
   `MAX_INPUT_COMBINATIONS = 65 536`. When exceeded, minimization is
   silently skipped (encoding search still runs).
-- **Single-module scope.** `optimized_encoding(state_cls, module=m)`
-  optimises one Module at a time. Multi-Module designs that share a
-  State class need one wrapper per Module.
+- **Single-netlist scope.** `optimized_encoding(state_cls, module=m)`
+  optimises one `Netlist` at a time. Designs split across several netlists that
+  share a State class need one wrapper per netlist.
 - **Mealy guards over wide data inputs** are enumerated by exhaustive
   product. Narrow inputs are fine; for wide combined input domains,
   consider partitioning the FSM.

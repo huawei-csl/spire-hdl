@@ -1,8 +1,8 @@
 """Hopcroft DFA minimisation (Step 7)."""
 from __future__ import annotations
 
-from spirehdl.optimize.fsm._hopcroft import equivalence_classes, minimize_fsm
-from spirehdl.optimize.fsm._table import TransitionTable
+from spire.optimize.fsm._hopcroft import equivalence_classes, minimize_fsm
+from spire.optimize.fsm._table import TransitionTable
 
 
 def _make_table(

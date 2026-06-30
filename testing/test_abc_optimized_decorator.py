@@ -14,11 +14,11 @@ from __future__ import annotations
 import random
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-from spirehdl.spirehdl import Expr, HDLType, Signal, UInt, reset_shared_cache
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_aiger import AigerExporter
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.optimize import abc_optimized, clear_optimization_cache
+from spire.expr import Expr, HDLType, Signal, UInt, reset_shared_cache
+from spire.component import Netlist
+from spire.aiger import AigerExporter
+from spire.simulator import Simulator
+from spire.optimize import abc_optimized, clear_optimization_cache
 
 
 # ---------------------------------------------------------------------------
@@ -29,8 +29,8 @@ def wrap_in_module(
     name: str,
     input_specs: Dict[str, HDLType],
     build_fn: Callable[..., Union[Expr, Tuple[Expr, ...]]],
-) -> Module:
-    m = Module(name, with_clock=False, with_reset=False)
+) -> Netlist:
+    m = Netlist(name, with_clock=False, with_reset=False)
     inputs: Dict[str, Signal] = {}
     for pname, typ in input_specs.items():
         inputs[pname] = m.input(typ, pname)
@@ -46,7 +46,7 @@ def wrap_in_module(
     return m
 
 
-def get_aig_stats(module: Module) -> Dict[str, int]:
+def get_aig_stats(module: Netlist) -> Dict[str, int]:
     """Get AIG gate count and depth from the AAG header."""
     aag_lines = AigerExporter(module).get_aag()
     header = aag_lines[0].split()
@@ -55,7 +55,7 @@ def get_aig_stats(module: Module) -> Dict[str, int]:
 
 
 def simulate_module(
-    module: Module,
+    module: Netlist,
     test_vectors: List[Dict[str, int]],
 ) -> List[Dict[str, int]]:
     sim = Simulator(module)

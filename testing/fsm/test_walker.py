@@ -1,12 +1,12 @@
 """Walker (Step 4 of the FSM-encoding-search plan)."""
 from __future__ import annotations
 
-from spirehdl.optimize.fsm._walker import (
+from spire.optimize.fsm._walker import (
     find_input_signals, find_state_consts, is_state_const, walk,
 )
-from spirehdl.spirehdl import Bool, Const, UInt, cat, mux
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_state import Encoding, State, state
+from spire.expr import Bool, Const, UInt, cat, mux
+from spire.component import Netlist
+from spire.state import Encoding, State, state
 
 
 class S(State, encoding=Encoding.BINARY):
@@ -31,7 +31,7 @@ def test_is_state_const_predicate():
 
 def test_walker_finds_state_consts_in_mux_tree():
     """A typical FSM body: nested mux of state Consts under a sel."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     sel = m.input(Bool(), "sel")
     out = m.output(S.typ, "out")
     out <<= mux(sel, S.A, mux(sel, S.B, S.C))
@@ -45,7 +45,7 @@ def test_walker_finds_state_consts_in_mux_tree():
 
 def test_walker_dedup_in_find_state_consts():
     """Find returns at most one entry per Const object even if referenced twice."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     sel = m.input(Bool(), "sel")
     # Reference S.A in both branches → same Const object referenced twice.
     out = m.output(S.typ, "out")
@@ -58,7 +58,7 @@ def test_walker_dedup_in_find_state_consts():
 
 
 def test_walker_ignores_other_state_class():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     sel = m.input(Bool(), "sel")
     out = m.output(S.typ, "out")
     # Mixed: S and T constants — wrong dimensions intentionally, just structurally.
@@ -76,7 +76,7 @@ def test_walker_ignores_other_state_class():
 
 
 def test_walker_finds_input_signals():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(Bool(), "a")
     b = m.input(Bool(), "b")
     out = m.output(S.typ, "out")
@@ -93,7 +93,7 @@ def test_walker_finds_input_signals():
 
 
 def test_walker_excludes_passed_signals_from_inputs():
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(Bool(), "a")
     reg = m.reg(S.typ, "reg", init=S.A)
     out = m.output(S.typ, "out")
@@ -107,7 +107,7 @@ def test_walker_excludes_passed_signals_from_inputs():
 
 def test_walker_recurses_through_auto_shared_wires():
     """The walker follows auto-shared CSE wires via their _driver."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     sel = m.input(Bool(), "sel")
     # Force a deeper auto-shared chain by combining many Exprs.
     middle = mux(sel, S.A, S.B)              # → sig_N wraps this Ternary
@@ -130,7 +130,7 @@ def test_walker_const_only_root():
 
 def test_walker_concat_index_state_const():
     """Concat parts can contain state Consts at various indices."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     bit = m.input(Bool(), "bit")
     # cat(...) places parts LSB-first; mix State Consts with arbitrary bits.
     packed = m.wire(UInt(4), "packed")

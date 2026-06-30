@@ -1,4 +1,4 @@
-"""Simulation-verified examples for `spirehdl.spirehdl_state`.
+"""Simulation-verified examples for `spire.state`.
 
 The existing ``test_state_machine.py`` covers the encoding-width contract and
 a 3-state demo. This file exercises richer FSM patterns end-to-end:
@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.spirehdl import Bool, UInt, mux
-from spirehdl.spirehdl_control_structures import case_, default, if_, else_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_state import Encoding, State, state
+from spire.expr import Bool, UInt, mux
+from spire.control_structures import case_, default, if_, else_, switch_
+from spire.component import Netlist
+from spire.simulator import Simulator
+from spire.state import Encoding, State, state
 
 
 # ---------------------------------------------------------------------------
@@ -33,8 +33,8 @@ class Traffic(State, encoding=Encoding.BINARY):
     YELLOW = state()
 
 
-def _build_traffic_fsm() -> tuple[Module, dict]:
-    m = Module("traffic", with_clock=True, with_reset=False)
+def _build_traffic_fsm() -> tuple[Netlist, dict]:
+    m = Netlist("traffic", with_clock=True, with_reset=False)
     go    = m.input(Bool(), "go")
     light = m.output(UInt(2), "light")
     state_reg = m.reg(Traffic.typ, "state_reg", init=Traffic.RED)
@@ -100,8 +100,8 @@ class EdgeDetect(State, encoding=Encoding.BINARY):
     HIGH = state()
 
 
-def _build_edge_detector() -> tuple[Module, dict]:
-    m = Module("edge_detect", with_clock=True, with_reset=False)
+def _build_edge_detector() -> tuple[Netlist, dict]:
+    m = Netlist("edge_detect", with_clock=True, with_reset=False)
     in_bit = m.input(Bool(), "in_bit")
     rising = m.output(Bool(), "rising")
     st = m.reg(EdgeDetect.typ, "st", init=EdgeDetect.LOW)
@@ -149,8 +149,8 @@ class Match1101(State, encoding=Encoding.BINARY):
     # match completes when seeing the final 1; we emit `hit` on that cycle
 
 
-def _build_pattern_detector() -> tuple[Module, dict]:
-    m = Module("match1101", with_clock=True, with_reset=False)
+def _build_pattern_detector() -> tuple[Netlist, dict]:
+    m = Netlist("match1101", with_clock=True, with_reset=False)
     b   = m.input(Bool(), "b")
     hit = m.output(Bool(), "hit")
     st  = m.reg(Match1101.typ, "st", init=Match1101.S0)
@@ -228,7 +228,7 @@ class CounterFSM(State, encoding=Encoding.BINARY):
 
 
 def test_counter_fsm_with_sync_reset():
-    m = Module("counter_fsm", with_clock=True, with_reset=False)
+    m = Netlist("counter_fsm", with_clock=True, with_reset=False)
     sync_rst = m.input(Bool(), "sync_rst")
     out = m.output(CounterFSM.typ, "out")
     st = m.reg(CounterFSM.typ, "st", init=CounterFSM.C0)
@@ -286,9 +286,9 @@ def _make_4state_fsm(encoding):
     return FSM
 
 
-def _build_4state(encoding) -> tuple[Module, dict, type]:
+def _build_4state(encoding) -> tuple[Netlist, dict, type]:
     FSM = _make_4state_fsm(encoding)
-    m = Module(f"fsm4_{encoding.value}", with_clock=True, with_reset=False)
+    m = Netlist(f"fsm4_{encoding.value}", with_clock=True, with_reset=False)
     x = m.input(Bool(), "x")
     st = m.reg(FSM.typ, "st", init=FSM.A)
     # Output = a 2-bit "name index" so we can compare across encodings.

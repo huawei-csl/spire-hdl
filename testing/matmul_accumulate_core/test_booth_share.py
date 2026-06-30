@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption, PPAOption, PPGOption
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel
-from spirehdl.cores.matmul_accumulate.matmul_accumulate_core import MMAcDims, MMAcWidths, max_y_width_unsigned
-from spirehdl.cores.matmul_accumulate.matmul_accumulate_core_fused_precomputed_b_stages import MMAcFusedCfg, MatmulAccumulateComponent, MultiplierConfig
-from spirehdl.helpers import get_yosys_metrics
-from spirehdl.spirehdl_analyzer import _Analyzer
-from spirehdl.spirehdl_simulator import Simulator
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import FSAOption, PPAOption, PPGOption
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding, EncodingModel
+from spire.cores.matmul_accumulate.matmul_accumulate_core import MMAcDims, MMAcWidths, max_y_width_unsigned
+from spire.cores.matmul_accumulate.matmul_accumulate_core_fused_precomputed_b_stages import MMAcFusedCfg, MatmulAccumulateComponent, MultiplierConfig
+from spire.helpers import get_yosys_metrics
+from spire.analyzer import _Analyzer
+from spire.simulator import Simulator
 
 
 def run_test(dim: int, share: bool, seed: int = 42):
@@ -95,7 +95,7 @@ if __name__ == "__main__":
 #
 # Conclusion:
 #   Precomputing the Booth b-decode (use1/use2/neg per group) for each B[k,j] and
-#   sharing it across all dim_m rows reduces the SpireHDL IR operator count by ~5%
+#   sharing it across all dim_m rows reduces the Spire IR operator count by ~5%
 #   (−2,160 op nodes) and cuts Op1 (NOT/INV) nodes by 56% (1,280 → 560), since the
 #   decode expressions are counted once instead of dim_m times.
 #

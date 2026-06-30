@@ -1,12 +1,12 @@
 import pytest
 
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_control_structures import case_, default, else_, elif_, if_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator, _sid
+from spire.expr import Bool, UInt
+from spire.control_structures import case_, default, else_, elif_, if_, switch_
+from spire.component import Netlist
+from spire.simulator import Simulator, _sid
 
 
-def simulate_outputs(module: Module, vectors: list[tuple[dict[str, int], dict[str, int]]]) -> None:
+def simulate_outputs(module: Netlist, vectors: list[tuple[dict[str, int], dict[str, int]]]) -> None:
     sim = Simulator(module)
     for inputs, expected in vectors:
         for name, value in inputs.items():
@@ -17,7 +17,7 @@ def simulate_outputs(module: Module, vectors: list[tuple[dict[str, int], dict[st
 
 
 def test_if_elif_else_priority():
-    m = Module("IfElse", with_clock=False, with_reset=False)
+    m = Netlist("IfElse", with_clock=False, with_reset=False)
     sel_a = m.input(Bool(), "sel_a")
     sel_b = m.input(Bool(), "sel_b")
     out = m.output(UInt(2), "out")
@@ -42,7 +42,7 @@ def test_if_elif_else_priority():
 
 
 def test_register_conditional_assignment():
-    m = Module("RegIf", with_clock=True, with_reset=False)
+    m = Netlist("RegIf", with_clock=True, with_reset=False)
     en = m.input(Bool(), "en")
     value = m.input(UInt(4), "value")
     reg = m.reg(UInt(4), "reg")
@@ -69,7 +69,7 @@ def test_register_conditional_assignment():
 
 
 def test_switch_cases():
-    m = Module("Switch", with_clock=False, with_reset=False)
+    m = Netlist("Switch", with_clock=False, with_reset=False)
     sel = m.input(UInt(2), "sel")
     out = m.output(UInt(4), "out")
 
@@ -94,7 +94,7 @@ def test_switch_cases():
 
 
 def test_nested_switch_without_binding():
-    m = Module("NestedSwitch", with_clock=False, with_reset=False)
+    m = Netlist("NestedSwitch", with_clock=False, with_reset=False)
     outer_sel = m.input(UInt(2), "outer_sel")
     inner_sel = m.input(UInt(2), "inner_sel")
     out = m.output(UInt(4), "out")
@@ -124,7 +124,7 @@ def test_nested_switch_without_binding():
 
 
 def test_missing_default_driver_raises():
-    m = Module("MissingDriver", with_clock=False, with_reset=False)
+    m = Netlist("MissingDriver", with_clock=False, with_reset=False)
     cond = m.input(Bool(), "cond")
     out = m.output(UInt(2), "out")
 

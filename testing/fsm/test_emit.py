@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.optimize.fsm._emit import apply_encoding, restore_encoding, snapshot_encoding
-from spirehdl.spirehdl import Bool, mux
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_state import Encoding, State, state
+from spire.optimize.fsm._emit import apply_encoding, restore_encoding, snapshot_encoding
+from spire.expr import Bool, mux
+from spire.component import Netlist
+from spire.state import Encoding, State, state
 
 
 class S(State, encoding=Encoding.BINARY):
@@ -42,7 +42,7 @@ def test_apply_encoding_updates_state_class_values_dict():
 def test_apply_encoding_propagates_to_existing_expression_tree():
     """The mutation should be visible to Exprs that referenced the Const
     objects *before* apply_encoding was called."""
-    m = Module("t", with_clock=False, with_reset=False)
+    m = Netlist("t", with_clock=False, with_reset=False)
     sel = m.input(Bool(), "sel")
     out = m.output(S.typ, "out")
     # Capture the Expr now; verify post-apply that the Const values changed.
@@ -51,7 +51,7 @@ def test_apply_encoding_propagates_to_existing_expression_tree():
     apply_encoding(S, {"A": 3, "B": 2, "C": 1, "D": 0})
 
     # The Const objects in the driver tree are the SAME objects we mutated.
-    from spirehdl.optimize.fsm._walker import find_state_consts
+    from spire.optimize.fsm._walker import find_state_consts
     consts = find_state_consts([out._driver], S)
     values = {c._state_name: c.value for c in consts}
     assert values["A"] == 3

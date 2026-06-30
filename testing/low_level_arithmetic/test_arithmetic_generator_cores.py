@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from spirehdl.arithmetic.arithmetic_generator import (
+from spire.arithmetic.arithmetic_generator import (
     FpMatmulAccumulateGeneratorConfig,
     GenerationActions,
     MatmulAccumulateGeneratorConfig,
@@ -15,12 +15,12 @@ from spirehdl.arithmetic.arithmetic_generator import (
     generate_matmul_accumulate,
     generate_matmul_accumulate_fused,
 )
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     PPAOption,
     PPGOption,
 )
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding
 
 
 # --- Unsigned matmul-accumulate core ---
@@ -211,7 +211,7 @@ def test_cli_matmulacc_smoke(tmp_path: Path):
     cmd = [
         sys.executable,
         "-m",
-        "spirehdl.arithmetic.arithmetic_generator",
+        "spire.arithmetic.arithmetic_generator",
         "matmulacc",
         "--dim-m", "2",
         "--dim-n", "2",
@@ -248,7 +248,7 @@ def test_cli_matmulacc_fused_smoke(tmp_path: Path):
     cmd = [
         sys.executable,
         "-m",
-        "spirehdl.arithmetic.arithmetic_generator",
+        "spire.arithmetic.arithmetic_generator",
         "matmulacc-fused",
         "--dim-m", "2",
         "--dim-n", "2",
@@ -285,7 +285,7 @@ def test_cli_fpmatmulacc_smoke(tmp_path: Path):
     cmd = [
         sys.executable,
         "-m",
-        "spirehdl.arithmetic.arithmetic_generator",
+        "spire.arithmetic.arithmetic_generator",
         "fpmatmulacc",
         "--dim-m", "2",
         "--dim-n", "2",

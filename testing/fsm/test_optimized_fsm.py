@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.optimize.fsm._emit import restore_encoding
-from spirehdl.optimize.fsm._hopcroft import equivalence_classes
-from spirehdl.optimize.fsm._table import extract_transition_table
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_control_structures import case_, default, if_, else_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.spirehdl_state import (
+from spire.optimize.fsm._emit import restore_encoding
+from spire.optimize.fsm._hopcroft import equivalence_classes
+from spire.optimize.fsm._table import extract_transition_table
+from spire.expr import Bool, UInt
+from spire.control_structures import case_, default, if_, else_, switch_
+from spire.component import Netlist
+from spire.simulator import Simulator
+from spire.state import (
     Encoding, State, optimized_fsm, state,
 )
 
@@ -37,7 +37,7 @@ def _restore_case10():
                               "S4": 4, "S5": 5, "S6": 6})
 
 
-def _build_case10_body(m: Module, reg, out, x):
+def _build_case10_body(m: Netlist, reg, out, x):
     """case10 body (no wrapper)."""
     out <<= 0
     with switch_(reg):
@@ -77,7 +77,7 @@ def test_optimized_fsm_collapses_case10_to_four_classes():
     """The wrapper should detect that case10 has 4 equivalence classes:
     {S0, S3}, {S1}, {S5}, {S2, S4, S6}. After the wrapper exits, the State
     Consts in each class share a single value."""
-    m = Module("case10", with_clock=True, with_reset=False)
+    m = Netlist("case10", with_clock=True, with_reset=False)
     x = m.input(Bool(), "x")
     out = m.output(UInt(1), "out")
     reg = m.reg(Case10.typ, "reg", init=Case10.S0)
@@ -99,7 +99,7 @@ def test_optimized_fsm_collapses_case10_to_four_classes():
 
 def test_minimize_false_is_a_noop():
     """When minimize=False the wrapper must not touch the State class."""
-    m = Module("case10", with_clock=True, with_reset=False)
+    m = Netlist("case10", with_clock=True, with_reset=False)
     x = m.input(Bool(), "x")
     out = m.output(UInt(1), "out")
     reg = m.reg(Case10.typ, "reg", init=Case10.S0)
@@ -117,7 +117,7 @@ def test_already_minimal_fsm_is_unchanged():
     class Three(State, encoding=Encoding.BINARY):
         A = state(); B = state(); C = state()
 
-    m = Module("t3", with_clock=True, with_reset=False)
+    m = Netlist("t3", with_clock=True, with_reset=False)
     x = m.input(Bool(), "x")
     out = m.output(UInt(2), "out")
     reg = m.reg(Three.typ, "reg", init=Three.A)
@@ -147,7 +147,7 @@ def test_post_wrapper_simulation_still_correct():
     """End-to-end: after the wrapper rewrites Consts and runs apply_simplify,
     the FSM must still produce case10's documented output sequence under a
     deterministic input."""
-    m = Module("case10", with_clock=True, with_reset=False)
+    m = Netlist("case10", with_clock=True, with_reset=False)
     x = m.input(Bool(), "x")
     out = m.output(UInt(1), "out")
     reg = m.reg(Case10.typ, "reg", init=Case10.S0)

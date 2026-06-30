@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import pytest
 
-from spirehdl.optimize.fsm._emit import restore_encoding
-from spirehdl.spirehdl import Bool, UInt
-from spirehdl.spirehdl_control_structures import case_, default, if_, else_, switch_
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_state import (
+from spire.optimize.fsm._emit import restore_encoding
+from spire.expr import Bool, UInt
+from spire.control_structures import case_, default, if_, else_, switch_
+from spire.component import Netlist
+from spire.state import (
     Encoding, State, optimized_encoding, optimized_fsm, state,
 )
 
@@ -73,7 +73,7 @@ def test_nested_wrappers_minimize_then_search_synthetic():
     layout, the nested wrappers must (a) reduce to 4 classes, then (b)
     rewrite the representatives onto the preferred values.
     """
-    m = Module("case10", with_clock=True, with_reset=False)
+    m = Netlist("case10", with_clock=True, with_reset=False)
     x = m.input(Bool(), "x")
     out = m.output(UInt(1), "out")
     reg = m.reg(Case10.typ, "state_reg", init=Case10.S0)
@@ -113,10 +113,10 @@ def test_nested_wrappers_case10_real_synth():
     on a specific cell count — just that the nested wrappers produce a valid
     synthesisable module and don't regress on the original. Cells after the
     pipeline must be <= cells before (i.e. optimisation is non-negative)."""
-    from spirehdl.optimize.fsm._cost_oracle import _measure
+    from spire.optimize.fsm._cost_oracle import _measure
 
     # Baseline: build without wrappers, synth, record cells.
-    m_base = Module("case10_base", with_clock=True, with_reset=False)
+    m_base = Netlist("case10_base", with_clock=True, with_reset=False)
     x_b = m_base.input(Bool(), "x")
     out_b = m_base.output(UInt(1), "out")
     reg_b = m_base.reg(Case10.typ, "state_reg", init=Case10.S0)
@@ -128,7 +128,7 @@ def test_nested_wrappers_case10_real_synth():
                               "S4": 4, "S5": 5, "S6": 6})
 
     # Optimised: nested wrappers around a fresh build.
-    m_opt = Module("case10_opt", with_clock=True, with_reset=False)
+    m_opt = Netlist("case10_opt", with_clock=True, with_reset=False)
     x_o = m_opt.input(Bool(), "x")
     out_o = m_opt.output(UInt(1), "out")
     reg_o = m_opt.reg(Case10.typ, "state_reg", init=Case10.S0)

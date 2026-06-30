@@ -5,28 +5,28 @@ from typing import Iterable, List, Literal, Sequence
 
 import numpy as np
 
-from spirehdl.aggregate.aggregate_array import Array
-from spirehdl.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
+from spire.composite.array import Array
+from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib import (
     FSAOption,
     MultiplierOption,
     PPAOption,
     PPGOption,
     TwoInputAritEncodings,
 )
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import Encoding
-from spirehdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
+from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding
+from spire.arithmetic.prefix_adders.adders import StageBasedPrefixAdder
+from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import (
     RippleCarryFinalAdder,
 )
-from spirehdl.helpers import get_yosys_metrics
-from spirehdl.spirehdl import Expr, UInt
-from spirehdl.spirehdl_module import Module
-from spirehdl.spirehdl_simulator import Simulator
+from spire.helpers import get_yosys_metrics
+from spire.expr import Expr, UInt
+from spire.component import Netlist
+from spire.simulator import Simulator
 
 
 @dataclass
 class MultiplierConfig:
-    """Configuration for choosing between SpireHDL operator and explicit multiplier."""
+    """Configuration for choosing between Spire operator and explicit multiplier."""
 
     use_operator: bool = False
     multiplier_opt: MultiplierOption | None = None
@@ -52,7 +52,7 @@ class MultiplierConfig:
             ppa_cls=self.ppa_opt.value,
             fsa_cls=self.fsa_opt.value,
             optim_type=self.optim_type,
-        ).make_internal()
+        )
         multiplier.io.a <<= a
         multiplier.io.b <<= b
         return multiplier.io.y
@@ -60,7 +60,7 @@ class MultiplierConfig:
 
 @dataclass
 class AdderConfig:
-    """Configuration for choosing between SpireHDL operator and explicit adder."""
+    """Configuration for choosing between Spire operator and explicit adder."""
 
     use_operator: bool = False
     signed: bool = False
@@ -80,7 +80,7 @@ class AdderConfig:
             optim_type=self.optim_type,
             fsa_cls=self.fsa_opt.value,
             full_output_bit=self.full_output_bit,
-        ).make_internal()
+        )
         adder.io.a <<= a
         adder.io.b <<= b
         return adder.io.y
@@ -112,7 +112,7 @@ def inner_product(
 
 @dataclass
 class MatmulAccumulateCore:
-    module: Module
+    module: Netlist
     A: Array
     B: Array
     C: Array
@@ -130,13 +130,13 @@ def build_matmul_accumulate_core(
     if dim <= 0 or dim & (dim - 1) != 0:
         raise ValueError("Matrix dimension must be a power of two")
 
-    m = Module("matmul_accumulate_core")
+    m = Netlist("matmul_accumulate_core")
 
     # not for now, but in the future we would like a module, e.g. with IOs. But to convert to a module we need basic hdl types (signals with kind input and output)
-    # maybe have an inner componenet with arrays as input and output (need input output kind for aggregate hdl type?), 
+    # maybe have an inner componenet with arrays as input and output (need input output kind for composite hdl type?), 
     # then wrap an outer comoponent or module with signals as input and output that connect to the inner component
     # io could be defined like this:
-    # class MyRecord(AggregateRecord):
+    # class MyRecord(CompositeRecord):
     #    a: Array = self.A
     #    b: Array = self.B
     #    c: Array = self.C
@@ -179,7 +179,7 @@ def test_mmac_core_basic_simulation():
     b_width = 8
     c_width = 20
 
-    # use SpireHDL operators
+    # use Spire operators
     #mult_cfg = MultiplierConfig(use_operator=True)
     #add_cfg = AdderConfig(use_operator=True, full_output_bit=True)
 

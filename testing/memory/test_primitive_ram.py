@@ -11,10 +11,10 @@ from dataclasses import make_dataclass
 
 import pytest
 
-from spirehdl.spirehdl import Bool, Signal, UInt, reset_shared_cache
-from spirehdl.spirehdl_module import Component
-from spirehdl.spirehdl_simulator import Simulator
-from spirehdl.primitives import RamPrimitive
+from spire.expr import Bool, Signal, UInt, reset_shared_cache
+from spire.component import Component
+from spire.simulator import Simulator
+from spire.primitives import RamPrimitive
 
 
 def _wire(dst, src):
@@ -23,7 +23,7 @@ def _wire(dst, src):
 
 
 def _top_from(ram_factory, io_fields, wiring):
-    """Build a parent Component that exposes a RamPrimitive's ports and returns its Module."""
+    """Build a parent Component that exposes a RamPrimitive's ports and returns its Netlist."""
     class Top(Component):
         def __init__(self):
             IO = make_dataclass("TopIO", [(n, Signal) for n, _ in io_fields])
@@ -32,7 +32,7 @@ def _top_from(ram_factory, io_fields, wiring):
             self.elaborate()
 
         def elaborate(self):
-            ram = ram_factory().make_internal()
+            ram = ram_factory()
             wiring(self, ram)
 
     reset_shared_cache()

@@ -1,20 +1,20 @@
 import pytest
 
-from spirehdl.arithmetic.int_multipliers.eval.testvector_generation import (
+from spire.arithmetic.int_multipliers.eval.testvector_generation import (
     AdderTestVectors,
     Encoding,
     SubtractorTestVectors,
     is_signed,
 )
-from spirehdl.arithmetic.int_multipliers.multipliers.multiplier_stage_core import RippleCarryFinalAdder
-from spirehdl.arithmetic.int_multipliers.stages.fsa_stages import (
+from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import RippleCarryFinalAdder
+from spire.arithmetic.int_multipliers.stages.fsa_stages import (
     BrentKungPrefixFinalStage,
     KoggeStonePrefixFinalStage,
     SklanskyPrefixFinalStage,
 )
-from spirehdl.arithmetic.prefix_adders.adders import StageBasedPrefixAdder, StageBasedSubtractor
-from spirehdl.helpers import run_vectors_on_simulator
-from spirehdl.spirehdl_simulator import Simulator
+from spire.arithmetic.prefix_adders.adders import StageBasedPrefixAdder, StageBasedSubtractor
+from spire.helpers import run_vectors_on_simulator
+from spire.simulator import Simulator
 
 
 FSA_OPTIONS = [

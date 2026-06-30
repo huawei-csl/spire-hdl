@@ -1,19 +1,19 @@
-from spirehdl.spirehdl import reset_shared_cache
+from spire.expr import reset_shared_cache
 from testing.floating_point.synthesise_fp2 import flowy_optimize
 from aigverse import Aig, DepthAig
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult import build_f16_mul, build_fp_mul
-from spirehdl.arithmetic.floating_point.spire_hdl_float_mult_sn import build_fp_mul_sn
-from spirehdl.arithmetic.floating_point.spire_hdl_hif8 import build_hif8_mul_logic
-from spirehdl.helpers import get_yosys_transistor_count
-from spirehdl.spirehdl_aiger import AigerExporter, export_module_to_aiger
-from spirehdl.aig.aig_aigerverse import conv_aag_into_aig, read_aag_into_aig
+from spire.arithmetic.floating_point.float_mult import build_f16_mul, build_fp_mul
+from spire.arithmetic.floating_point.float_mult_sn import build_fp_mul_sn
+from spire.arithmetic.floating_point.hif8 import build_hif8_mul_logic
+from spire.helpers import get_yosys_transistor_count
+from spire.aiger import AigerExporter, export_module_to_aiger
+from spire.aig.aig_aigerverse import conv_aag_into_aig, read_aag_into_aig
 
 from aigverse import aig_resubstitution, sop_refactoring, aig_cut_rewriting, balancing
 
-from spirehdl.spirehdl_module import Module
+from spire.component import Netlist
 
 
-def get_result(m: Module, optim_steps = 200) -> tuple:
+def get_result(m: Netlist, optim_steps = 200) -> tuple:
     agg_lines = AigerExporter(m).get_aag()
     aig = conv_aag_into_aig(agg_lines)
     print("nodes:", aig.size(), "PIs:", aig.num_pis(), "POs:", aig.num_pos())
@@ -35,7 +35,7 @@ def get_result(m: Module, optim_steps = 200) -> tuple:
 
     return aig.size(), DepthAig(aig).num_levels(), nb_transistors
 
-def optimize_m(m: Module) -> Module:
+def optimize_m(m: Netlist) -> Netlist:
     #return m
     return flowy_optimize(m)
 
