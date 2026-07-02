@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from spire.design_db.store import DesignDB, DesignDBError
-from spire.design_db.verify import (CECInapplicable, SlotUnverified, cec_check)
+from spire.design_db.verify import (CECInapplicable, SlotUnverified, VerificationFailed, cec_check)
 
 
 @dataclass
@@ -50,6 +50,35 @@ def _materialize(design: Any, tdir: Path) -> Path:
     target = tdir / "candidate.v"
     target.write_text(text if text.endswith("\n") else text + "\n")
     return target
+
+
+def _aag_port_names(aag_lines: List[str]) -> Dict[str, set]:
+    """Base port names from the AAG symbol table (``i<n> a[3]`` → ``a``)."""
+    import re
+    head = aag_lines[0].split()
+    n_in, n_latch, n_out, n_and = (int(x) for x in head[2:6])
+    names: Dict[str, set] = {"input": set(), "output": set()}
+    for line in aag_lines[1 + n_in + n_latch + n_out + n_and:]:
+        if line == "c":
+            break
+        parts = line.split(maxsplit=1)
+        if len(parts) != 2 or not parts[0] or parts[0][0] not in "io":
+            continue
+        base = re.sub(r"\[\d+\]$", "", parts[1].strip())
+        names["input" if parts[0][0] == "i" else "output"].add(base)
+    return names
+
+
+def _check_ports(aag_lines: List[str], ports: List[Dict[str, Any]]) -> None:
+    """The candidate's interface must match the slot's port spec (clear error beats an abc mystery)."""
+    got = _aag_port_names(aag_lines)
+    want = {"input": {p["name"] for p in ports if p["dir"] == "input"},
+            "output": {p["name"] for p in ports if p["dir"] == "output"}}
+    if got != want:
+        raise VerificationFailed(
+            f"port mismatch vs the slot spec — candidate inputs={sorted(got['input'])} "
+            f"outputs={sorted(got['output'])}, expected inputs={sorted(want['input'])} "
+            f"outputs={sorted(want['output'])}")
 
 
 def _aag_stats(aag_lines: List[str]) -> Dict[str, int]:
@@ -110,6 +139,7 @@ def insert_design(spec_key: str, design: Any, *, source: str,
         # Structural dedup key (also feeds the intrinsic metrics) — heavy import deferred.
         from spire.aig.aig_yosys import verilog_to_aag_lines_via_yosys
         aag_lines = verilog_to_aag_lines_via_yosys(str(design_v))
+        _check_ports(aag_lines, spec.get("ports", []))
         struct_hash = hashlib.sha256("\n".join(aag_lines).encode("utf-8")).hexdigest()
 
         index = d.read_json(slot / "index.json", {})
@@ -136,6 +166,7 @@ def insert_design(spec_key: str, design: Any, *, source: str,
             shutil.rmtree(tmp_dir)
         tmp_dir.mkdir(parents=True)
         shutil.copyfile(design_v, tmp_dir / "design.v")
+        (tmp_dir / "design.aag").write_text("\n".join(aag_lines) + "\n")   # precomputed splice input
         if design_py is not None:
             py = Path(design_py)
             (tmp_dir / "design.py").write_text(py.read_text() if py.exists() else str(design_py))

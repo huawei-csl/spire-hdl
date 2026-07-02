@@ -17,6 +17,9 @@ dynamic = [
     "dependencies"
 ]
 
+[project.scripts]
+spire = "spire.design_db.cli:main"
+
 # Data files matching .gitignore patterns (*.aig, *.map, *.csv) are excluded by hatchling
 # unless listed as artifacts; a plain `include` cannot override the VCS-based exclusion.
 [tool.hatch.build]

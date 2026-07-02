@@ -106,6 +106,19 @@ class DesignDB:
         manifest["slots"][name] = slot
         self.write_json(self.manifest_path, manifest)
 
+    def update_manifest_selection(self, spec_key: str, fields: Dict[str, Any]) -> None:
+        """Record the resolved selection on every manifest entry of this slot."""
+        manifest = self.read_json(self.manifest_path, None)
+        if not manifest:
+            return
+        changed = False
+        for entry in manifest.get("slots", {}).values():
+            if entry.get("spec_key") == spec_key:
+                entry.update(fields)
+                changed = True
+        if changed:
+            self.write_json(self.manifest_path, manifest)
+
     def refresh_manifest_counts(self, spec_key: str, n_designs: int) -> None:
         manifest = self.read_json(self.manifest_path, None)
         if not manifest:
