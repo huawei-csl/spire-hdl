@@ -50,6 +50,13 @@ jobs:
           pip install build
           python -m build
 
+      - name: Smoke-test the built wheel (clean venv install + import)
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install --upgrade pip
+          /tmp/smoke/bin/pip install dist/*.whl
+          /tmp/smoke/bin/python -c "import spire; from spire.component import Component; print('imported spire from', spire.__file__)"
+
       - name: Upload distributions
         uses: actions/upload-artifact@v4
         with:
