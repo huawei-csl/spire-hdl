@@ -17,23 +17,23 @@ dynamic = [
     "dependencies"
 ]
 
-# Tell hatchling what to put into the wheel
-[tool.hatch.build.targets.wheel]
-packages = ["src/spire"]
-include = [
+# Data files matching .gitignore patterns (*.aig, *.map, *.csv) are excluded by hatchling
+# unless listed as artifacts; a plain `include` cannot override the VCS-based exclusion.
+[tool.hatch.build]
+artifacts = [
     "src/spire/arithmetic/int_multipliers/data/**",
     "src/spire/arithmetic/eval/*.json",
     "src/spire/arithmetic/eval/*.csv",
 ]
 
-# Optional but nice: also define sdist the same way
-[tool.hatch.build.targets.sdist]
+# Tell hatchling what to put into the wheel
+[tool.hatch.build.targets.wheel]
 packages = ["src/spire"]
-include = [
-    "src/spire/arithmetic/int_multipliers/data/**",
-    "src/spire/arithmetic/eval/*.json",
-    "src/spire/arithmetic/eval/*.csv",
-]
+
+# The sdist must keep the src/ layout (no path rewriting), otherwise building the
+# wheel from the sdist finds no "src/spire" package and produces an empty wheel.
+[tool.hatch.build.targets.sdist]
+only-include = ["src/spire"]
 
 [tool.hatch.metadata.hooks.requirements_txt]
 files = ["requirements.txt"]

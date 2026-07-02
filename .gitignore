@@ -3,15 +3,15 @@
 *.pyc
 *.v
 *.aig
-!src/spirehdl/arithmetic/int_multipliers/data/optimized/*/*.aig
+!src/spire/arithmetic/int_multipliers/data/optimized/*/*.aig
 *.aag
 *.map
-!src/spirehdl/arithmetic/int_multipliers/data/optimized/*/*.map
+!src/spire/arithmetic/int_multipliers/data/optimized/*/*.map
 *.dot
 *.vscode
 */__pycache__/*
 *.csv
-!src/spirehdl/arithmetic/eval/best_configs.csv
+!src/spire/arithmetic/eval/best_configs.csv
 output/*
 *.history
 *.parquet
@@ -21,7 +21,7 @@ data/*
 *.vcd
 *.dat
 *.json
-!src/spirehdl/arithmetic/eval/best_configs.json
+!src/spire/arithmetic/eval/best_configs.json
 *.zip
 .devcontainer/*
 .claude
