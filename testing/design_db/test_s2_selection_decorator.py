@@ -230,6 +230,24 @@ def test_insert_rejects_port_mismatch(db):
 # --- CLI ------------------------------------------------------------------------------------------
 
 
+def test_seed_original_is_floor_and_idempotent(db):
+    from spire.design_db import seed_original
+    key = register_slot(Adder(), name="adder8")
+    res = seed_original(key)
+    assert res.design_id.startswith("original:") and not res.deduped
+    assert seed_original(key).deduped                        # idempotent via structural dedup
+    sel = select_design(key, objective="area")
+    assert sel.design_id == res.design_id                    # the floor: only candidate = original
+
+
+def test_cli_seed(db, capsys):
+    register_slot(Adder(), name="adder8")
+    capsys.readouterr()
+    assert cli_main(["db", "seed", "--slot", "adder8"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["design_id"].startswith("original:")
+
+
 def test_cli_read_commands_do_not_create_db(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv(DB_ENV, raising=False)
     monkeypatch.chdir(tmp_path)

@@ -189,6 +189,20 @@ def insert_design(spec_key: str, design: Any, *, source: str,
     return InsertResult(design_id, False, metrics)
 
 
+def seed_original(spec_key: str, *, db: Optional[str | Path] = None,
+                  budget_s: Optional[float] = None) -> InsertResult:
+    """Insert the slot's own golden as the baseline candidate (``source="original"``).
+
+    Gives selection a *floor* (argmin can never pick worse than the original) and gives
+    reports/Pareto a baseline to compare against. Idempotent via structural dedup.
+    """
+    d = DesignDB.open(db)
+    golden = d.slot_dir(spec_key) / "golden.v"
+    if not golden.exists():
+        raise DesignDBError(f"slot {spec_key[:12]}… has no golden.v — register it first")
+    return insert_design(spec_key, golden, source="original", db=db, budget_s=budget_s)
+
+
 def _json(obj: Any) -> str:
     import json
     return json.dumps(obj, indent=2, sort_keys=True) + "\n"

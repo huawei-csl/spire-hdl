@@ -96,7 +96,14 @@ spire db init                      # create (or print) the DB root
 spire db ls                        # slots: name, class, #designs, key, selected
 spire db show adder8 --pareto      # one slot as JSON (spec, verification, designs, Pareto front)
 spire db insert cand.v --slot adder8 --source handwritten [--budget 300]
+spire db seed --slot adder8            # insert the slot's own golden as the baseline candidate
 ```
+
+**Seeding the baseline.** `spire db seed` (API: `seed_original(spec_key)`) admits the slot's own
+golden as a design with `source="original"`. This gives selection a *floor* — argmin can never pick
+something worse than the original — and gives reports/Pareto a baseline. Idempotent (structural
+dedup). It is not done automatically at compile time (registration must stay cost-free); fillers
+are expected to seed before generating.
 
 `show`/`ls` are read-only (they never create a DB); `insert` exits 2 with a `REJECTED (...)` line
 on any verification failure. Slots are addressed by manifest name, full key, or a unique key
@@ -162,6 +169,7 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 | `@from_design_db(objective=, metric=, pin=, fill=, db=)` | The selection decorator: register → select → splice; miss ⇒ original logic. |
 | `register_slot(module_or_component, db=None, name=None) -> spec_key` | Register a slot (idempotent): spec + golden + default verification + manifest entry. |
 | `insert_design(spec_key, design, *, source, db=None, design_py=None, budget_s=None, provenance=None) -> InsertResult` | The gate: verify → dedup → stamp metrics → record provenance → admit atomically. `design`: spire `Component`/`Netlist`, Verilog path, or Verilog text. |
+| `seed_original(spec_key, db=None, budget_s=None) -> InsertResult` | Insert the slot's golden as the baseline candidate (`source="original"`) — a selection floor. |
 | `select_design(spec_key, *, objective=, metric=, pin=, sources=, record=)` | Deterministic selection → `SelectionResult` (or None on an empty slot). |
 | `pareto_front(spec_key, objectives=("area","delay"), metric=None)` | The non-dominated set. |
 | `constrained / weighted / lexicographic` | Objective combinators. |

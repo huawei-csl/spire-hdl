@@ -12,7 +12,7 @@ the insert gate; S2 adds selection, the decorator, and the ``spire db`` CLI. Hea
 stays dependency-light.
 """
 from spire.design_db.decorator import from_design_db  # noqa: F401
-from spire.design_db.insert import InsertResult, insert_design  # noqa: F401
+from spire.design_db.insert import InsertResult, insert_design, seed_original  # noqa: F401
 from spire.design_db.keys import CANONICAL_TOP, golden_and_key, normalize, port_spec, spec_key  # noqa: F401
 from spire.design_db.select import (SelectionResult, constrained, lexicographic,  # noqa: F401
                                     metric_value, pareto_front, resolve_metric, select_design,

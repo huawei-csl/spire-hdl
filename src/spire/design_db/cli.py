@@ -81,23 +81,34 @@ def _cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_insert(args: argparse.Namespace) -> int:
+def _gated_insert(run) -> int:
+    """Run an insert-like callable with clean stdout; print the result JSON or REJECTED."""
     import contextlib
     import io
-
-    from spire.design_db.insert import insert_design
-    d = _open(args.db, create=True)
-    key = _resolve_slot(d, args.slot)
     try:
         with contextlib.redirect_stdout(io.StringIO()):     # keep stdout = our JSON only
-            res = insert_design(key, Path(args.design), source=args.source, db=args.db,
-                                budget_s=args.budget)
+            res = run()
     except VerificationError as exc:
         print(f"REJECTED ({type(exc).__name__}): {exc}", file=sys.stderr)
         return 2
     print(json.dumps({"design_id": res.design_id, "deduped": res.deduped,
                       "metrics": res.metrics}, indent=2, sort_keys=True))
     return 0
+
+
+def _cmd_insert(args: argparse.Namespace) -> int:
+    from spire.design_db.insert import insert_design
+    d = _open(args.db, create=True)
+    key = _resolve_slot(d, args.slot)
+    return _gated_insert(lambda: insert_design(key, Path(args.design), source=args.source,
+                                               db=args.db, budget_s=args.budget))
+
+
+def _cmd_seed(args: argparse.Namespace) -> int:
+    from spire.design_db.insert import seed_original
+    d = _open(args.db, create=True)
+    key = _resolve_slot(d, args.slot)
+    return _gated_insert(lambda: seed_original(key, db=args.db, budget_s=args.budget))
 
 
 def main(argv: Optional[list] = None) -> int:
@@ -126,6 +137,13 @@ def main(argv: Optional[list] = None) -> int:
     p.add_argument("--source", default="cli", help="provenance source tag (default: cli)")
     p.add_argument("--budget", type=float, default=None, help="CEC budget in seconds")
     p.set_defaults(func=_cmd_insert)
+
+    p = sub.add_parser("seed", help="insert the slot's own golden as the baseline candidate "
+                                    "(source=original) — a selection floor + report baseline")
+    _common(p); p.add_argument("--slot", required=True,
+                               help="manifest name, spec_key, or unique key prefix")
+    p.add_argument("--budget", type=float, default=None, help="CEC budget in seconds")
+    p.set_defaults(func=_cmd_seed)
 
     args = parser.parse_args(argv)
     try:
