@@ -1,7 +1,7 @@
 # Design DB — a verification-gated library of implementations
 
-> **Status: registration + verification gate + selection decorator + CLI in place.** The simulation
-> verification tiers (`spire db verify`, sequential slots) are coming next and will extend this page.
+> **Status: registration, the verification gate (CEC + sim tiers), the selection decorator, and the
+> CLI are in place.** Remaining: per-technology PPA scoring and the agent fillers (rtlscout-side).
 
 `spire.design_db` is a content-addressed store of **correct implementations of a subcircuit**. For
 each subcircuit — a *slot*, keyed by its golden specification — the DB holds any number of
@@ -118,7 +118,14 @@ spire db ls                        # slots: name, class, #designs, key, selected
 spire db show adder8 --pareto      # one slot as JSON (spec, verification, designs, Pareto front)
 spire db insert cand.v --slot adder8 --source handwritten [--budget 300]
 spire db seed --slot adder8            # insert the slot's own golden as the baseline candidate
+spire db verify --slot mypipe --auto [--vectors 256 --seed 0 --sim-budget 300]
+spire db verify --slot mypipe --stimulus stim.py     # authored stimulus (Tier 2, human)
+spire db verify --slot adder8 --cec [--budget 300]   # (re)confirm CEC on a combinational slot
 ```
+
+`verify` is the explicit, fail-and-choose verification chooser: a bare `verify` defaults to CEC for
+combinational slots and **errors with the options** for sequential ones — there is never an
+auto-fallback, and a frozen sim verification is immutable.
 
 **Seeding the baseline.** `spire db seed` (API: `seed_original(spec_key)`) admits the slot's own
 golden as a design with `source="original"`. This gives selection a *floor* — argmin can never pick
@@ -140,10 +147,12 @@ one-line note is printed on first creation).
 
 ```
 design_db/v1/<spec_key>/        # spec_key = sha256(structural AAG + port spec)
-    spec.json                   # name, ports, class, golden_sha, source_ref, registered_from
+    spec.json                   # name, ports, class, clock, golden_sha, source_ref, registered_from
     golden.v                    # the golden reference candidates are verified against
     starting_point.py           # the decorated function's captured source (fidelity-tagged)
     verification.json           # the frozen verification (absent = unverified, inserts refused)
+    tb.sv, vectors.dat          # sim tiers only: the frozen testbench + golden-simulated trace
+                                #   (read-only once frozen)
     designs/<source>:<hash>/    # one admitted implementation
         design.v                #   the implementation
         design.aag              #   precomputed splice input (structural AIG)
@@ -173,15 +182,23 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 | Tier | Method | Applies to | Status |
 |------|--------|-----------|--------|
 | 0 | **CEC** vs `golden.v` (yosys → BLIF, `yosys-abc cec`) — formal, exhaustive | combinational only | **implemented** |
-| 1 | auto sim harness (randomized + directed stimulus, golden-simulated outputs) | sequential; combinational where the caller chose sim | planned |
-| 2 | authored stimulus (human or dv agent), coverage-gated | protocol-heavy sequential | planned |
+| 1 | **auto sim harness**: corners + seeded random stimulus (exhaustive for tiny combinational input spaces), **golden-simulated** outputs, frozen `tb.sv` + `vectors.dat` | sequential; combinational where the caller chose sim | **implemented** |
+| 2 | **authored stimulus** (`--stimulus <file>`: a Python `generate(ports, n_vectors, seed)` generator), golden-simulated outputs | protocol-heavy sequential | **implemented (human path)** — the dv-agent filler is rtlscout-side |
 
 - Combinational slots get Tier-0 CEC **by default** at registration; sequential slots register
-  fine but stay **unverified** (inserts raise `SlotUnverified`) until a sim tier is frozen.
+  fine but stay **unverified** (inserts raise `SlotUnverified`) until a sim tier is frozen with
+  `spire db verify --slot <key> --auto | --stimulus <file>`.
 - CEC runs under a bounded budget (`budget_s`, default 120 s, per candidate at insert). A timeout
   is a clean failure: `CECTimeout` — *"CEC timed out after 120 s. Options: --budget <t> | --auto |
   --stimulus <file>"* — and the slot's verification is unchanged until the caller picks the next
   rung. Requesting CEC for a sequential slot raises `CECInapplicable` (no register mapping).
+- **Sim-tier semantics: cycle-accurate trace equivalence** under the frozen stimulus. Expected
+  outputs always come from simulating the golden (Verilator); a sequential candidate must match
+  the golden's output trace cycle for cycle — a re-pipelined design with different latency is
+  rejected, by design. The frozen `tb.sv` follows the rtlscout testbench contract
+  (`TB_SUMMARY total=N errors=M`, `PASS`), and the DUT is bound by name via `-DDUT=<top>`.
+- **Frozen means frozen**: `tb.sv`/`vectors.dat` are written read-only and a re-freeze is refused —
+  it would silently change the oracle that admitted designs were checked against.
 
 ## API summary
 
@@ -196,16 +213,16 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 | `constrained / weighted / lexicographic` | Objective combinators. |
 | `resolve_db_root(db=None)` / `DesignDB` | DB-root resolution / low-level store handle. |
 | `cec_check(design_v, golden_v, workdir, budget_s=…)` | Standalone Tier-0 CEC (raises on non-PASS). |
+| `freeze_sim_verification(spec_key, *, stimulus_file=None, n_vectors=, seed=, sim_budget_s=)` | Build + freeze a sim verification (Tier 1 auto / Tier 2 authored). |
+| `run_frozen_tb(spec_key, candidate_v, workdir, budget_s=…)` | The sim-tier gate check (raises on non-PASS). |
 | `detect_class(module)` | `"combinational"` / `"sequential"` (register scan). |
-| Exceptions | `VerificationFailed`, `CECTimeout`, `CECInapplicable`, `SlotUnverified`, `VerificationError`, `DesignDBError`. |
+| Exceptions | `VerificationFailed`, `CECTimeout`, `SimTimeout`, `CECInapplicable`, `SlotUnverified`, `VerificationError`, `DesignDBError`. |
 
 `import spire.design_db` is dependency-light: pyosys/aigverse are only imported when an insert or
 splice actually needs them.
 
 ## Coming next (will extend this page)
 
-- **Sim verification tiers**: `spire db verify --slot <key> [--cec [--budget]| --auto | --stimulus]`
-  — the auto sim harness + human-authored stimulus for sequential and CEC-infeasible combinational
-  slots (coverage-measured, frozen).
 - **Per-technology PPA scoring** (`db score`, rtlscout-side) enabling `metric="asap7"` selection.
-- Agent fillers: campaign (`rtlscout fill-db` / the `fill=` hook) and orchestrator/subagent flows.
+- Agent fillers: campaign (`rtlscout fill-db` / the `fill=` hook) and orchestrator/subagent flows,
+  including the dv-agent for authored stimulus on protocol-heavy slots.

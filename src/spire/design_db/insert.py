@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import subprocess
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -50,6 +51,36 @@ def _materialize(design: Any, tdir: Path) -> Path:
     target = tdir / "candidate.v"
     target.write_text(text if text.endswith("\n") else text + "\n")
     return target
+
+
+def _candidate_aag(design_v: Path, workdir: Path) -> List[str]:
+    """Convert a candidate to AAG via a **subprocess** yosys (dedup hash / ports / metrics).
+
+    Deliberately not the in-process pyosys path: a pyosys ``log_error`` (e.g. ``write_aiger`` on
+    an async-reset FF) hard-exits the host process — unacceptable for a gate fed arbitrary input.
+    ``async2sync`` legalizes async-reset FFs into AIGER-expressible sync form first; any failure
+    becomes a clean rejection.
+    """
+    if shutil.which("yosys") is None:
+        raise DesignDBError("yosys not found on PATH — insert unavailable")
+    out = workdir / "candidate.aag"
+    script = "; ".join([
+        f"read_verilog -sv {design_v.resolve()}",
+        "hierarchy -auto-top",
+        "proc",
+        "synth -flatten",
+        "async2sync",
+        "dffunmap",
+        "clean",
+        "aigmap",
+        f"write_aiger -ascii -symbols -no-startoffset {out}",
+    ])
+    proc = subprocess.run(["yosys", "-q", "-p", script], cwd=str(workdir),
+                          capture_output=True, text=True, timeout=300)
+    if proc.returncode != 0 or not out.exists():
+        tail = (proc.stdout + proc.stderr)[-600:]
+        raise VerificationFailed(f"candidate could not be converted to an AIG:\n{tail}")
+    return out.read_text().splitlines()
 
 
 def _aag_port_names(aag_lines: List[str]) -> Dict[str, set]:
@@ -124,21 +155,25 @@ def insert_design(spec_key: str, design: Any, *, source: str,
         raise SlotUnverified(
             "slot has no frozen verification (sim tiers arrive in S3) — options: "
             "spire db verify --slot <key> --auto | --stimulus <file>")
-    if verification.get("method") != "cec":
-        raise DesignDBError(f"verification method {verification.get('method')!r} is not supported "
-                            f"yet (S1 implements Tier-0 cec)")
-    if spec.get("class") == "sequential":
+    method = verification.get("method")
+    if method not in ("cec", "sim"):
+        raise DesignDBError(f"verification method {method!r} is not supported")
+    if method == "cec" and spec.get("class") == "sequential":
         raise CECInapplicable("CEC is inapplicable to sequential slots (no register mapping)")
-    budget = float(budget_s) if budget_s is not None else float(verification.get("budget_s", 120.0))
+    if budget_s is not None:
+        budget = float(budget_s)
+    elif method == "cec":
+        budget = float(verification.get("budget_s", 120.0))
+    else:
+        budget = float(verification.get("sim_budget_s", 300.0))
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
 
     with tempfile.TemporaryDirectory(prefix="spire_ddb_") as td:
         tdir = Path(td)
         design_v = _materialize(design, tdir)
 
-        # Structural dedup key (also feeds the intrinsic metrics) — heavy import deferred.
-        from spire.aig.aig_yosys import verilog_to_aag_lines_via_yosys
-        aag_lines = verilog_to_aag_lines_via_yosys(str(design_v))
+        # Structural dedup key (also feeds the intrinsic metrics + the port check).
+        aag_lines = _candidate_aag(design_v, tdir)
         _check_ports(aag_lines, spec.get("ports", []))
         struct_hash = hashlib.sha256("\n".join(aag_lines).encode("utf-8")).hexdigest()
 
@@ -148,7 +183,11 @@ def insert_design(spec_key: str, design: Any, *, source: str,
                 return InsertResult(design_id, True, entry.get("metrics", {}))
 
         # The gate: run the frozen verification (raises on anything but PASS).
-        cec_check(design_v, slot / "golden.v", tdir / "cec", budget_s=budget)
+        if method == "cec":
+            cec_check(design_v, slot / "golden.v", tdir / "cec", budget_s=budget)
+        else:
+            from spire.design_db.verify_sim import run_frozen_tb
+            run_frozen_tb(spec_key, design_v, tdir / "sim", db=db, budget_s=budget)
 
         metrics: Dict[str, Any] = {"intrinsic": _aag_stats(aag_lines)}
         try:
@@ -171,7 +210,7 @@ def insert_design(spec_key: str, design: Any, *, source: str,
             py = Path(design_py)
             (tmp_dir / "design.py").write_text(py.read_text() if py.exists() else str(design_py))
         prov = {"schema": 1, "source": source, "created": now,
-                "verification": {"tier": verification.get("tier", 0), "method": "cec",
+                "verification": {"tier": verification.get("tier", 0), "method": method,
                                  "verdict": "PASS", "budget_s": budget}}
         if provenance:
             prov.update(provenance)

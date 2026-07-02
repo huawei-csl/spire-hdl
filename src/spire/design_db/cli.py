@@ -111,6 +111,48 @@ def _cmd_seed(args: argparse.Namespace) -> int:
     return _gated_insert(lambda: seed_original(key, db=args.db, budget_s=args.budget))
 
 
+def _cmd_verify(args: argparse.Namespace) -> int:
+    """Explicit verification choice — fail-and-choose, never an auto-fallback."""
+    from spire.design_db.verify import DEFAULT_CEC_BUDGET_S, VERIFICATION_SCHEMA
+    d = _open(args.db, create=True)
+    key = _resolve_slot(d, args.slot)
+    slot = d.slot_dir(key)
+    spec = d.read_json(slot / "spec.json", None)
+    if spec is None:
+        raise DesignDBError(f"unknown slot {args.slot!r}")
+    chosen = [m for m, on in (("cec", args.cec), ("auto", args.auto),
+                              ("stimulus", args.stimulus is not None)) if on]
+    if len(chosen) > 1:
+        raise DesignDBError("choose exactly one of --cec | --auto | --stimulus")
+    if not chosen:
+        if spec.get("class") == "combinational":
+            chosen = ["cec"]                                # the default-picker (class check)
+        else:
+            raise DesignDBError("sequential slot — choose the verification explicitly: "
+                                "--auto (Tier-1 sim harness) | --stimulus <file> (authored); "
+                                "CEC is inapplicable")
+    mode = chosen[0]
+    existing = d.read_json(slot / "verification.json", None)
+    if mode == "cec":
+        if spec.get("class") == "sequential":
+            raise DesignDBError("CEC is inapplicable to sequential slots (no register mapping) — "
+                                "options: --auto | --stimulus <file>")
+        if existing is not None and int(existing.get("tier", 0)) >= 1:
+            raise DesignDBError("slot has a frozen sim verification (immutable) — CEC cannot "
+                                "replace it")
+        verification = {"schema": VERIFICATION_SCHEMA, "tier": 0, "method": "cec",
+                        "budget_s": args.budget if args.budget is not None
+                        else DEFAULT_CEC_BUDGET_S}
+        d.write_json(slot / "verification.json", verification)
+    else:
+        from spire.design_db.verify_sim import freeze_sim_verification
+        verification = freeze_sim_verification(
+            key, stimulus_file=args.stimulus, n_vectors=args.vectors, seed=args.seed,
+            sim_budget_s=args.sim_budget, db=args.db)
+    print(json.dumps(verification, indent=2, sort_keys=True))
+    return 0
+
+
 def main(argv: Optional[list] = None) -> int:
     parser = argparse.ArgumentParser(prog="spire", description="Spire command-line tools")
     top = parser.add_subparsers(dest="ns", required=True)
@@ -144,6 +186,21 @@ def main(argv: Optional[list] = None) -> int:
                                help="manifest name, spec_key, or unique key prefix")
     p.add_argument("--budget", type=float, default=None, help="CEC budget in seconds")
     p.set_defaults(func=_cmd_seed)
+
+    p = sub.add_parser("verify", help="choose + freeze a slot's verification (explicit; "
+                                      "no auto-fallback)")
+    _common(p); p.add_argument("--slot", required=True,
+                               help="manifest name, spec_key, or unique key prefix")
+    p.add_argument("--cec", action="store_true", help="Tier-0 CEC (combinational only)")
+    p.add_argument("--auto", action="store_true", help="freeze the Tier-1 auto sim harness")
+    p.add_argument("--stimulus", default=None, metavar="FILE",
+                   help="freeze a Tier-2 sim verification from an authored stimulus generator")
+    p.add_argument("--budget", type=float, default=None, help="CEC budget in seconds (--cec)")
+    p.add_argument("--vectors", type=int, default=256, help="number of stimulus vectors (sim)")
+    p.add_argument("--seed", type=int, default=0, help="stimulus RNG seed (sim, auto)")
+    p.add_argument("--sim-budget", type=float, default=300.0,
+                   help="verilator build/run budget in seconds (sim)")
+    p.set_defaults(func=_cmd_verify)
 
     args = parser.parse_args(argv)
     try:

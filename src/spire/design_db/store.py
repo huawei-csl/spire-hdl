@@ -151,9 +151,13 @@ def register_slot(module_or_component: Any, db: Optional[str | Path] = None, *,
     reg_name = name or getattr(module, "name", "design")
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
 
+    clk = getattr(module, "clk", None)
+    rst = getattr(module, "rst", None)
     spec = d.read_json(slot / "spec.json", None)
     if spec is None:
         spec = {"schema": SPEC_SCHEMA, "name": reg_name, "ports": ports, "class": circuit_class,
+                "clock": {"clk": clk.name if clk is not None else None,
+                          "rst": rst.name if rst is not None else None},
                 "golden_sha": hashlib.sha256(verilog.encode("utf-8")).hexdigest(),
                 "created": now, "registered_from": []}
     if reg_name not in [r["name"] for r in spec["registered_from"]]:
