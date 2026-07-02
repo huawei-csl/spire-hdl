@@ -50,12 +50,31 @@ jobs:
           pip install build
           python -m build
 
-      - name: Smoke-test the built wheel (clean venv install + import)
+      - name: Smoke-test the built wheel (clean venv install + import + Verilog emit)
         run: |
           python -m venv /tmp/smoke
           /tmp/smoke/bin/pip install --upgrade pip
           /tmp/smoke/bin/pip install dist/*.whl
-          /tmp/smoke/bin/python -c "import spire; from spire.component import Component; print('imported spire from', spire.__file__)"
+          /tmp/smoke/bin/python - <<'EOF'
+          import spire
+          print("imported spire from", spire.__file__)
+
+          from spire import Component, IORecord, Input, Output, UInt
+
+          class Adder(Component):
+              def __init__(self):
+                  self.io = IORecord(a=Input(UInt(8)), b=Input(UInt(8)), sum=Output(UInt(9)))
+                  self.elaborate()
+
+              def elaborate(self):
+                  self.io.sum <<= self.io.a + self.io.b
+
+          Adder().to_verilog_file("/tmp/smoke/smoke_adder.v", name="Adder")
+          EOF
+          grep -q "module Adder" /tmp/smoke/smoke_adder.v
+          grep -q "endmodule" /tmp/smoke/smoke_adder.v
+          echo "Verilog emission OK:"
+          cat /tmp/smoke/smoke_adder.v
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
