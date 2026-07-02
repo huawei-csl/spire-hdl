@@ -6,9 +6,21 @@ Three optimization objectives are available:
 
 | Objective | Minimizes | Good for |
 |-----------|-----------|----------|
-| `"area"`  | Yosys transistor count | Silicon area, power |
+| `"area"`  | the size `metric` (default: Yosys transistor count) | Silicon area, power |
 | `"delay"` | AIG depth (AND-gate levels) | Clock frequency |
-| `"adp"`   | Area-delay product | Balanced designs |
+| `"adp"`   | `metric` × AIG depth | Balanced designs |
+
+How size is measured is set by the optional **`metric`** argument — accepted by `ArithmeticAutoConfig`
+and `@arithmetic_optimized`, e.g. `ArithmeticAutoConfig(objective="area", metric="aig_count")`:
+
+| Metric | Measures |
+|--------|----------|
+| `"transistors_heavy"` *(default)* | Yosys transistor count under the full `synth; clean -purge` pipeline |
+| `"transistors"` | Yosys transistor count under the lite `abc -fast` pipeline (faster, rougher) |
+| `"aig_count"` | AIG gate count post-synth (aigverse) — technology-independent |
+
+Delay is always AIG depth; `metric` sets only the size axis: `"area"` minimizes the metric (tie-break:
+depth), `"delay"` minimizes depth (tie-break: the metric), `"adp"` minimizes metric × depth.
 
 ## Example: 16-bit unsigned adder
 
