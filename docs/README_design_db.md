@@ -41,6 +41,27 @@ Parameters: `objective=` (what to minimize — see Selection), `metric=` (measur
 `pin=` (an exact `design_id`; missing ⇒ error — a reproducibility lock), `fill=` (opt-in callable
 invoked once on miss to generate, then re-select), `db=` (explicit DB root).
 
+### First compile with no DB — the bootstrap path
+
+Decorating costs nothing up front: compiling a design that uses `@from_design_db` when no DB exists
+(or the slot is empty) succeeds unchanged.
+
+1. The call is traced and the slot **registers** — resolution finds no DB, so `./design_db` is
+   **auto-created** (one printed note; write paths may create — read-only commands never do).
+2. The slot gets `spec.json`, `golden.v`, the default Tier-0 CEC `verification.json`,
+   `starting_point.py` + `source_ref` (captured best-effort from the defining file), and a manifest
+   entry.
+3. Selection finds an empty slot → **miss ⇒ original logic**: one note
+   (`slot … has no admitted design — using the original logic for f`), and `f`'s own body is used
+   inline — the emitted circuit is **structurally identical to the undecorated function**
+   (test-asserted via AAG equality). No error, no CEC, no yosys, no budget spent.
+4. Later fills (`spire db seed`, `spire db insert`, a `fill=` hook, or an external filler such as
+   an RTLScout campaign) populate the slot; the **next compile splices** the selected
+   implementation.
+
+The only variants that behave differently on an empty slot: `pin=` errors (a broken
+reproducibility lock, by design), and `fill=` fires the generate hook on the miss.
+
 ## Quick start — filling a slot
 
 ```python
