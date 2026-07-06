@@ -73,7 +73,7 @@ def test_sequential_freeze_and_gate(db):
     ver = freeze_sim_verification(key, n_vectors=48, seed=7)
     assert ver["tier"] == 1 and ver["sequential"] is True
     res = insert_design(key, CORRECT_SEQ_V, source="test")
-    assert res.metrics["intrinsic"]["aig_latches"] > 0
+    assert res.metrics["aig"]["metrics"]["aig_latches"] > 0
     with pytest.raises(VerificationFailed, match="vector mismatches"):
         insert_design(key, WRONG_SEQ_V, source="test")
 
@@ -119,11 +119,11 @@ def test_stimulus_author_attribution(db, tmp_path, capsys):
     assert ver["seed"] is None                          # authored freeze: seed not recorded
 
     # CLI: --author refused outside --stimulus (guard fires before any state change) …
-    assert cli_main(["db", "verify", "--slot", key[:12], "--auto", "--author", "agent:x"]) == 1
+    assert cli_main(["db", "set-verification", "--slot", key[:12], "--auto", "--author", "agent:x"]) == 1
     assert "--author only applies" in capsys.readouterr().err
     # … and flows through on --stimulus
     key2 = register_slot(Adder(), name="adder_auth")
-    assert cli_main(["db", "verify", "--slot", key2[:12], "--stimulus", str(stim),
+    assert cli_main(["db", "set-verification", "--slot", key2[:12], "--stimulus", str(stim),
                      "--vectors", "16", "--author", "agent:rtl-dv-prep"]) == 0
     assert json.loads(capsys.readouterr().out)["stimulus_author"] == "agent:rtl-dv-prep"
 
@@ -151,9 +151,9 @@ def test_stimulus_check_dry_run(db, tmp_path, capsys):
         check_stimulus(key, stimulus_file=bad)
 
     # CLI: --check requires --stimulus; a passing check does not consume the one-shot freeze
-    assert cli_main(["db", "verify", "--slot", key[:12], "--check"]) == 1
+    assert cli_main(["db", "set-verification", "--slot", key[:12], "--check"]) == 1
     assert "requires --stimulus" in capsys.readouterr().err
-    assert cli_main(["db", "verify", "--slot", key[:12], "--stimulus", str(stim),
+    assert cli_main(["db", "set-verification", "--slot", key[:12], "--stimulus", str(stim),
                      "--check"]) == 0
     assert json.loads(capsys.readouterr().out)["check"] == "ok"
     ver = freeze_sim_verification(key, stimulus_file=stim, n_vectors=24)
@@ -163,18 +163,39 @@ def test_stimulus_check_dry_run(db, tmp_path, capsys):
 def test_cli_verify_fail_and_choose(db, capsys):
     seq_key = register_slot(_seq_module())
     # sequential slot, no explicit method → clean failure listing the options
-    assert cli_main(["db", "verify", "--slot", seq_key[:12]]) == 1
+    assert cli_main(["db", "set-verification", "--slot", seq_key[:12]]) == 1
     assert "--auto" in capsys.readouterr().err
     # explicit --cec on sequential → guardrail
-    assert cli_main(["db", "verify", "--slot", seq_key[:12], "--cec"]) == 1
+    assert cli_main(["db", "set-verification", "--slot", seq_key[:12], "--cec"]) == 1
     assert "inapplicable" in capsys.readouterr().err
     # explicit --auto → freezes tier 1
-    assert cli_main(["db", "verify", "--slot", seq_key[:12], "--auto", "--vectors", "32"]) == 0
+    assert cli_main(["db", "set-verification", "--slot", seq_key[:12], "--auto", "--vectors", "32"]) == 0
     assert json.loads(capsys.readouterr().out)["tier"] == 1
     # combinational slot: bare verify defaults to CEC (the default-picker)
     register_slot(Adder(), name="adder8")
-    assert cli_main(["db", "verify", "--slot", "adder8"]) == 0
+    assert cli_main(["db", "set-verification", "--slot", "adder8"]) == 0
     assert json.loads(capsys.readouterr().out)["method"] == "cec"
     # sim-frozen slots are immutable, even against --cec
-    assert cli_main(["db", "verify", "--slot", seq_key[:12], "--auto"]) == 1
+    assert cli_main(["db", "set-verification", "--slot", seq_key[:12], "--auto"]) == 1
     assert "immutable" in capsys.readouterr().err
+
+
+def test_cli_verify_advisory(db, tmp_path, capsys):
+    """`db verify <design>` runs the *set* oracle against a candidate — no admit, no write — the
+    same check `db insert` gates on."""
+    from spire.design_db.store import DesignDB
+    key = register_slot(Adder(), name="adder8")          # combinational → CEC by default
+    good = tmp_path / "good.v"; good.write_text(EQUIV_V)
+    bad = tmp_path / "bad.v"; bad.write_text(WRONG_V)
+
+    assert cli_main(["db", "verify", str(good), "--slot", "adder8"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["verdict"] == "PASS" and out["method"] == "cec"
+    assert cli_main(["db", "verify", str(bad), "--slot", "adder8"]) == 2
+    assert json.loads(capsys.readouterr().out)["verdict"] == "FAIL"
+    assert DesignDB.open(db).read_json(_slot(db, key) / "index.json", {}) == {}   # nothing admitted
+
+    # a slot with no oracle set → a setup error, not a candidate verdict
+    seq_key = register_slot(_seq_module())
+    assert cli_main(["db", "verify", str(good), "--slot", seq_key[:12]]) == 1
+    assert "set-verification" in capsys.readouterr().err

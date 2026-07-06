@@ -48,6 +48,30 @@ def _slot_dir(db_root: Path, key: str) -> Path:
     return db_root / VERSION_DIR / key
 
 
+def test_slot_names_are_permanent_bindings(db):
+    """A manifest name binds to exactly one subcircuit: re-registering the same content is
+    idempotent, aliases are fine, but different logic under an existing name raises."""
+    key = register_slot(Adder(), name="adder8")
+    assert register_slot(Adder(), name="adder8") == key          # idempotent
+    assert register_slot(Adder(), name="adder8_alias") == key    # second name, same slot: fine
+
+    class AdderPlusOne(Component):
+        def __init__(self):
+            self.io = IORecord(a=Input(UInt(8)), b=Input(UInt(8)), s=Output(UInt(9)))
+            self.elaborate()
+
+        def elaborate(self):
+            self.io.s <<= self.io.a + self.io.b + 1
+
+    with pytest.raises(DesignDBError, match="permanent bindings"):
+        register_slot(AdderPlusOne(), name="adder8")
+    key2 = register_slot(AdderPlusOne(), name="adder8_v2")       # new name: fine
+    assert key2 != key
+    # the conflicting attempt must not have re-pointed the manifest
+    manifest = json.loads((db / VERSION_DIR / "manifest.json").read_text())
+    assert manifest["slots"]["adder8"]["spec_key"] == key
+
+
 def test_register_creates_slot_with_default_cec(db):
     key = register_slot(Adder(), name="adder8")
     slot = _slot_dir(db, key)
@@ -65,8 +89,8 @@ def test_insert_equivalent_design(db):
     key = register_slot(Adder(), name="adder8")
     res = insert_design(key, EQUIV_V, source="test")
     assert not res.deduped
-    assert res.metrics["intrinsic"]["aig_nodes"] > 0
-    assert isinstance(res.metrics["transistors_heavy"], int)
+    assert res.metrics["aig"]["metrics"]["aig_nodes"] > 0
+    assert isinstance(res.metrics["transistors"]["metrics"]["transistors_heavy"], int)
     ddir = _slot_dir(db, key) / "designs" / res.design_id
     assert (ddir / "design.v").exists() and (ddir / "provenance.json").exists()
     prov = json.loads((ddir / "provenance.json").read_text())
@@ -101,7 +125,7 @@ def test_insert_spire_component_directly(db):
     assert not res.deduped
     ddir = _slot_dir(db, key) / "designs" / res.design_id
     assert "module" in (ddir / "design.v").read_text()
-    assert res.metrics["intrinsic"]["aig_nodes"] > 0
+    assert res.metrics["aig"]["metrics"]["aig_nodes"] > 0
 
 
 def test_dedup_by_structural_hash(db):

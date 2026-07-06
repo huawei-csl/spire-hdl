@@ -111,8 +111,52 @@ def _cmd_seed(args: argparse.Namespace) -> int:
     return _gated_insert(lambda: seed_original(key, db=args.db, budget_s=args.budget))
 
 
+def _parse_metric_pairs(pairs: list) -> dict:
+    values = {}
+    for p in pairs:
+        if "=" not in p:
+            raise DesignDBError(f"metric must be KEY=VALUE, got {p!r}")
+        k, v = p.split("=", 1)
+        try:
+            values[k.strip()] = float(v)
+        except ValueError:
+            raise DesignDBError(f"metric {k.strip()!r} must be numeric, got {v!r}")
+    return values
+
+
+def _cmd_annotate(args: argparse.Namespace) -> int:
+    from spire.design_db.annotate import annotate
+    d = _open(args.db, create=False)
+    key = _resolve_slot(d, args.slot)
+    values = _parse_metric_pairs(args.values)
+    raw = json.loads(Path(args.raw).read_text()) if args.raw else None
+    result = annotate(key, args.design, tech=args.tech, values=values, raw=raw,
+                      force=args.force, db=args.db)
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
 def _cmd_verify(args: argparse.Namespace) -> int:
-    """Explicit verification choice — fail-and-choose, never an auto-fallback."""
+    """Advisory verification: run the slot's set oracle against a candidate, no admit, no write."""
+    from spire.design_db.insert import check_design
+    from spire.design_db.verify import CECInapplicable, SlotUnverified, VerificationError
+    d = _open(args.db, create=False)
+    key = _resolve_slot(d, args.slot)
+    try:
+        result = check_design(key, Path(args.design), db=args.db, budget_s=args.budget)
+    except (SlotUnverified, CECInapplicable) as exc:
+        raise DesignDBError(str(exc))                    # a setup problem, not a candidate verdict
+    except VerificationError as exc:
+        print(json.dumps({"verdict": "FAIL", "type": type(exc).__name__,
+                          "reason": str(exc).splitlines()[0][:300]}, indent=2, sort_keys=True))
+        return 2
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+def _cmd_set_verification(args: argparse.Namespace) -> int:
+    """Configure (and, for sim tiers, freeze) a slot's verification oracle — the method every
+    later insert/verify for this slot is judged by. Fail-and-choose, never an auto-fallback."""
     from spire.design_db.verify import DEFAULT_CEC_BUDGET_S, VERIFICATION_SCHEMA
     if args.check and args.stimulus is None:
         raise DesignDBError("--check requires --stimulus <file> (it dry-runs the generator)")
@@ -197,8 +241,25 @@ def main(argv: Optional[list] = None) -> int:
     p.add_argument("--budget", type=float, default=None, help="CEC budget in seconds")
     p.set_defaults(func=_cmd_seed)
 
-    p = sub.add_parser("verify", help="choose + freeze a slot's verification (explicit; "
-                                      "no auto-fallback)")
+    p = sub.add_parser("annotate", help="attach a per-technology metric block to a stored design "
+                                        "(makes metric=<tech> selectable)")
+    _common(p); p.add_argument("--slot", required=True,
+                               help="manifest name, spec_key, or unique key prefix")
+    p.add_argument("--design", required=True, help="design_id or a unique prefix of one")
+    p.add_argument("--tech", required=True,
+                   help="measurement-system name, e.g. asap7 (selectable via metric=<tech>)")
+    p.add_argument("values", nargs="+", metavar="KEY=VALUE",
+                   help="numeric metric readings, e.g. area=123.4 delay=456.7 adp=56789")
+    p.add_argument("--raw", default=None, metavar="FILE",
+                   help="optional JSON file: the full tool stats blob (stored under .raw)")
+    p.add_argument("--force", action="store_true",
+                   help="overwrite an existing block for this tech")
+    p.set_defaults(func=_cmd_annotate)
+
+    p = sub.add_parser("set-verification",
+                       help="choose (and, for sim tiers, freeze) a slot's verification oracle — "
+                            "the method every later insert/verify is judged by (explicit; "
+                            "no auto-fallback; combinational defaults to CEC at registration)")
     _common(p); p.add_argument("--slot", required=True,
                                help="manifest name, spec_key, or unique key prefix")
     p.add_argument("--cec", action="store_true", help="Tier-0 CEC (combinational only)")
@@ -216,6 +277,13 @@ def main(argv: Optional[list] = None) -> int:
     p.add_argument("--check", action="store_true",
                    help="dry-run the --stimulus generator (load + produce vectors against the "
                         "slot interface) without simulating, writing, or freezing anything")
+    p.set_defaults(func=_cmd_set_verification)
+
+    p = sub.add_parser("verify", help="advisory: run the slot's set oracle against a candidate "
+                                      "design (no admit, no write) — the check `insert` gates on")
+    _common(p); p.add_argument("design", help="path to the candidate .v/.sv file")
+    p.add_argument("--slot", required=True, help="manifest name, spec_key, or unique key prefix")
+    p.add_argument("--budget", type=float, default=None, help="verification budget in seconds")
     p.set_defaults(func=_cmd_verify)
 
     args = parser.parse_args(argv)

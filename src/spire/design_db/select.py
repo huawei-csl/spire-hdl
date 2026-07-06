@@ -45,53 +45,70 @@ class SelectionResult:
     metric: str             # resolved measurement system
 
 
-_ALIASES = {"aig": "aig", "intrinsic": "aig", "transistors": "transistors",
-            "transistors_heavy": "transistors"}
+# Built-in systems the insert gate stamps, in default-resolution preference (after technologies).
+BUILTIN_SYSTEMS = ("transistors", "aig")
 
 
-def _systems(index: Dict[str, Any]) -> Tuple[List[str], bool]:
-    """(technology systems present, any transistor stamp present)."""
-    techs, has_t = set(), False
+def _is_system_block(v: Any) -> bool:
+    """A measurement system is a self-describing block: raw ``metrics`` + an ``objectives`` map."""
+    return isinstance(v, dict) and isinstance(v.get("metrics"), dict)
+
+
+def _system_names(index: Dict[str, Any]) -> set:
+    """Every measurement system present across the slot's designs."""
+    names: set = set()
     for entry in index.values():
-        metrics = entry.get("metrics", {})
-        for k, v in metrics.items():
-            if isinstance(v, dict) and k != "intrinsic":
-                techs.add(k)
-        if metrics.get("transistors_heavy") is not None:
-            has_t = True
-    return sorted(techs), has_t
+        for k, v in (entry.get("metrics") or {}).items():
+            if _is_system_block(v):
+                names.add(k)
+    return names
 
 
 def resolve_metric(index: Dict[str, Any], metric: Optional[str]) -> str:
     """Deterministic system resolution: explicit (validated) or technology → transistors → aig."""
-    techs, has_t = _systems(index)
+    names = _system_names(index)
     if metric is not None:
-        if metric in _ALIASES:
-            return _ALIASES[metric]
-        if metric in techs:
+        if metric in names:
             return metric
         raise DesignDBError(f"metric {metric!r} not available for this slot — "
-                            f"available: {techs + (['transistors'] if has_t else []) + ['aig']}")
+                            f"available: {sorted(names)}")
+    techs = sorted(n for n in names if n not in BUILTIN_SYSTEMS)
     if techs:
         return techs[0]
-    return "transistors" if has_t else "aig"
+    for n in BUILTIN_SYSTEMS:
+        if n in names:
+            return n
+    raise DesignDBError("slot has no measurement systems (no admitted designs?)")
+
+
+def _lookup(metrics: Dict[str, Any], system: str, path: str) -> Optional[float]:
+    """Resolve an objectives path: ``field`` (this system's metrics) or ``other.field`` (a sibling
+    system's metrics — how the transistor system borrows the AIG depth for its delay axis)."""
+    sys_name, field = path.split(".", 1) if "." in path else (system, path)
+    block = metrics.get(sys_name)
+    if not isinstance(block, dict):
+        return None
+    return (block.get("metrics") or {}).get(field)
 
 
 def metric_value(metrics: Dict[str, Any], objective: str, system: str) -> Optional[float]:
-    """The value of one objective under one measurement system, or None if not measurable."""
-    intrinsic = metrics.get("intrinsic") or {}
-    if system == "aig":
-        nodes, depth = intrinsic.get("aig_nodes"), intrinsic.get("aig_depth")
-        return {"area": nodes, "delay": depth,
-                "adp": nodes * depth if nodes is not None and depth is not None else None,
-                "edap": None}.get(objective)
-    if system == "transistors":
-        t, depth = metrics.get("transistors_heavy"), intrinsic.get("aig_depth")
-        return {"area": t, "delay": depth,
-                "adp": t * depth if t is not None and depth is not None else None,
-                "edap": None}.get(objective)
-    tech = metrics.get(system) or {}
-    return tech.get(objective)
+    """The value of one objective under one measurement system, or None if not measurable.
+
+    Fully data-driven: each system block carries an ``objectives`` map (objective → a ``field`` in
+    its own metrics, or a ``sibling.field`` path). ``adp`` is derived (area·delay) when a system
+    does not map it explicitly; ``edap`` and any other objective are only available if mapped.
+    """
+    block = metrics.get(system)
+    if not isinstance(block, dict):
+        return None
+    mapping = block.get("objectives") or {}
+    if objective in mapping:
+        return _lookup(metrics, system, mapping[objective])
+    if objective == "adp":                                   # derived by default
+        a = metric_value(metrics, "area", system)
+        delay = metric_value(metrics, "delay", system)
+        return a * delay if a is not None and delay is not None else None
+    return None
 
 
 def _score(metrics: Dict[str, Any], objective: ObjectiveSpec, system: str) -> Optional[Tuple]:

@@ -146,9 +146,16 @@ def register_slot(module_or_component: Any, db: Optional[str | Path] = None, *,
     circuit_class = detect_class(module)
 
     d = DesignDB.open(db)
+    reg_name = name or getattr(module, "name", "design")
+    existing = d.read_json(d.manifest_path, {"slots": {}}).get("slots", {}).get(reg_name)
+    if existing and existing.get("spec_key") != key:
+        raise DesignDBError(
+            f"slot name {reg_name!r} is already bound to slot "
+            f"{(existing.get('spec_key') or '?')[:12]}… but this subcircuit hashes to "
+            f"{key[:12]}… — slot names are permanent bindings; register the changed subcircuit "
+            f"under a new name (rename the function or pass name=)")
     slot = d.slot_dir(key)
     (slot / "designs").mkdir(parents=True, exist_ok=True)
-    reg_name = name or getattr(module, "name", "design")
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
 
     clk = getattr(module, "clk", None)

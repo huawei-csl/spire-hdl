@@ -31,7 +31,7 @@ _ALLOWED_GLOBALS = {"UInt", "SInt", "Bool", "Signal", "Wire", "Register", "Input
 def from_design_db(_fn: Optional[Callable[..., Any]] = None, *,
                    objective: ObjectiveSpec = "area", metric: Optional[str] = None,
                    pin: Optional[str] = None, fill: Optional[Callable[..., Any]] = None,
-                   db: Optional[Any] = None) -> Callable[..., Any]:
+                   name: Optional[str] = None, db: Optional[Any] = None) -> Callable[..., Any]:
     """Select the decorated subcircuit's implementation from the design DB.
 
     Usage (bare or parameterized, like the other optimization decorators)::
@@ -39,6 +39,10 @@ def from_design_db(_fn: Optional[Callable[..., Any]] = None, *,
         @from_design_db(objective="area")
         def mac(a, b, c):
             return a * b + c
+
+    ``name=`` sets the slot's manifest name (default: the function's qualname). Names are
+    **permanent bindings** to one subcircuit: registering different logic under an existing
+    name raises — change the name when the function's behavior changes.
     """
 
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -76,7 +80,7 @@ def from_design_db(_fn: Optional[Callable[..., Any]] = None, *,
 
             comp, output_names = _build_component(fn, logic_args, other_args)
             module = comp.to_netlist(_keys.CANONICAL_TOP)
-            key = register_slot(module, db=db, name=fn.__qualname__)
+            key = register_slot(module, db=db, name=name or fn.__qualname__)
             d = DesignDB.open(db)
             _capture_source(d, key, fn)
 

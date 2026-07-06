@@ -131,6 +131,60 @@ def _aag_stats(aag_lines: List[str]) -> Dict[str, int]:
     return {"aig_nodes": n_and, "aig_depth": max_depth, "aig_latches": n_latch}
 
 
+def _resolve_verification(d: DesignDB, spec_key: str, spec: Dict[str, Any],
+                          budget_s: Optional[float]) -> tuple:
+    """(verification dict, method, budget) for a slot's frozen oracle — or raise. Shared by the
+    gate (``insert_design``) and the advisory check (``check_design``) so both apply exactly the
+    same oracle."""
+    verification = d.read_json(d.slot_dir(spec_key) / "verification.json", None)
+    if verification is None:
+        raise SlotUnverified(
+            "slot has no verification set — choose one first: "
+            "spire db set-verification --slot <key> [--cec | --auto | --stimulus <file>]")
+    method = verification.get("method")
+    if method not in ("cec", "sim"):
+        raise DesignDBError(f"verification method {method!r} is not supported")
+    if method == "cec" and spec.get("class") == "sequential":
+        raise CECInapplicable("CEC is inapplicable to sequential slots (no register mapping)")
+    if budget_s is not None:
+        budget = float(budget_s)
+    elif method == "cec":
+        budget = float(verification.get("budget_s", 120.0))
+    else:
+        budget = float(verification.get("sim_budget_s", 300.0))
+    return verification, method, budget
+
+
+def _run_gate(d: DesignDB, spec_key: str, method: str, design_v: Path, tdir: Path,
+              budget: float, db: Optional[str | Path]) -> None:
+    """Run the frozen oracle against one candidate (raises on anything but PASS)."""
+    if method == "cec":
+        cec_check(design_v, d.slot_dir(spec_key) / "golden.v", tdir / "cec", budget_s=budget)
+    else:
+        from spire.design_db.verify_sim import run_frozen_tb
+        run_frozen_tb(spec_key, design_v, tdir / "sim", db=db, budget_s=budget)
+
+
+def check_design(spec_key: str, design: Any, *, db: Optional[str | Path] = None,
+                 budget_s: Optional[float] = None) -> Dict[str, Any]:
+    """Advisory verification: run the slot's frozen oracle against ``design`` **without admitting
+    or writing anything** — the same check ``insert_design`` gates on. Returns
+    ``{"verdict": "PASS", "method": …}``; raises the same ``VerificationError`` subclasses (and a
+    port/`SlotUnverified` error) on failure. This is the read-only sibling of ``insert_design``."""
+    d = DesignDB.open(db)
+    spec = d.read_json(d.slot_dir(spec_key) / "spec.json", None)
+    if spec is None:
+        raise DesignDBError(f"unknown slot {spec_key[:12]}… — register it first")
+    _verification, method, budget = _resolve_verification(d, spec_key, spec, budget_s)
+    with tempfile.TemporaryDirectory(prefix="spire_ddb_chk_") as td:
+        tdir = Path(td)
+        design_v = _materialize(design, tdir)
+        aag_lines = _candidate_aag(design_v, tdir)
+        _check_ports(aag_lines, spec.get("ports", []))
+        _run_gate(d, spec_key, method, design_v, tdir, budget, db)
+    return {"verdict": "PASS", "method": method}
+
+
 def insert_design(spec_key: str, design: Any, *, source: str,
                   db: Optional[str | Path] = None, design_py: Optional[str | Path] = None,
                   budget_s: Optional[float] = None,
@@ -150,22 +204,7 @@ def insert_design(spec_key: str, design: Any, *, source: str,
     spec = d.read_json(slot / "spec.json", None)
     if spec is None:
         raise DesignDBError(f"unknown slot {spec_key[:12]}… — register it first")
-    verification = d.read_json(slot / "verification.json", None)
-    if verification is None:
-        raise SlotUnverified(
-            "slot has no frozen verification (sim tiers arrive in S3) — options: "
-            "spire db verify --slot <key> --auto | --stimulus <file>")
-    method = verification.get("method")
-    if method not in ("cec", "sim"):
-        raise DesignDBError(f"verification method {method!r} is not supported")
-    if method == "cec" and spec.get("class") == "sequential":
-        raise CECInapplicable("CEC is inapplicable to sequential slots (no register mapping)")
-    if budget_s is not None:
-        budget = float(budget_s)
-    elif method == "cec":
-        budget = float(verification.get("budget_s", 120.0))
-    else:
-        budget = float(verification.get("sim_budget_s", 300.0))
+    verification, method, budget = _resolve_verification(d, spec_key, spec, budget_s)
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
 
     with tempfile.TemporaryDirectory(prefix="spire_ddb_") as td:
@@ -183,19 +222,22 @@ def insert_design(spec_key: str, design: Any, *, source: str,
                 return InsertResult(design_id, True, entry.get("metrics", {}))
 
         # The gate: run the frozen verification (raises on anything but PASS).
-        if method == "cec":
-            cec_check(design_v, slot / "golden.v", tdir / "cec", budget_s=budget)
-        else:
-            from spire.design_db.verify_sim import run_frozen_tb
-            run_frozen_tb(spec_key, design_v, tdir / "sim", db=db, budget_s=budget)
+        _run_gate(d, spec_key, method, design_v, tdir, budget, db)
 
-        metrics: Dict[str, Any] = {"intrinsic": _aag_stats(aag_lines)}
+        # Self-describing measurement systems: each block carries raw `metrics` + an `objectives`
+        # map (objective → own field, or a `sibling.field` borrow). The transistor system borrows
+        # the AIG depth for its delay axis rather than duplicating it.
+        metrics: Dict[str, Any] = {
+            "aig": {"metrics": _aag_stats(aag_lines),
+                    "objectives": {"area": "aig_nodes", "delay": "aig_depth"}},
+        }
         try:
             from spire.helpers import extract_yosys_heavy_metrics_from_verilog
             heavy = extract_yosys_heavy_metrics_from_verilog(design_v.read_text().splitlines())
-            metrics["transistors_heavy"] = int(heavy["estimated_num_transistors"])
+            metrics["transistors"] = {
+                "metrics": {"transistors_heavy": int(heavy["estimated_num_transistors"])},
+                "objectives": {"area": "transistors_heavy", "delay": "aig.aig_depth"}}
         except Exception as exc:  # metric enrichment must never block a correct insert
-            metrics["transistors_heavy"] = None
             metrics["notes"] = f"transistor estimate unavailable: {exc}"
 
         design_id = f"{source}:{struct_hash[:10]}"

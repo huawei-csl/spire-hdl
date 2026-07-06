@@ -38,7 +38,7 @@ def _filled_slot(db):
 
 def test_argmin_area_transistors_default(db):
     key, index = _filled_slot(db)
-    expected = min(index.items(), key=lambda kv: (kv[1]["metrics"]["transistors_heavy"], kv[0]))[0]
+    expected = min(index.items(), key=lambda kv: (kv[1]["metrics"]["transistors"]["metrics"]["transistors_heavy"], kv[0]))[0]
     sel = select_design(key, objective="area")
     assert sel.design_id == expected and sel.metric == "transistors"
 
@@ -46,15 +46,15 @@ def test_argmin_area_transistors_default(db):
 def test_objective_delay_under_aig_metric(db):
     key, index = _filled_slot(db)
     expected = min(index.items(),
-                   key=lambda kv: (kv[1]["metrics"]["intrinsic"]["aig_depth"], kv[0]))[0]
+                   key=lambda kv: (kv[1]["metrics"]["aig"]["metrics"]["aig_depth"], kv[0]))[0]
     sel = select_design(key, objective="delay", metric="aig")
     assert sel.design_id == expected and sel.metric == "aig"
 
 
 def test_constrained_weighted_lexicographic(db):
     key, index = _filled_slot(db)
-    depths = {k: v["metrics"]["intrinsic"]["aig_depth"] for k, v in index.items()}
-    areas = {k: v["metrics"]["transistors_heavy"] for k, v in index.items()}
+    depths = {k: v["metrics"]["aig"]["metrics"]["aig_depth"] for k, v in index.items()}
+    areas = {k: v["metrics"]["transistors"]["metrics"]["transistors_heavy"] for k, v in index.items()}
     min_area_id = min(areas, key=lambda k: (areas[k], k))
     loose = max(depths.values())
     sel = select_design(key, objective=constrained(minimize="area", subject_to={"delay": loose}))
@@ -201,6 +201,25 @@ endmodule
 """
 
 
+def test_decorator_name_argument_and_conflict(db):
+    """name= sets the manifest name; a second decorated function with different logic but the
+    same explicit name fails the build (names are permanent bindings)."""
+    @from_design_db(objective="area", name="named_add")
+    def add_v1(a, b):
+        return a + b
+
+    _build_top(add_v1)
+    manifest = json.loads((db / VERSION_DIR / "manifest.json").read_text())
+    assert "named_add" in manifest["slots"]
+
+    @from_design_db(objective="area", name="named_add")
+    def add_v2(a, b):
+        return (a ^ b) + ((a & b) << 1)     # different structure -> different spec key
+
+    with pytest.raises(DesignDBError, match="permanent bindings"):
+        _build_top(add_v2)
+
+
 def test_decorator_broken_pin_raises(db):
     @from_design_db(pin="ghost:1234567890")
     def add8_pinned(a, b):
@@ -265,7 +284,7 @@ def test_cli_roundtrip(db, tmp_path, capsys):
     capsys.readouterr()                                      # drain init/registration output
     assert cli_main(["db", "insert", str(design), "--slot", "adder8", "--source", "cli"]) == 0
     inserted = json.loads(capsys.readouterr().out)
-    assert inserted["deduped"] is False and inserted["metrics"]["intrinsic"]["aig_nodes"] > 0
+    assert inserted["deduped"] is False and inserted["metrics"]["aig"]["metrics"]["aig_nodes"] > 0
     assert cli_main(["db", "ls"]) == 0
     out = capsys.readouterr().out
     assert "adder8" in out and "designs=1" in out
