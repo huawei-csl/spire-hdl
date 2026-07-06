@@ -114,6 +114,8 @@ def _cmd_seed(args: argparse.Namespace) -> int:
 def _cmd_verify(args: argparse.Namespace) -> int:
     """Explicit verification choice — fail-and-choose, never an auto-fallback."""
     from spire.design_db.verify import DEFAULT_CEC_BUDGET_S, VERIFICATION_SCHEMA
+    if args.check and args.stimulus is None:
+        raise DesignDBError("--check requires --stimulus <file> (it dry-runs the generator)")
     d = _open(args.db, create=True)
     key = _resolve_slot(d, args.slot)
     slot = d.slot_dir(key)
@@ -132,6 +134,14 @@ def _cmd_verify(args: argparse.Namespace) -> int:
                                 "--auto (Tier-1 sim harness) | --stimulus <file> (authored); "
                                 "CEC is inapplicable")
     mode = chosen[0]
+    if args.check:
+        from spire.design_db.verify_sim import check_stimulus
+        result = check_stimulus(key, stimulus_file=args.stimulus, n_vectors=args.vectors,
+                                seed=args.seed, db=args.db)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.author is not None and mode != "stimulus":
+        raise DesignDBError("--author only applies to --stimulus (authored) freezes")
     existing = d.read_json(slot / "verification.json", None)
     if mode == "cec":
         if spec.get("class") == "sequential":
@@ -148,7 +158,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
         from spire.design_db.verify_sim import freeze_sim_verification
         verification = freeze_sim_verification(
             key, stimulus_file=args.stimulus, n_vectors=args.vectors, seed=args.seed,
-            sim_budget_s=args.sim_budget, db=args.db)
+            sim_budget_s=args.sim_budget, stimulus_author=args.author, db=args.db)
     print(json.dumps(verification, indent=2, sort_keys=True))
     return 0
 
@@ -200,6 +210,12 @@ def main(argv: Optional[list] = None) -> int:
     p.add_argument("--seed", type=int, default=0, help="stimulus RNG seed (sim, auto)")
     p.add_argument("--sim-budget", type=float, default=300.0,
                    help="verilator build/run budget in seconds (sim)")
+    p.add_argument("--author", default=None,
+                   help="recorded stimulus author for --stimulus freezes (default: human; "
+                        "agent layers pass e.g. agent:rtl-dv-prep)")
+    p.add_argument("--check", action="store_true",
+                   help="dry-run the --stimulus generator (load + produce vectors against the "
+                        "slot interface) without simulating, writing, or freezing anything")
     p.set_defaults(func=_cmd_verify)
 
     args = parser.parse_args(argv)

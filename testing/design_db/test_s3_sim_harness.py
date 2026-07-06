@@ -101,6 +101,65 @@ def test_human_stimulus_is_tier_2(db, tmp_path):
     insert_design(key, CORRECT_SEQ_V, source="test")
 
 
+def test_stimulus_author_attribution(db, tmp_path, capsys):
+    """--author / stimulus_author= records who wrote the generator (still Tier 2); it is
+    rejected outside authored freezes — auto stimulus is always recorded as "auto"."""
+    stim = tmp_path / "stim.py"
+    stim.write_text(
+        "def generate(ports, n_vectors, seed):\n"
+        "    for i in range(n_vectors):\n"
+        "        yield {p['name']: i * 3 + 1 for p in ports}\n")
+
+    key = register_slot(_seq_module())
+    with pytest.raises(DesignDBError, match="stimulus_author only applies"):
+        freeze_sim_verification(key, n_vectors=32, stimulus_author="agent:rtl-dv-prep")
+    ver = freeze_sim_verification(key, stimulus_file=stim, n_vectors=32,
+                                  stimulus_author="agent:rtl-dv-prep")
+    assert ver["tier"] == 2 and ver["stimulus_author"] == "agent:rtl-dv-prep"
+    assert ver["seed"] is None                          # authored freeze: seed not recorded
+
+    # CLI: --author refused outside --stimulus (guard fires before any state change) …
+    assert cli_main(["db", "verify", "--slot", key[:12], "--auto", "--author", "agent:x"]) == 1
+    assert "--author only applies" in capsys.readouterr().err
+    # … and flows through on --stimulus
+    key2 = register_slot(Adder(), name="adder_auth")
+    assert cli_main(["db", "verify", "--slot", key2[:12], "--stimulus", str(stim),
+                     "--vectors", "16", "--author", "agent:rtl-dv-prep"]) == 0
+    assert json.loads(capsys.readouterr().out)["stimulus_author"] == "agent:rtl-dv-prep"
+
+
+def test_stimulus_check_dry_run(db, tmp_path, capsys):
+    """--check / check_stimulus(): the cheap front half of a --stimulus freeze, no side effects
+    — so the one-shot freeze is preserved for after the stimulus is worth committing."""
+    from spire.design_db import check_stimulus
+
+    key = register_slot(_seq_module())
+    stim = tmp_path / "stim.py"
+    stim.write_text(
+        "def generate(ports, n_vectors, seed):\n"
+        "    for i in range(n_vectors):\n"
+        "        yield {p['name']: i for p in ports}\n")
+    res = check_stimulus(key, stimulus_file=stim, n_vectors=24)
+    assert res["check"] == "ok" and res["n_vectors"] == 24 and res["data_inputs"] == ["din"]
+    slot = _slot(db, key)
+    for name in ("verification.json", "vectors.dat", "tb.sv"):
+        assert not (slot / name).exists(), f"--check must write nothing ({name})"
+
+    bad = tmp_path / "bad.py"
+    bad.write_text("def generate(ports, n_vectors, seed):\n    raise RuntimeError('boom')\n")
+    with pytest.raises(DesignDBError, match="stimulus check failed: RuntimeError"):
+        check_stimulus(key, stimulus_file=bad)
+
+    # CLI: --check requires --stimulus; a passing check does not consume the one-shot freeze
+    assert cli_main(["db", "verify", "--slot", key[:12], "--check"]) == 1
+    assert "requires --stimulus" in capsys.readouterr().err
+    assert cli_main(["db", "verify", "--slot", key[:12], "--stimulus", str(stim),
+                     "--check"]) == 0
+    assert json.loads(capsys.readouterr().out)["check"] == "ok"
+    ver = freeze_sim_verification(key, stimulus_file=stim, n_vectors=24)
+    assert ver["tier"] == 2                                    # still freezable after checks
+
+
 def test_cli_verify_fail_and_choose(db, capsys):
     seq_key = register_slot(_seq_module())
     # sequential slot, no explicit method → clean failure listing the options

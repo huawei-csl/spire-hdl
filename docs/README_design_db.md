@@ -119,13 +119,35 @@ spire db show adder8 --pareto      # one slot as JSON (spec, verification, desig
 spire db insert cand.v --slot adder8 --source handwritten [--budget 300]
 spire db seed --slot adder8            # insert the slot's own golden as the baseline candidate
 spire db verify --slot mypipe --auto [--vectors 256 --seed 0 --sim-budget 300]
-spire db verify --slot mypipe --stimulus stim.py     # authored stimulus (Tier 2, human)
+spire db verify --slot mypipe --stimulus stim.py --check   # dry-run the generator (no freeze)
+spire db verify --slot mypipe --stimulus stim.py     # authored stimulus (Tier 2)
+spire db verify --slot mypipe --stimulus stim.py --author agent:rtl-dv-prep   # honest attribution
 spire db verify --slot adder8 --cec [--budget 300]   # (re)confirm CEC on a combinational slot
 ```
 
 `verify` is the explicit, fail-and-choose verification chooser: a bare `verify` defaults to CEC for
 combinational slots and **errors with the options** for sequential ones — there is never an
-auto-fallback, and a frozen sim verification is immutable.
+auto-fallback, and a frozen sim verification is immutable. `--stimulus` freezes record who wrote
+the generator in `stimulus_author` (default `human`; `--author agent:rtl-dv-prep` etc. keeps
+agent-authored stimulus honestly attributed — the stimulus stays open to human review either way).
+
+**What "freeze" means.** Freezing turns the chosen sim verification into the slot's *permanent
+acceptance oracle*. Concretely it (1) simulates the **golden** with the chosen stimulus and stores
+the input + expected-output trace as `vectors.dat`, (2) stores the generated `tb.sv` that replays
+this exact trace against any candidate, (3) makes both files read-only (0444), and (4) writes
+`verification.json` (tier, method, `stimulus_author`, vector count). From then on **every insert
+into the slot is judged against exactly this trace**. That is why a freeze is one-shot and
+immutable: re-freezing would silently swap the yardstick that already-admitted designs were
+measured with, making designs admitted before and after incomparable. (Tier-0 CEC is not
+"frozen" in this sense — it stores only parameters, since equivalence against `golden.v` needs no
+recorded trace; a CEC slot may still be switched **once** to a sim tier, after which the sim
+freeze is final.)
+
+Because the freeze is **one-shot**, iterate on the generator with `--check` first (API:
+`check_stimulus(spec_key, stimulus_file=…)`): it loads the file and produces the masked vectors
+against the slot's interface but simulates, writes, and freezes **nothing** — a failing generator
+is a clean error, a weak-but-working one can still be improved. Freeze only when the stimulus is
+worth committing.
 
 **Seeding the baseline.** `spire db seed` (API: `seed_original(spec_key)`) admits the slot's own
 golden as a design with `source="original"`. This gives selection a *floor* — argmin can never pick

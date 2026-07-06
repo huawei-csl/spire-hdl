@@ -22,5 +22,5 @@ from spire.design_db.store import (DB_DIRNAME, DB_ENV, DesignDB, DesignDBError, 
 from spire.design_db.verify import (DEFAULT_CEC_BUDGET_S, CECInapplicable, CECTimeout,  # noqa: F401
                                     SlotUnverified, VerificationError, VerificationFailed,
                                     cec_check, default_verification, detect_class)
-from spire.design_db.verify_sim import (SimTimeout, freeze_sim_verification,  # noqa: F401
-                                        run_frozen_tb)
+from spire.design_db.verify_sim import (SimTimeout, check_stimulus,  # noqa: F401
+                                        freeze_sim_verification, run_frozen_tb)

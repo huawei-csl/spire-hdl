@@ -92,6 +92,34 @@ def load_stimulus_file(path: Path, ins: List[dict], n_vectors: int,
     return vectors
 
 
+def check_stimulus(spec_key: str, *, stimulus_file: str | Path,
+                   n_vectors: int = DEFAULT_N_VECTORS, seed: int = 0,
+                   db: Optional[Any] = None) -> Dict[str, Any]:
+    """Dry-run an authored stimulus generator against a slot's interface — the cheap front half
+    of a ``--stimulus`` freeze with **no side effects**: nothing is simulated, written, or
+    frozen. The iteration aid for stimulus authors, since the freeze itself is one-shot."""
+    d = DesignDB.open(db, create=False)
+    slot = d.slot_dir(spec_key)
+    spec = d.read_json(slot / "spec.json", None)
+    if spec is None:
+        raise DesignDBError(f"unknown slot {spec_key[:12]}… — register it first")
+    ins, outs, _clk, _rst = _ports_split(spec)
+    if not ins or not outs:
+        raise DesignDBError("slot has no data inputs/outputs to stimulate")
+    try:
+        vectors = load_stimulus_file(Path(stimulus_file), ins, n_vectors, seed)
+    except DesignDBError:
+        raise
+    except Exception as exc:            # generator bugs surface as a clean check verdict
+        raise DesignDBError(f"stimulus check failed: {type(exc).__name__}: "
+                            f"{str(exc).splitlines()[0][:300]}") from exc
+    return {"check": "ok", "n_vectors": len(vectors),
+            "data_inputs": [p["name"] for p in ins],
+            "note": "generator loads and produces masked vectors (clk/rst are driven by the "
+                    "testbench, not the generator); freeze with: spire db verify --slot <key> "
+                    "--stimulus <file> [--author …]"}
+
+
 # --- testbench generation -------------------------------------------------------------------
 
 
@@ -231,10 +259,13 @@ def _parse_summary(out: str) -> Tuple[int, int, bool]:
 def freeze_sim_verification(spec_key: str, *, stimulus_file: Optional[str | Path] = None,
                             n_vectors: int = DEFAULT_N_VECTORS, seed: int = 0,
                             sim_budget_s: float = DEFAULT_SIM_BUDGET_S,
+                            stimulus_author: Optional[str] = None,
                             db: Optional[Any] = None) -> Dict[str, Any]:
     """Build + freeze a sim verification for a slot: golden-simulated ``vectors.dat`` + ``tb.sv``.
 
-    Tier 1 with auto stimulus, Tier 2 with a human-authored generator file. Immutable once
+    Tier 1 with auto stimulus, Tier 2 with an authored generator file. ``stimulus_author``
+    records who authored the generator (default ``"human"``; agent layers pass e.g.
+    ``"agent:rtl-dv-prep"``) — it only applies to a ``stimulus_file`` freeze. Immutable once
     frozen (a re-freeze would silently change the oracle designs were admitted against).
     """
     d = DesignDB.open(db)
@@ -254,8 +285,12 @@ def freeze_sim_verification(spec_key: str, *, stimulus_file: Optional[str | Path
         raise DesignDBError("sequential slot without recorded clock info — re-register the slot")
     sequential = clk is not None
 
-    author = "human" if stimulus_file else "auto"
-    if stimulus_file:
+    authored = stimulus_file is not None
+    if stimulus_author is not None and not authored:
+        raise DesignDBError("stimulus_author only applies to an authored (stimulus-file) freeze — "
+                            "auto stimulus is always recorded as \"auto\"")
+    author = (stimulus_author or "human") if authored else "auto"
+    if authored:
         vectors = load_stimulus_file(Path(stimulus_file), ins, n_vectors, seed)
     else:
         vectors = generate_auto_stimulus(ins, n_vectors, seed, sequential)
@@ -279,9 +314,9 @@ def freeze_sim_verification(spec_key: str, *, stimulus_file: Optional[str | Path
     for f in (slot / "tb.sv", slot / "vectors.dat"):                # frozen = read-only
         f.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
 
-    verification = {"schema": 1, "tier": 2 if author == "human" else 1, "method": "sim",
+    verification = {"schema": 1, "tier": 2 if authored else 1, "method": "sim",
                     "stimulus_author": author, "n_vectors": len(vectors),
-                    "seed": seed if author == "auto" else None, "sim_budget_s": sim_budget_s,
+                    "seed": None if authored else seed, "sim_budget_s": sim_budget_s,
                     "sequential": sequential,
                     "frozen_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     d.write_json(slot / "verification.json", verification)
