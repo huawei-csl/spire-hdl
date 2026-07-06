@@ -185,8 +185,10 @@ Installed as the `spire` console script (also `python -m spire.design_db …`):
 spire db init                      # create (or print) the DB root
 spire db ls                        # slots: name, class, #designs, key, selected
 spire db show adder8 --pareto      # one slot as JSON (spec, verification, designs, Pareto front)
-spire db insert cand.v --slot adder8 --source handwritten [--budget 300]   # check + admit
-spire db verify cand.v --slot adder8   # advisory: run the set oracle, no admit (PASS/FAIL)
+spire db insert cand.py --slot adder8 --source agent:rtl-subcircuit   # spire design: check + admit
+spire db insert cand.v --slot adder8 --source handwritten [--budget 300]   # Verilog: check + admit
+spire db verify cand.py --slot adder8  # advisory: run the set oracle, no admit (PASS/FAIL)
+spire db verify cand.v --slot adder8   # (both commands take .py or .v/.sv)
 spire db seed --slot adder8            # insert the slot's own golden as the baseline candidate
 spire db annotate --slot adder8 --design 9f3c1a2b7d --tech asap7 area=118.3 delay=94.6 [--force]
 spire db set-verification --slot mypipe --auto [--vectors 256 --seed 0 --sim-budget 300]
@@ -209,6 +211,17 @@ The three verification commands are orthogonal — one configures the oracle, tw
 - **`insert <design>`** — *candidate-level*: the same check, then **admit** on pass. `verify` and
   `insert` apply whatever `set-verification` established, so a slot judges every design the same way.
 
+**Spire designs first; Verilog is the IR.** Both `insert` and `verify` accept a **python design
+file** — a `.py` defining `build() -> Component/Netlist` — as the primary way in: the gate
+elaborates it itself, the generated Verilog becomes the canonical `design.v` (all downstream
+processing — dedup, metrics, splice — runs on Verilog, the DB's intermediate representation), and
+the **python source is stored with the design**, correct by construction (the `.v` *is* its
+elaboration; there is no way for the stored source to lie about the stored design). Multi-file
+designs work: the entry's transitive *project-local* import closure (helpers under the entry's git
+root; stdlib/site-packages/spire excluded) is vendored under the design's `source/` dir and listed
+in provenance. Verilog inserts remain fully supported (external, handwritten, harvested
+candidates) — they simply carry no python source.
+
 **What "freeze" means.** Freezing turns the chosen sim verification into the slot's *permanent
 acceptance oracle*. Concretely it (1) simulates the **golden** with the chosen stimulus and stores
 the input + expected-output trace as `vectors.dat`, (2) stores the generated `tb.sv` that replays
@@ -229,8 +242,11 @@ worth committing.
 
 **Seeding the baseline.** `spire db seed` (API: `seed_original(spec_key)`) admits the slot's own
 golden as a design with `source="original"`. This gives selection a *floor* — argmin can never pick
-something worse than the original — and gives reports/Pareto a baseline. Idempotent (structural
-dedup). It is not done automatically at compile time (registration must stay cost-free); fillers
+something worse than the original — and gives reports/Pareto a baseline. When the slot has a
+captured `starting_point.py` (decorator-registered slots), seed stores it with the seeded design as
+its python source (`python_source: {kind: copied}` — the origin of the golden). Idempotent
+(structural dedup). It is not done automatically at compile time (registration must stay
+cost-free); fillers
 are expected to seed before generating.
 
 `show`/`ls` are read-only (they never create a DB); `insert` exits 2 with a `REJECTED (...)` line
@@ -262,10 +278,13 @@ design_db/v1/<spec_key>/        # spec_key = sha256(structural AAG + port spec)
     tb.sv, vectors.dat          # sim tiers only: the frozen testbench + golden-simulated trace
                                 #   (read-only once frozen)
     designs/<source>:<hash>/    # one admitted implementation
-        design.v                #   the implementation
+        design.v                #   the implementation (canonical IR — all processing runs on this)
         design.aag              #   precomputed splice input (structural AIG)
+        design.py               #   python source when known (.py inserts: elaborated-by-the-gate;
+                                #   seeded originals: copy of starting_point.py)
+        source/<rel>.py         #   .py inserts only: the entry's project-local import closure
         metrics.json            #   {<system>: {metrics: {...}, objectives: {axis -> field}}, …}
-        provenance.json         #   {source, created, verification: {tier, method, verdict, budget_s}}
+        provenance.json         #   {source, created, verification: {...}, python_source: {kind, …}}
     index.json                  # roll-up {design_id -> {struct_hash, metrics, source, created}}
 design_db/v1/manifest.json      # {registered name -> {spec_key, class, n_designs, selected_id, …}}
 ```
@@ -314,9 +333,9 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 |---|---|
 | `@from_design_db(objective=, metric=, pin=, fill=, name=, db=)` | The selection decorator: register → select → splice; miss ⇒ original logic. `name=` = manifest name (default: fn qualname; permanent binding). |
 | `register_slot(module_or_component, db=None, name=None) -> spec_key` | Register a slot (idempotent): spec + golden + default verification + manifest entry. |
-| `insert_design(spec_key, design, *, source, db=None, design_py=None, budget_s=None, provenance=None) -> InsertResult` | The gate: verify → dedup → stamp metrics → record provenance → admit atomically. `design`: spire `Component`/`Netlist`, Verilog path, or Verilog text. |
+| `insert_design(spec_key, design, *, source, db=None, budget_s=None, python_copy=None, provenance=None) -> InsertResult` | The gate: verify → dedup → stamp metrics → record provenance → admit atomically. `design`: a **`.py` design file** (`build()` — elaborated here, source stored), a spire `Component`/`Netlist`, a Verilog path, or Verilog text. |
 | `check_design(spec_key, design, *, db=None, budget_s=None) -> dict` | Advisory: run the slot's set oracle against a candidate (no admit, no write). The read-only sibling of `insert_design`; raises the same `VerificationError`s on failure. |
-| `seed_original(spec_key, db=None, budget_s=None) -> InsertResult` | Insert the slot's golden as the baseline candidate (`source="original"`) — a selection floor. |
+| `seed_original(spec_key, db=None, budget_s=None) -> InsertResult` | Insert the slot's golden as the baseline candidate (`source="original"`) — a selection floor; stores the slot's `starting_point.py` as its python source when present. |
 | `annotate(spec_key, design_ref, *, tech, values, raw=None, force=False, db=None) -> dict` | Attach a per-technology metric block (`metrics[tech]`) to a stored design; makes `metric=<tech>` selectable. Writes `metrics.json` + `index.json` mirror. |
 | `select_design(spec_key, *, objective=, metric=, pin=, sources=, record=)` | Deterministic selection → `SelectionResult` (or None on an empty slot). |
 | `pareto_front(spec_key, objectives=("area","delay"), metric=None)` | The non-dominated set. |

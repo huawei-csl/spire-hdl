@@ -227,8 +227,9 @@ def main(argv: Optional[list] = None) -> int:
     p.add_argument("--pareto", action="store_true", help="include the area/delay Pareto front")
     p.set_defaults(func=_cmd_show)
 
-    p = sub.add_parser("insert", help="insert a Verilog design through the verification gate")
-    _common(p); p.add_argument("design", help="path to the candidate .v/.sv file")
+    p = sub.add_parser("insert", help="insert a design through the verification gate — spire "
+                                      "(.py with build(); source stored) or Verilog (.v/.sv)")
+    _common(p); p.add_argument("design", help="candidate: .py (spire, elaborated here) or .v/.sv")
     p.add_argument("--slot", required=True, help="manifest name, spec_key, or unique key prefix")
     p.add_argument("--source", default="cli", help="provenance source tag (default: cli)")
     p.add_argument("--budget", type=float, default=None, help="CEC budget in seconds")
@@ -281,7 +282,7 @@ def main(argv: Optional[list] = None) -> int:
 
     p = sub.add_parser("verify", help="advisory: run the slot's set oracle against a candidate "
                                       "design (no admit, no write) — the check `insert` gates on")
-    _common(p); p.add_argument("design", help="path to the candidate .v/.sv file")
+    _common(p); p.add_argument("design", help="candidate: .py (spire, elaborated here) or .v/.sv")
     p.add_argument("--slot", required=True, help="manifest name, spec_key, or unique key prefix")
     p.add_argument("--budget", type=float, default=None, help="verification budget in seconds")
     p.set_defaults(func=_cmd_verify)

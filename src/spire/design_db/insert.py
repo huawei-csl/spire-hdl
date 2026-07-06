@@ -14,6 +14,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -33,7 +34,8 @@ class InsertResult:
 
 def _materialize(design: Any, tdir: Path) -> Path:
     """Accept a spire ``Component``/``Netlist``, a Verilog file path, or raw Verilog text; return a
-    Verilog file inside ``tdir``."""
+    Verilog file inside ``tdir``. (Python design *files* go through ``_elaborate_python`` first —
+    see ``_materialize_any``.)"""
     if hasattr(design, "_ports") or hasattr(design, "to_netlist"):   # a spire design — lower it
         from spire.design_db.keys import normalize
         text = normalize(design).to_verilog()
@@ -51,6 +53,96 @@ def _materialize(design: Any, tdir: Path) -> Path:
     target = tdir / "candidate.v"
     target.write_text(text if text.endswith("\n") else text + "\n")
     return target
+
+
+def _local_import_closure(entry: Path) -> Dict[str, Path]:
+    """The design's own helper modules: the transitive imports of ``entry`` whose files live under
+    its project root (git root, else its directory) and outside any site-packages — i.e. local by
+    containment. Stdlib and installed packages (spire included) resolve elsewhere and are never
+    vendored. Returns ``{root-relative path: file}``, bounded at 64 files."""
+    import ast
+    import importlib.util
+    entry = entry.resolve()
+    root = next((p for p in entry.parents if (p / ".git").exists()), entry.parent)
+
+    def _imported_names(f: Path) -> set:
+        names = set()
+        for node in ast.walk(ast.parse(f.read_text())):
+            if isinstance(node, ast.Import):
+                names.update(a.name.split(".")[0] for a in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                names.add(node.module.split(".")[0])
+        return names
+
+    def _local_file(name: str) -> Optional[Path]:
+        try:
+            origin = getattr(importlib.util.find_spec(name), "origin", None)
+        except (ImportError, ValueError):
+            return None
+        if not origin or not origin.endswith(".py"):
+            return None
+        p = Path(origin).resolve()
+        is_local = p.is_relative_to(root) and "site-packages" not in p.parts and p != entry
+        return p if is_local else None
+
+    closure: Dict[str, Path] = {}
+    queue = [entry]
+    sys.path.insert(0, str(entry.parent))                # names resolve as the design imports them
+    try:
+        while queue and len(closure) < 64:
+            for name in sorted(_imported_names(queue.pop())):
+                p = _local_file(name)
+                if p and str(p.relative_to(root)) not in closure:
+                    closure[str(p.relative_to(root))] = p
+                    queue.append(p)
+    finally:
+        sys.path.remove(str(entry.parent))
+    return closure
+
+
+def _elaborate_python(py: Path, tdir: Path) -> tuple:
+    """Elaborate a python design file — it must define ``build() -> Component/Netlist`` — into a
+    Verilog file inside ``tdir``. The generated Verilog is what the gate verifies and what the DB
+    stores as the canonical ``design.v``; the python is stored alongside as the *source* (correct
+    by construction: the .v is its elaboration). Returns ``(verilog_path, python_source_info)``."""
+    import runpy
+    py = Path(py).resolve()
+    if not py.exists():
+        raise DesignDBError(f"design file not found: {py}")
+    entry_dir = str(py.parent)
+    sys.path.insert(0, entry_dir)                    # local helper imports resolve from the entry
+    try:
+        try:
+            ns = runpy.run_path(str(py))
+        except DesignDBError:
+            raise
+        except Exception as exc:
+            raise DesignDBError(f"python design failed to execute: "
+                                f"{type(exc).__name__}: {exc}") from exc
+        build = ns.get("build")
+        if not callable(build):
+            raise DesignDBError(f"{py.name} must define build() -> Component/Netlist")
+        try:
+            module = build()
+        except Exception as exc:
+            raise DesignDBError(f"build() failed: {type(exc).__name__}: {exc}") from exc
+    finally:
+        sys.path.remove(entry_dir)
+    from spire.design_db.keys import normalize
+    text = normalize(module).to_verilog()
+    target = tdir / "candidate.v"
+    target.write_text(text if text.endswith("\n") else text + "\n")
+    info = {"entry": py, "closure": _local_import_closure(py)}
+    return target, info
+
+
+def _materialize_any(design: Any, tdir: Path) -> tuple:
+    """``_materialize`` + the python-design dispatch: a ``.py`` path is elaborated (build() →
+    Verilog) and its source travels with the result. Returns ``(verilog_path, python_src|None)``."""
+    if isinstance(design, (str, Path)) and "\n" not in str(design) \
+            and str(design).endswith(".py"):
+        return _elaborate_python(Path(design), tdir)
+    return _materialize(design, tdir), None
 
 
 def _candidate_aag(design_v: Path, workdir: Path) -> List[str]:
@@ -178,7 +270,7 @@ def check_design(spec_key: str, design: Any, *, db: Optional[str | Path] = None,
     _verification, method, budget = _resolve_verification(d, spec_key, spec, budget_s)
     with tempfile.TemporaryDirectory(prefix="spire_ddb_chk_") as td:
         tdir = Path(td)
-        design_v = _materialize(design, tdir)
+        design_v, _python_src = _materialize_any(design, tdir)
         aag_lines = _candidate_aag(design_v, tdir)
         _check_ports(aag_lines, spec.get("ports", []))
         _run_gate(d, spec_key, method, design_v, tdir, budget, db)
@@ -186,13 +278,21 @@ def check_design(spec_key: str, design: Any, *, db: Optional[str | Path] = None,
 
 
 def insert_design(spec_key: str, design: Any, *, source: str,
-                  db: Optional[str | Path] = None, design_py: Optional[str | Path] = None,
-                  budget_s: Optional[float] = None,
+                  db: Optional[str | Path] = None, budget_s: Optional[float] = None,
+                  python_copy: Optional[str | Path] = None,
                   provenance: Optional[Dict[str, Any]] = None) -> InsertResult:
     """Verify ``design`` against the slot's frozen verification and, if correct, admit it.
 
-    ``design`` may be a spire ``Component``/``Netlist`` (lowered to Verilog internally), a Verilog
-    file path, or raw Verilog text.
+    ``design`` may be a **python design file** (``*.py`` defining ``build() -> Component/Netlist``
+    — the primary, spire-first path: it is elaborated here, the generated Verilog becomes the
+    canonical ``design.v``, and the source + its project-local import closure are stored with the
+    design, correct by construction), a spire ``Component``/``Netlist`` object (lowered
+    internally), a Verilog file path, or raw Verilog text. Verilog is the DB's intermediate
+    representation: whatever the input, all downstream processing (gate, dedup, metrics, splice)
+    runs on ``design.v``.
+
+    ``python_copy`` attaches a .py as *provenance only* (tagged ``kind: copied``, not validated) —
+    used by ``seed_original`` to carry the slot's starting point; prefer inserting a ``.py``.
 
     Raises ``SlotUnverified`` (no frozen verification), ``VerificationFailed`` (rejected),
     ``CECTimeout`` (budget exceeded — options message included), ``CECInapplicable`` /
@@ -209,7 +309,7 @@ def insert_design(spec_key: str, design: Any, *, source: str,
 
     with tempfile.TemporaryDirectory(prefix="spire_ddb_") as td:
         tdir = Path(td)
-        design_v = _materialize(design, tdir)
+        design_v, python_src = _materialize_any(design, tdir)
 
         # Structural dedup key (also feeds the intrinsic metrics + the port check).
         aag_lines = _candidate_aag(design_v, tdir)
@@ -248,12 +348,22 @@ def insert_design(spec_key: str, design: Any, *, source: str,
         tmp_dir.mkdir(parents=True)
         shutil.copyfile(design_v, tmp_dir / "design.v")
         (tmp_dir / "design.aag").write_text("\n".join(aag_lines) + "\n")   # precomputed splice input
-        if design_py is not None:
-            py = Path(design_py)
-            (tmp_dir / "design.py").write_text(py.read_text() if py.exists() else str(design_py))
         prov = {"schema": 1, "source": source, "created": now,
                 "verification": {"tier": verification.get("tier", 0), "method": method,
                                  "verdict": "PASS", "budget_s": budget}}
+        if python_src is not None:            # a .py insert: design.v IS its elaboration
+            shutil.copyfile(python_src["entry"], tmp_dir / "design.py")
+            for rel, srcp in sorted(python_src["closure"].items()):
+                dst = tmp_dir / "source" / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(srcp, dst)
+            prov["python_source"] = {"kind": "elaborated", "entry": "design.py",
+                                     "local_modules": sorted(python_src["closure"])}
+        elif python_copy is not None:         # provenance copy (seed: the slot's starting point)
+            py = Path(python_copy)
+            if py.exists():
+                shutil.copyfile(py, tmp_dir / "design.py")
+                prov["python_source"] = {"kind": "copied", "entry": "design.py"}
         if provenance:
             prov.update(provenance)
         (tmp_dir / "metrics.json").write_text(_json(metrics))
@@ -275,13 +385,17 @@ def seed_original(spec_key: str, *, db: Optional[str | Path] = None,
     """Insert the slot's own golden as the baseline candidate (``source="original"``).
 
     Gives selection a *floor* (argmin can never pick worse than the original) and gives
-    reports/Pareto a baseline to compare against. Idempotent via structural dedup.
+    reports/Pareto a baseline to compare against. Idempotent via structural dedup. When the slot
+    has a captured ``starting_point.py`` (decorator-registered slots), it is stored with the
+    seeded design as its python source (provenance copy — the origin of the golden).
     """
     d = DesignDB.open(db)
     golden = d.slot_dir(spec_key) / "golden.v"
     if not golden.exists():
         raise DesignDBError(f"slot {spec_key[:12]}… has no golden.v — register it first")
-    return insert_design(spec_key, golden, source="original", db=db, budget_s=budget_s)
+    starting_point = d.slot_dir(spec_key) / "starting_point.py"
+    return insert_design(spec_key, golden, source="original", db=db, budget_s=budget_s,
+                         python_copy=starting_point if starting_point.exists() else None)
 
 
 def _json(obj: Any) -> str:
