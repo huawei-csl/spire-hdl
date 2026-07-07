@@ -126,7 +126,7 @@ class LogicDemo(Component):
             b=Input(UInt(8)),
             sel=Input(Bool()),
             sum=Output(UInt(9)),
-            mask=Output(UInt(4)),
+            mask=Output(UInt(2)),
             out=Output(UInt(8)),
         )
         self.elaborate()

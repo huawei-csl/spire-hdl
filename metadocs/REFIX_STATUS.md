@@ -93,5 +93,5 @@ each item's commit message cites the same ids. An item is not `applied` without 
 | Item | Source | Status | Notes |
 |---|---|---|---|
 | Examples/scripts (complete 10.4 incl. guards) | I 10.3, 10.4, I2 §13.1–13.9 | pending | |
-| Docs corrections/regeneration | I 10.1, 10.7, 9.4, I2 §14.1–14.7 | pending | |
+| Docs corrections/regeneration | I 10.1, 10.7, 9.4, I2 §14.1–14.7 | pending | early catch (review): README quickstart declared mask as UInt(4) for a 2-bit cat — fixed to UInt(2), full block re-verified incl. emitted [1:0] decl (new finding, not in ISSUES/ISSUES2) |
 | Packaging/metadata/extras | I 10.2, 10.5, 10.6, I2 §16.1–16.8 | pending | |
