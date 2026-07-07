@@ -51,7 +51,7 @@ each item's commit message cites the same ids. An item is not `applied` without 
 
 | Item | Source | Status | Notes |
 |---|---|---|---|
-| 5.1 with async-ROM exemption | I 5.1, I2 §6.4 guard | pending | |
+| 5.1 with async-ROM exemption | I 5.1, I2 §6.4 guard | applied | guard moved up-front in to_verilog_lines and now counts ALL registers (incl. `_no_emit_drive`-tagged primitive internals) plus memories with `needs_clock()` (new `_MemoryArray` method: any write port or reset arm); write-less unregistered ROMs stay clockless (§6.4 exemption by construction — never counted); registered-read ROMs are caught via their internal Register. Old dead inner guard deleted (guide). Actionable message names an offending signal and says with_clock=True. 5 tests (FIFO default-emit raises / clocked emits, async ROM clockless, registered ROM requires clock, plain reg still guarded); FIFO + registered-ROM cases fail at baseline. Residual (unchanged from old fix): a custom block referencing rst with with_reset=False is not generically detectable. Full suite 654/19/13xf/12xp/0 fail |
 | Memory/FIFO re-fixes + via_reg parity | I 5.2–5.8, I2 §6.1–6.3, §6.5–6.7 | pending | |
 
 ## Phase 4 — backends (AIGER, decorators)

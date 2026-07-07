@@ -98,6 +98,11 @@ class _MemoryArray(Signal):
         self._no_emit_decl = True
         self._no_emit_drive = True
 
+    def needs_clock(self) -> bool:
+        """True iff this storage requires a clock: any write port or reset arm. A write-less,
+        unregistered ROM is pure combinational + ``initial`` and emits clockless."""
+        return bool(self.write_ports) or self.reset is not None
+
     # ----------------------------- port factory -------------------------------
 
     def _port(self, suffix: str, typ: HDLType, kind: str = "wire") -> Signal:

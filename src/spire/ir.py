@@ -225,6 +225,13 @@ class Netlist:
         regs_all = self._internals_of(("reg",))
         regs = regs_all
 
+        # Anything sequential needs a clock — also `_no_emit_drive` registers (their always block
+        # lives in a primitive's custom Verilog). Async ROMs are clockless (needs_clock is False).
+        clocked = [*regs_all, *[m for m in self._internals_of(("mem",)) if m.needs_clock()]]
+        if clocked and not self.with_clock:
+            raise ValueError(f"Registers/memories present (e.g. '{clocked[0].name}') but the module has "
+                             f"no clock input; emit with with_clock=True")
+
         lines.append('// Wires')
         for w in wires:
             if w._no_emit_decl:
@@ -254,8 +261,6 @@ class Netlist:
         lines.append("// Sequential logic")
         emit_regs = [r for r in regs if not r._no_emit_drive]
         if emit_regs:
-            if not self.with_clock:
-                raise ValueError("Registers present but module has no clock input.")
             sens = f"posedge {self.clk.name}"
             if self.with_reset:
                 sens += f" or posedge {self.rst.name}"
