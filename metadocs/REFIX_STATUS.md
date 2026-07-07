@@ -14,8 +14,8 @@ each item's commit message cites the same ids. An item is not `applied` without 
 | Semantics reference (`docs/README_semantics.md`) | I2 §1 preamble | applied | process-free reference doc |
 | Plan + status docs in `metadocs/`, committed via .gitignore whitelist | — | applied | this commit |
 | Differential harness in `testing/differential/` | I2 §1, harness from issues2_repros | applied | ieee_eval (yosys-calibrated port) + harness + leaf battery + nested battery + fuzz; 2.8 s |
-| Baseline run recorded; bug shapes as strict xfails | I 0.1, 0.2, 0.3-0.6, 13.2; I2 §1.1-§1.6 | applied | 62 pass / 33 strict-xfail; leaf: mixed ± * and any-signed ordered cmp diverge (= 0.1/0.2 exactly); (s4-s4)<s5 conformant-by-accident — guards the §1.3 trap; AIGER: unsigned fuzz clean, signed xfail (0.3-0.6) |
-| `simplify=` docstring caveat (experimental until Phase 7) | I 0.7/1.1, I2 §2.1 | pending | one line |
+| Baseline run recorded; bug shapes as strict xfails | I 0.1, 0.2, 0.3-0.6, 13.2; I2 §1.1-§1.6 | applied | harness: 62 pass / 33 strict-xfail; leaf: mixed ± * and any-signed ordered cmp diverge (= 0.1/0.2 exactly); (s4-s4)<s5 conformant-by-accident — guards the §1.3 trap; AIGER: unsigned fuzz clean, signed xfail (0.3-0.6). Full suite @ baseline: 539 passed / 19 skipped / 45 xfailed / 12 xpassed / 0 failed, 13m28s (12 xpass = the pre-existing non-strict BOOTH_OPTIMISED sweep; skips = 12 BAUGH_WOOLEY-signed-only + 7 missing PPA fingerprints) |
+| `simplify=` docstring caveat (experimental until Phase 7) | I 0.7/1.1, I2 §2.1 | applied | ir.py to_verilog_lines docstring |
 
 ## Phase 1 — expression signedness & width-correct emission
 

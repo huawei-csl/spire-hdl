@@ -126,7 +126,12 @@ class Netlist:
     # Verilog generation
     def to_verilog_lines(self, collect_signals=True, simplify=False, cse=True,
                           balance_mux_trees=False, balance_mux_min_n=16) -> list[str]:
+        """Emit the module as Verilog source lines.
 
+        Caveat: ``simplify=True`` is experimental — its rewrites are not yet verified to preserve node signedness,
+        and it mutates drivers in place (the module can differ from what was simulated before the call). Leave it
+        off for signed designs and for any emission whose equivalence matters.
+        """
         if collect_signals:
             self.collect_signals()
             # Post-construction peephole simplification (opt_expr / opt_muxtree analogue): constant folding, boolean
