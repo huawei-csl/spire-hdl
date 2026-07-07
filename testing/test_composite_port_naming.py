@@ -1,14 +1,15 @@
-"""Composite IO leaf naming: field-path port names at any nesting depth.
+"""Composite IO leaf naming: field-path port names at any nesting depth; explicit names survive.
 
-Every enclosing record rebuilds its subtree's names from scratch, so a leaf port is always its
-full field path with each segment appearing exactly once — regardless of nesting depth or
-construction order. Field keys win: a `name=` given at leaf construction applies to standalone
-signals only and is overridden inside records.
+Every enclosing record rebuilds its subtree's names from scratch, so a leaf port is always
+`<field path to parent>_<field key or explicit name>` with each segment appearing exactly once —
+regardless of nesting depth or construction order. An explicit `name=` survives as the last
+segment: records also merely group existing signals (operand bundles), so wrapping must not
+rename what the user named.
 """
 from spire import Bool, Component, Input, IORecord, Output, UInt, Wire
 from spire.composite.array import Array
 from spire.composite.record import CompositeRecord
-from spire.expr import reset_shared_cache
+from spire.expr import Signal, reset_shared_cache
 from spire.interfaces import Stream
 
 
@@ -16,17 +17,17 @@ def _leaf_names(composite):
     return [leaf.name for leaf in composite.to_list()]
 
 
-def test_depth1_field_names_win_over_construction_names():
+def test_depth1_field_and_explicit_names():
     reset_shared_cache()
     io = IORecord(addr=Input(UInt(4)), q=Output(UInt(4)), named=Input(UInt(4), name="my_addr"))
-    assert _leaf_names(io) == ["addr", "q", "named"]
+    assert _leaf_names(io) == ["addr", "q", "my_addr"]
 
 
 def test_depth2_single_path_segments():
     reset_shared_cache()
     io = IORecord(bus=CompositeRecord(hdr=CompositeRecord(addr=Input(UInt(4)), my=Input(UInt(4), name="my_addr")),
                                       data=Input(UInt(8))))
-    assert _leaf_names(io) == ["bus_hdr_addr", "bus_hdr_my", "bus_data"]
+    assert _leaf_names(io) == ["bus_hdr_addr", "bus_hdr_my_addr", "bus_data"]
 
 
 def test_depth3_single_path_segments():
@@ -47,16 +48,23 @@ def test_record_in_array_in_record():
     assert _leaf_names(io) == ["lanes_0_v", "lanes_0_d", "lanes_1_v", "lanes_1_d"]
 
 
-def test_construction_name_overridden_at_depth_too():
+def test_explicit_name_replaces_leaf_key_only():
     reset_shared_cache()
     io = IORecord(bus=CompositeRecord(addr=Input(UInt(4), name="my_addr")))
-    assert _leaf_names(io) == ["bus_addr"]
+    assert _leaf_names(io) == ["bus_my_addr"]
 
 
 def test_wire_fields_get_field_path_names():
     reset_shared_cache()
-    rec = CompositeRecord(top=Wire(UInt(4)), sub=CompositeRecord(inner=Wire(UInt(4))))
-    assert _leaf_names(rec) == ["top", "sub_inner"]
+    rec = CompositeRecord(top=Wire(UInt(4)), sub=CompositeRecord(inner=Wire(UInt(4))),
+                          named=Wire(UInt(4), name="kept"))
+    assert _leaf_names(rec) == ["top", "sub_inner", "kept"]
+
+def test_wrapping_existing_named_signals_does_not_rename_them():
+    reset_shared_cache()
+    port = Signal(typ=UInt(4), kind="input", name="a_0_0")  # e.g. a parent's port fed to an operand bundle
+    _ = CompositeRecord(a=port)
+    assert port.name == "a_0_0"
 
 
 class _Depth2Comp(Component):

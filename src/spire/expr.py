@@ -348,6 +348,7 @@ class Signal(Expr, Assignable):
             raise TypeError("Signal(typ, kind, name=None): argument order changed — 'name' is now last (pass name= or reorder).")
         if typ is None or kind is None:
             raise TypeError("Signal requires a type and a kind, e.g. Signal(UInt(8), 'input')")
+        self._given_name = name  # or None ⇒ record machinery may (re)name this leaf from its field path
         if name is None:
             # Infer from the assignment target, e.g. ``clk = Signal(UInt(8), "input")`` → ``"clk"``.
             name = infer_signal_name_from_assignment(kind, "signal", __file__)
@@ -414,8 +415,9 @@ class Wire(Signal):
 
 # explicit IO ports — Signal with a preset direction (siblings of Wire/Register).
 # Used as IORecord fields; standalone `x = Input(UInt(8))` self-names via the same inference
-# as Wire/Register. Inside a record, leaves are always named from their field path (the robust
-# source inside an `IORecord(a=Input(...))` call) — field keys win over any name= given here.
+# as Wire/Register. Inside a record, a leaf without an explicit name (`_given_name is None`) is
+# named from its field path (the robust source inside an `IORecord(a=Input(...))` call); an
+# explicit name= survives record wraps as the last path segment.
 class Input(Signal):
     def __init__(self, typ: HDLType, name: Optional[str]=None):
         super().__init__(typ, kind="input", name=name)   # name inferred by Signal when None

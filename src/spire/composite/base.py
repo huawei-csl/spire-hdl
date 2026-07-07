@@ -53,14 +53,14 @@ class HDLComposite(BitSerializable, Assignable):
         return [(str(i), c) for i, c in enumerate(self.to_list_first_level())]
 
     def _assign_port_names(self, prefix: str) -> None:
-        """Name every leaf ``<prefix>_<field/index path>``. Rebuilt from scratch each call, so
-        outer re-walks never duplicate segments."""
+        """Name every leaf ``<prefix>_<field/index path>``, with an explicit user-chosen name as
+        the last segment. Rebuilt from scratch each call, so outer re-walks never duplicate segments."""
         for key, child in self._named_children():
             full = f"{prefix}_{key}"
             if isinstance(child, HDLComposite):
                 child._assign_port_names(full)
             elif isinstance(child, Signal):
-                child.name = full
+                child.name = f"{prefix}_{child._given_name}" if child._given_name else full
 
     def flip(self: SelfComp) -> SelfComp:
         """Reverse the direction of every leaf in place (``input``<->``output``; ``wire``/``reg``

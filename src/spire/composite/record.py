@@ -39,9 +39,10 @@ class CompositeRecord(HDLComposite):
 
     def __init__(self, **field_values: object) -> None:
         for field_name, val in field_values.items():
-            # Direct Signal port: named by its field key (field keys win over any construction name).
+            # Direct Signal port: named by its field key unless the user chose a name (records also
+            # merely *group* existing signals — an operand bundle must not rename its arguments).
             if isinstance(val, Signal):
-                val.name = field_name
+                val.name = val._given_name or field_name
             # Nested bundle/array: leaves are named by the full field path (``up`` + ``valid`` ->
             # ``up_valid``). Names are rebuilt from this record as the root, so an enclosing
             # record's later walk replaces them wholesale — no duplicated path segments at depth.
