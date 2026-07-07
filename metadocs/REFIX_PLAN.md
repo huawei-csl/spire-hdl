@@ -121,7 +121,12 @@ Scope: ISSUES 0.1, 0.2 (redesigned, not re-applied) + ISSUES2 §1.1–1.6, §2.2
    `Netlist` name/port API, and explicit-name paths; deterministic fallback names.
 6. **Register `init=` cones** collected by `_SignalCollector` (+ exclude self-colliding inferred names) (§2.3).
 7. `flat_emit`: after (1), decide whether it still has a correctness-safe niche; if not, restrict it to width-1
-   boolean cones (its only in-tree use) and document (13.2, §1.6).
+   boolean cones (its only in-tree use) and document (13.2, §1.6). DONE with the isolation pass (docstring updated);
+   what remains of `flat_emit` is "keep flat-safe boolean cones fully inline + no construction-time wires".
+   RETIREMENT DEFERRED to Phase 5: either generalize (normal-mode sharing also skips flat-safe booleans — likely
+   QoR-positive per the _minimize_emit investigation, measurable with bench_fsm_optimize) and delete flat_emit, or
+   keep the narrow knob. Note construction-time-default isolation was rejected: the flat-safe exception is
+   parent-contextual (unknown at construction), and interposed wires would break every IR pattern matcher.
 
 Gate: Phase-0 xfails all flip green; 100% sim == evaluator == AIGER on leaf battery, nested battery, and fuzz;
 yosys crosscheck green; old branch's signedness differential tests (ported) green.

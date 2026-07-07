@@ -21,7 +21,7 @@ each item's commit message cites the same ids. An item is not `applied` without 
 
 | Item | Source | Status | Notes |
 |---|---|---|---|
-| Width-isolation of non-leaf operands at op construction | I2 §1.1–1.2, §1.6, I 13.2 | pending | design center; force-share first, narrow later |
+| Width-isolation pass (emission-time, always on) | I2 §1.1, §1.2, §1.5, §1.6; I 13.2; I 0.1 (all-signed half) | applied | src/spire/width_isolation.py + ir.py hook, after simplify/balance/cse so pattern matchers see original nesting; flat-safe 1-bit boolean cones stay inline (preserves _minimize_emit's flat-PPA path, flag-free); flipped 13 strict xfails (all §1.1/§1.5/§1.6/13.2 shapes, unsigned fuzz, ss ordered compares + narrow compound compare — alignment Resize wires carry declared signedness); FpMulSN(5,10) structure cost +47 wires (~+8.7%); fast sweep 134 passed; full suite 552/19/32xf/12xp/0 fail = baseline + exactly the 13 flips |
 | Signed compares re-fix on isolated operands | I 0.1, I2 §1.3 | pending | |
 | Mixed-arith alignment re-fix | I 0.2, I2 §1.4 | pending | |
 | Ternary emission per charter C1 | I2 §1.5 | pending | |

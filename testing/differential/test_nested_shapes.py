@@ -126,20 +126,21 @@ def shape_not_signed_plus(m):  # (~s8) + s8: unsigned ~ result mixed into signed
 
 
 SHAPES = [
-    # (builder, flat_emit?, strict-xfail reason or None)
-    (shape_sub_plus, False, "ISSUES2 §1.1: inline compound operand re-evaluated at context width"),
+    # (builder, flat_emit?, strict-xfail reason or None). Shapes without a reason are conformance guarantees;
+    # the §1.1/§1.5/§1.6-family entries flipped green when emission-time width isolation landed.
+    (shape_sub_plus, False, None),
     (shape_sub_plus_right, False, None),
-    (shape_not_plus_one, False, "ISSUES2 §1.1: ~ evaluated at context width (two's-complement idiom)"),
-    (shape_mixed_inner, False, "ISSUES 0.2 / ISSUES2 §1.4: mixed-sign op nested in signed context"),
-    (shape_signed_shr, False, "ISSUES2 §1.1: signed >> at context width (extend-then-shift)"),
-    (shape_var_shl, False, "ISSUES2 §1.1: variable << keeps bits the IR discards"),
-    (shape_cmp_compound_signed, False, None),  # correct-by-accident today; guards the ISSUES2 §1.3 trap
-    (shape_cmp_compound_signed_narrow, False, "ISSUES 0.1: extension concat unsigns the compare island"),
+    (shape_not_plus_one, False, None),
+    (shape_mixed_inner, False, "ISSUES 0.2: mixed-sign op emits an unsigned expression"),
+    (shape_signed_shr, False, None),
+    (shape_var_shl, False, None),
+    (shape_cmp_compound_signed, False, None),  # all-signed island; also guards the ISSUES2 §1.3 $signed trap
+    (shape_cmp_compound_signed_narrow, False, None),  # isolation keeps the alignment wire signed
     (shape_cmp_compound_unsigned, False, None),
-    (shape_flat_eq, True, "ISSUES2 §1.6 / ISSUES 13.2: flat_emit compare of compounds"),
-    (shape_neg_plus, False, "ISSUES 0.2 / ISSUES2 §1.4: unary minus nested in signed context"),
-    (shape_mux_operand, False, "ISSUES2 §1.5: ternary operand signedness/width in context"),
-    (shape_sub_times, False, "ISSUES2 §1.1: wrapped sub feeding a multiply"),
+    (shape_flat_eq, True, None),
+    (shape_neg_plus, False, "ISSUES 0.2: unary minus (`0 - a`) is a mixed-sign op"),
+    (shape_mux_operand, False, None),
+    (shape_sub_times, False, None),
     (shape_controls, False, None),
     (shape_masked_sub, False, None),
     (shape_cmp_in_arith, False, None),

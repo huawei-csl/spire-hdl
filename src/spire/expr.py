@@ -50,12 +50,8 @@ import contextlib as _contextlib
 
 @_contextlib.contextmanager
 def flat_emit(enabled: bool = True):
-    """Emit Verilog without *opportunistic* common-subexpression sharing.
-
-    By default Spire wraps every non-leaf subexpression into a named wire (``assign sig_k = ...``) 
-    to shrink the emitted Verilog. This context manager disables this behavior, 
-    The emitted Verilog is larger but can give better PPA results in some cases.
-    """
+    """Build without opportunistic subexpression sharing — keeps value-safe (1-bit boolean) logic inline,
+    which can map better on PPA. Emission stays value-conformant: see ``spire.width_isolation``."""
     old = _SharedCache.opportunistic
     _SharedCache.opportunistic = not enabled
     try:

@@ -50,11 +50,15 @@ ARITH = {"add", "sub", "mul"}
 
 
 def _baseline_xfail(op: str, sa: bool, sb: bool):
-    """Expected-divergent leaf shapes at the current baseline, with the issue that owns them."""
+    """Expected-divergent leaf shapes at the current baseline, with the issue that owns them.
+
+    All-signed ordered compares conform since width isolation: the operand-alignment `Resize` wires carry declared
+    signedness, so the emitted comparison island stays signed. Only mixed-signedness semantics remain open.
+    """
     if op in ARITH and sa != sb:
         return "ISSUES 0.2: mixed signed/unsigned +/-/* emits unsigned Verilog"
-    if op in ORDERED_CMP and (sa or sb):
-        return "ISSUES 0.1: signed comparisons emit unsigned Verilog"
+    if op in ORDERED_CMP and sa != sb:
+        return "ISSUES 0.1: mixed-signedness ordered compares emit an unsigned island"
     return None
 
 

@@ -35,7 +35,6 @@ def _cmp_verilog(m, inputs, vectors):
     return bad
 
 
-@pytest.mark.xfail(strict=True, reason="ISSUES2 §1.1: nested compound operands re-evaluated at context width")
 def test_fuzz_sim_vs_verilog_unsigned():
     _run(_cmp_verilog, seed_base=1000, signed_ok=False)
 

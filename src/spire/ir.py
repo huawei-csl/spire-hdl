@@ -158,6 +158,12 @@ class Netlist:
                 from spire.cse import apply_structural_cse
                 if apply_structural_cse(self):
                     self.collect_signals()
+            # Width isolation (always on, last — the passes above want the original nesting): wire every remaining
+            # inline compound operand so IEEE context re-sizing cannot diverge from the IR's node-width semantics
+            # (docs/README_semantics.md §2, backend conformance).
+            from spire.width_isolation import apply_width_isolation
+            if apply_width_isolation(self):
+                self.collect_signals()
 
         # Basic checks. Signals tagged `_no_emit_drive` (custom-Verilog replacement) are exempt — the custom block
         # provides their value. Memory stores (`_MemoryArray`) are sim-only and always no-emit, so they and their
