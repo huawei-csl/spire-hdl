@@ -8,7 +8,7 @@ Layout (schema v1)::
         verification.json   # frozen verification (combinational default: Tier-0 CEC); absent = unverified
         designs/<id>/       # verification-gated implementations (design.v, metrics.json, provenance.json)
         index.json          # roll-up {design_id -> {struct_hash, metrics, source, created}}
-    <db root>/v1/manifest.json   # reverse index {registered name -> {spec_key, class, n_designs}}
+    <db root>/v1/manifest.json   # reverse index {registered name -> {spec_key, class, selection}}
 
 DB-root resolution (zero-config): explicit ``db=`` → ``$SPIREHDL_DB_PATH`` → nearest ``design_db/``
 upward from cwd → auto-create ``./design_db`` (one-line note on first creation).
@@ -97,39 +97,81 @@ class DesignDB:
         except FileNotFoundError:
             return default
 
-    # -- manifest
+    # -- the design index: derived from the design dirs (the source of truth)
+
+    def derive_index(self, spec_key: str) -> Dict[str, Any]:
+        """The slot's design index, derived from ``designs/<id>/`` — each admitted dir carries
+        its own ``provenance.json`` + ``metrics.json`` (+ ``design.aag``), and the atomic dir
+        rename at admit is the only write that matters. Concurrent admissions can therefore
+        never lose an entry; ``index.json`` is merely a materialized cache of this."""
+        designs = self.slot_dir(spec_key) / "designs"
+        index: Dict[str, Any] = {}
+        if not designs.is_dir():
+            return index
+        for ddir in sorted(p for p in designs.iterdir()
+                           if p.is_dir() and not p.name.endswith(".tmp")):
+            prov = self.read_json(ddir / "provenance.json", {})
+            struct_hash = prov.get("struct_hash")
+            if not struct_hash:                     # pre-derivation dirs: hash the stored AAG
+                aag = ddir / "design.aag"
+                if aag.exists():
+                    text = aag.read_text()
+                    text = text[:-1] if text.endswith("\n") else text
+                    struct_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            index[ddir.name] = {"struct_hash": struct_hash,
+                                "source": prov.get("source", ddir.name.rsplit(":", 1)[0]),
+                                "created": prov.get("created"),
+                                "metrics": self.read_json(ddir / "metrics.json", {})}
+        return index
+
+    def read_index(self, spec_key: str, *, materialize: bool = True) -> Dict[str, Any]:
+        """Derived index + best-effort refresh of the ``index.json`` cache (kept on disk for
+        direct inspection — never authoritative, self-healing on every read)."""
+        index = self.derive_index(spec_key)
+        if materialize:
+            try:
+                cache = self.slot_dir(spec_key) / "index.json"
+                if self.read_json(cache, None) != index:
+                    self.write_json(cache, index)
+            except OSError:
+                pass                                 # cache refresh must never break a read
+        return index
+
+    # -- manifest (small primary record: name bindings + selection provenance; counts derived)
+
+    def _locked_manifest_write(self, mutate) -> None:
+        """Read-modify-write the manifest under an fcntl lock — manifest writes are rare
+        (registration, selection recording) but must not lose entries under concurrency."""
+        import fcntl
+        self.v1.mkdir(parents=True, exist_ok=True)
+        lock_path = self.v1 / ".manifest.lock"
+        with open(lock_path, "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                manifest = self.read_json(self.manifest_path, {"schema": 1, "slots": {}})
+                if mutate(manifest):
+                    self.write_json(self.manifest_path, manifest)
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
 
     def update_manifest(self, name: str, entry: Dict[str, Any]) -> None:
-        manifest = self.read_json(self.manifest_path, {"schema": 1, "slots": {}})
-        slot = manifest["slots"].get(name, {})
-        slot.update(entry)
-        manifest["slots"][name] = slot
-        self.write_json(self.manifest_path, manifest)
+        def _mutate(manifest: Dict[str, Any]) -> bool:
+            slot = manifest["slots"].get(name, {})
+            slot.update(entry)
+            manifest["slots"][name] = slot
+            return True
+        self._locked_manifest_write(_mutate)
 
     def update_manifest_selection(self, spec_key: str, fields: Dict[str, Any]) -> None:
         """Record the resolved selection on every manifest entry of this slot."""
-        manifest = self.read_json(self.manifest_path, None)
-        if not manifest:
-            return
-        changed = False
-        for entry in manifest.get("slots", {}).values():
-            if entry.get("spec_key") == spec_key:
-                entry.update(fields)
-                changed = True
-        if changed:
-            self.write_json(self.manifest_path, manifest)
-
-    def refresh_manifest_counts(self, spec_key: str, n_designs: int) -> None:
-        manifest = self.read_json(self.manifest_path, None)
-        if not manifest:
-            return
-        changed = False
-        for entry in manifest.get("slots", {}).values():
-            if entry.get("spec_key") == spec_key:
-                entry["n_designs"] = n_designs
-                changed = True
-        if changed:
-            self.write_json(self.manifest_path, manifest)
+        def _mutate(manifest: Dict[str, Any]) -> bool:
+            changed = False
+            for entry in manifest.get("slots", {}).values():
+                if entry.get("spec_key") == spec_key:
+                    entry.update(fields)
+                    changed = True
+            return changed
+        self._locked_manifest_write(_mutate)
 
 
 def register_slot(module_or_component: Any, db: Optional[str | Path] = None, *,
@@ -178,6 +220,6 @@ def register_slot(module_or_component: Any, db: Optional[str | Path] = None, *,
         if verification is not None:
             d.write_json(slot / "verification.json", verification)
 
-    index = d.read_json(slot / "index.json", {})
-    d.update_manifest(reg_name, {"spec_key": key, "class": circuit_class, "n_designs": len(index)})
+    d.update_manifest(reg_name, {"spec_key": key, "class": circuit_class})
+    # (design counts are derived from designs/ at read time — see derive_index; nothing to stamp)
     return key

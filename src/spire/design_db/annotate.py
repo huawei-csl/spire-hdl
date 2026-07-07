@@ -3,8 +3,8 @@
 Spire's insert gate stamps only what it can compute with yosys (the ``aig`` structural system +
 the ``transistors`` estimate). Richer per-technology PPA (e.g. an ASAP7 place-and-route flow) is
 produced *outside* spire — by RTLScout's cost pipeline, or by hand — and handed back through this
-one write path so spire keeps ownership of the on-disk schema and the ``metrics.json`` ↔
-``index.json`` mirror.
+one write path so spire keeps ownership of the on-disk schema (``metrics.json`` is authoritative;
+the ``index.json`` cache re-derives from it).
 
 A ``tech`` names a new *measurement system* on the design, written in the same self-describing
 form the gate uses — ``{"metrics": {...}, "objectives": {area→…, delay→…}}`` — so that after
@@ -28,7 +28,7 @@ OBJECTIVE_AXES = ("area", "delay", "adp", "edap")
 
 def _resolve_design(d: DesignDB, spec_key: str, design_ref: str) -> str:
     """A design reference: an exact design_id or a unique prefix of one, within the slot."""
-    index = d.read_json(d.slot_dir(spec_key) / "index.json", {})
+    index = d.derive_index(spec_key)
     if not index:
         raise DesignDBError(f"slot {spec_key[:12]}… has no admitted designs to annotate")
     if design_ref in index:
@@ -47,7 +47,7 @@ def _assert_consistent_with_siblings(d: DesignDB, spec_key: str, tech: str,
     """No other design in the slot may map the same objective of this system to a different field —
     keeps every design comparable under one interpretation (the guarantee a shared registry would
     give for free)."""
-    index = d.read_json(d.slot_dir(spec_key) / "index.json", {})
+    index = d.derive_index(spec_key)
     for did, entry in index.items():
         if did == exclude_id:
             continue
@@ -70,8 +70,8 @@ def annotate(spec_key: str, design_ref: str, *, tech: str, values: Dict[str, flo
 
     ``values`` are numeric readings; the block's ``objectives`` map is the identity over the
     standard axes (``area``/``delay``/``adp``/``edap``) present in ``values`` — other numeric keys
-    are stored but not selectable. Written to both the design's ``metrics.json`` and the slot
-    ``index.json`` mirror. Returns the updated metrics dict.
+    are stored but not selectable. Written to the design's ``metrics.json`` (authoritative);
+    the slot's ``index.json`` cache refreshes from it. Returns the updated metrics dict.
     """
     if tech in RESERVED_SYSTEMS:
         raise DesignDBError(f"{tech!r} is a reserved (gate-stamped) measurement system — "
@@ -101,10 +101,6 @@ def annotate(spec_key: str, design_ref: str, *, tech: str, values: Dict[str, flo
     if raw is not None:
         block["raw"] = raw
     metrics[tech] = block
-    d.write_json(mfile, metrics)
-
-    index = d.read_json(slot / "index.json", {})   # keep the index mirror consistent
-    if design_id in index:
-        index[design_id]["metrics"] = metrics
-        d.write_json(slot / "index.json", index)
+    d.write_json(mfile, metrics)                   # metrics.json is the source of truth …
+    d.read_index(spec_key)                         # … the index.json cache refreshes from it
     return {"spec_key": spec_key, "design_id": design_id, "tech": tech, "metrics": metrics}

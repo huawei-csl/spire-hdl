@@ -316,7 +316,7 @@ def insert_design(spec_key: str, design: Any, *, source: str,
         _check_ports(aag_lines, spec.get("ports", []))
         struct_hash = hashlib.sha256("\n".join(aag_lines).encode("utf-8")).hexdigest()
 
-        index = d.read_json(slot / "index.json", {})
+        index = d.derive_index(spec_key)             # designs/ is the source of truth
         for design_id, entry in index.items():
             if entry.get("struct_hash") == struct_hash:
                 return InsertResult(design_id, True, entry.get("metrics", {}))
@@ -348,7 +348,7 @@ def insert_design(spec_key: str, design: Any, *, source: str,
         tmp_dir.mkdir(parents=True)
         shutil.copyfile(design_v, tmp_dir / "design.v")
         (tmp_dir / "design.aag").write_text("\n".join(aag_lines) + "\n")   # precomputed splice input
-        prov = {"schema": 1, "source": source, "created": now,
+        prov = {"schema": 1, "source": source, "created": now, "struct_hash": struct_hash,
                 "verification": {"tier": verification.get("tier", 0), "method": method,
                                  "verdict": "PASS", "budget_s": budget}}
         if python_src is not None:            # a .py insert: design.v IS its elaboration
@@ -371,12 +371,9 @@ def insert_design(spec_key: str, design: Any, *, source: str,
         if final_dir.exists():                      # lost a race — treat as dedup
             shutil.rmtree(tmp_dir)
             return InsertResult(design_id, True, metrics)
-        os.replace(tmp_dir, final_dir)
+        os.replace(tmp_dir, final_dir)              # the admit: the only write that matters
 
-    index[design_id] = {"struct_hash": struct_hash, "source": source, "created": now,
-                        "metrics": metrics}
-    d.write_json(slot / "index.json", index)
-    d.refresh_manifest_counts(spec_key, len(index))
+    d.read_index(spec_key)                          # refresh the index.json cache (best effort)
     return InsertResult(design_id, False, metrics)
 
 

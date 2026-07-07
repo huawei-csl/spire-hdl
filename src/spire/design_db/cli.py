@@ -47,10 +47,14 @@ def _cmd_init(args: argparse.Namespace) -> int:
 def _cmd_ls(args: argparse.Namespace) -> int:
     d = _open(args.db)
     manifest = d.read_json(d.manifest_path, {"slots": {}})
-    if args.json:
-        print(json.dumps(manifest, indent=2, sort_keys=True))
-        return 0
     rows = manifest.get("slots", {})
+    counts = {e["spec_key"]: len(d.derive_index(e["spec_key"]))     # derived, never stale
+              for e in rows.values() if e.get("spec_key")}
+    if args.json:
+        out = {**manifest, "slots": {n: {**e, "n_designs": counts.get(e.get("spec_key"), 0)}
+                                     for n, e in rows.items()}}
+        print(json.dumps(out, indent=2, sort_keys=True))
+        return 0
     if not rows:
         if d.root.exists():
             print(f"(empty design DB at {d.root})")
@@ -59,7 +63,7 @@ def _cmd_ls(args: argparse.Namespace) -> int:
         return 0
     for name, e in sorted(rows.items()):
         sel = e.get("selected_id", "-")
-        print(f"{name:32s} {e.get('class', '?'):13s} designs={e.get('n_designs', 0):<3d} "
+        print(f"{name:32s} {e.get('class', '?'):13s} designs={counts.get(e.get('spec_key'), 0):<3d} "
               f"key={e['spec_key'][:12]}…  selected={sel}")
     return 0
 
@@ -72,7 +76,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
         "spec_key": key,
         "spec": d.read_json(slot / "spec.json"),
         "verification": d.read_json(slot / "verification.json"),
-        "designs": d.read_json(slot / "index.json", {}),
+        "designs": d.read_index(key),               # derived from designs/ (cache refreshed)
     }
     if args.pareto:
         from spire.design_db.select import pareto_front

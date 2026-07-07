@@ -85,11 +85,13 @@ def test_annotate_sibling_consistency(db):
     annotate(key, cand_id, tech="asap7", values={"area": 100.0, "delay": 88.0})
     annotate(key, original_id, tech="asap7", values={"area": 120.0, "delay": 90.0})  # same map: fine
 
-    # plant a conflicting interpretation (area drawn from a different field) on one design, then a
-    # normal annotate of the sibling must refuse rather than silently mix interpretations
-    index = d.read_json(idx_path, {})
-    index[cand_id]["metrics"]["asap7"]["objectives"]["area"] = "footprint"
-    d.write_json(idx_path, index)
+    # plant a conflicting interpretation (area drawn from a different field) in the design's own
+    # metrics.json (the source of truth — index.json is only a derived cache), then a normal
+    # annotate of the sibling must refuse rather than silently mix interpretations
+    mfile = d.slot_dir(key) / "designs" / cand_id / "metrics.json"
+    metrics = d.read_json(mfile)
+    metrics["asap7"]["objectives"]["area"] = "footprint"
+    d.write_json(mfile, metrics)
     with pytest.raises(DesignDBError, match="disagrees with design"):
         annotate(key, original_id, tech="asap7", values={"area": 111.0, "delay": 91.0}, force=True)
 

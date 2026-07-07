@@ -168,8 +168,8 @@ standard axes present in `values` (`area | delay | adp | edap`); other numeric k
 not selectable; `--raw <file>` optionally stashes the full tool-stats blob under `.raw`. Reserved
 system names (`aig`/`transistors`/…) are refused, re-annotating a technology needs `--force`, and
 the map must agree with any sibling design's for the same system — measurements are commitments and
-a slot keeps one interpretation. Spire owns the write (both `metrics.json` and the `index.json`
-mirror), so producers just hand it the numbers; RTLScout's `db-score` is exactly such a producer
+a slot keeps one interpretation. Spire owns the write (`metrics.json` is authoritative; the
+`index.json` cache re-derives from it), so producers just hand it the numbers; RTLScout's `db-score` is exactly such a producer
 (its ASAP7 pipeline → `annotate`).
 
 > **Cover the whole slot.** A technology counts as "present" once *any* design in the slot has it,
@@ -285,9 +285,20 @@ design_db/v1/<spec_key>/        # spec_key = sha256(structural AAG + port spec)
         source/<rel>.py         #   .py inserts only: the entry's project-local import closure
         metrics.json            #   {<system>: {metrics: {...}, objectives: {axis -> field}}, …}
         provenance.json         #   {source, created, verification: {...}, python_source: {kind, …}}
-    index.json                  # roll-up {design_id -> {struct_hash, metrics, source, created}}
-design_db/v1/manifest.json      # {registered name -> {spec_key, class, n_designs, selected_id, …}}
+    index.json                  # DERIVED CACHE of the roll-up {design_id -> {struct_hash,
+                                #   metrics, source, created}} — the designs/ dirs are the source
+                                #   of truth; the cache self-heals on every read (inspection aid)
+design_db/v1/manifest.json      # {registered name -> {spec_key, class, selected_id, …}} — names +
+                                #   selection provenance (fcntl-locked writes); counts are derived
 ```
+
+**Concurrency.** Admission is a single atomic directory rename, and the per-slot index is
+*derived* from the admitted `designs/` dirs (each carries its own `provenance.json` +
+`metrics.json`; `index.json` is only a materialized, self-healing cache). Concurrent inserts —
+same slot or across slots, threads or processes — can therefore never lose a design. The
+manifest's rare writes (name registration, selection recording) are serialized with an fcntl
+lock. Parallel fills of one DB are supported; the only rule left is per-slot *courtesy*: one
+filler per slot at a time beats two racing over the same search space.
 
 Everything is plain JSON + Verilog — inspectable, diffable, committable. A committed DB makes
 builds reproducible: selection reads it deterministically, nothing regenerates.
@@ -336,7 +347,7 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 | `insert_design(spec_key, design, *, source, db=None, budget_s=None, python_copy=None, provenance=None) -> InsertResult` | The gate: verify → dedup → stamp metrics → record provenance → admit atomically. `design`: a **`.py` design file** (`build()` — elaborated here, source stored), a spire `Component`/`Netlist`, a Verilog path, or Verilog text. |
 | `check_design(spec_key, design, *, db=None, budget_s=None) -> dict` | Advisory: run the slot's set oracle against a candidate (no admit, no write). The read-only sibling of `insert_design`; raises the same `VerificationError`s on failure. |
 | `seed_original(spec_key, db=None, budget_s=None) -> InsertResult` | Insert the slot's golden as the baseline candidate (`source="original"`) — a selection floor; stores the slot's `starting_point.py` as its python source when present. |
-| `annotate(spec_key, design_ref, *, tech, values, raw=None, force=False, db=None) -> dict` | Attach a per-technology metric block (`metrics[tech]`) to a stored design; makes `metric=<tech>` selectable. Writes `metrics.json` + `index.json` mirror. |
+| `annotate(spec_key, design_ref, *, tech, values, raw=None, force=False, db=None) -> dict` | Attach a per-technology metric block (`metrics[tech]`) to a stored design; makes `metric=<tech>` selectable. Writes `metrics.json`; the `index.json` cache refreshes from it. |
 | `select_design(spec_key, *, objective=, metric=, pin=, sources=, record=)` | Deterministic selection → `SelectionResult` (or None on an empty slot). |
 | `pareto_front(spec_key, objectives=("area","delay"), metric=None)` | The non-dominated set. |
 | `constrained / weighted / lexicographic` | Objective combinators. |

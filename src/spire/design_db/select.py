@@ -152,7 +152,7 @@ def select_design(spec_key: str, *, objective: ObjectiveSpec = "area",
     ``(selected_id, objective, metric)`` is written into the manifest.
     """
     d = DesignDB.open(db)
-    index = d.read_json(d.slot_dir(spec_key) / "index.json", {})
+    index = d.read_index(spec_key)
 
     if pin is not None:
         if pin not in index:
@@ -188,7 +188,7 @@ def pareto_front(spec_key: str, objectives: Sequence[str] = ("area", "delay"), *
                  metric: Optional[str] = None, db: Optional[Any] = None) -> List[Dict[str, Any]]:
     """The non-dominated set (minimizing all ``objectives``), sorted by the first objective."""
     d = DesignDB.open(db)
-    index = d.read_json(d.slot_dir(spec_key) / "index.json", {})
+    index = d.read_index(spec_key)
     if not index:
         return []
     system = resolve_metric(index, metric)
