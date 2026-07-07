@@ -117,15 +117,10 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         for sig in self.get_ios().to_list():
             sig: Signal
 
-            # if is clock/reset assign to module clk/rst
-            if sig.name == "clk":
-                if module.clk is None:
-                    module.clk = sig
-                continue
-            if sig.name == "rst":
-                if module.rst is None:
-                    module.rst = sig
-                continue
+            # Clock and reset are framework-provided, never IO leaves: request them via with_clock/with_reset.
+            if sig.name in ("clk", "rst"):
+                raise ValueError(f"IO leaf '{sig.name}': clock/reset are not declared in a component's IO — "
+                                 f"pass with_clock=True / with_reset=True to to_netlist()/to_verilog() instead")
 
             if sig.kind == "input":
                 module.add_input(sig)
