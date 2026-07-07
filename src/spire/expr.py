@@ -7,7 +7,7 @@ from typing import Optional, Union, Sequence
 from spire.signal_name_inference import (
     infer_signal_name_from_assignment,
     mark_expr_name,
-    resolve_shared_wire_name,
+    sanitize_signal_name,
 )
 from spire.hdl_traits import BitSerializable, Assignable, BitSerializableLike
 
@@ -27,7 +27,7 @@ class _SharedCache:
     wires: list["Signal"] = []               # all created wires in encounter order
     index: int = 0                           # for naming sig_{index}
     uid = itertools.count(1)                 # unique id for each expression
-    used_names: set[str] = set()             # avoid duplicate auto-generated names
+    used_names: set[str] = set()             # legacy, no longer consulted (kept for optimize-state snapshots)
     opportunistic: bool = True               # wrap every subexpr into a wire (see flat_emit)
 
     @classmethod
@@ -65,15 +65,17 @@ def get_shared_wires() -> list["Signal"]:
     return list(_SharedCache.wires)
 
 def _create_new_shared_wire(typ: HDLType, suggested_name: Optional[str] = None) -> "Signal":
-    name, _SharedCache.index = resolve_shared_wire_name(
-        suggested_name=suggested_name,
-        used_names=_SharedCache.used_names,
-        index=_SharedCache.index,
-    )
-
-    _SharedCache.used_names.add(name)
+    # Construction names are provisional (possibly duplicated across builds); the collector assigns canonical
+    # per-netlist names at emission — suggested names are uniquified there, anonymous ones renumbered.
+    base = sanitize_signal_name(suggested_name) if suggested_name else None
+    if base:
+        name = base
+    else:
+        name = f"sig_{_SharedCache.index}"
+        _SharedCache.index += 1
     sig = Signal(typ=typ, kind="wire", name=name)
     sig._auto_generated = True
+    sig._anonymous_name = base is None
     _SharedCache.wires.append(sig)
     return sig
 

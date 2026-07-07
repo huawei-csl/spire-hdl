@@ -24,6 +24,8 @@ packed interface modport var void return break continue do final
 
 def is_legal_verilog_identifier(name: str) -> bool:
     return bool(_VALID_VERILOG_IDENT_RE.match(name)) and name not in VERILOG_KEYWORDS
+
+
 # Matches `x = Signal(...)` / `x = Wire(...)` / `x = Register(...)` / `x = Input(...)` / `x = Output(...)`
 # (including the keyword-argument form used in IO bundles, e.g. `a = Input(...)`). One regex covers all of
 # them since Wire/Register/Input/Output are Signal subclasses that route their name inference through Signal.
@@ -115,20 +117,3 @@ def mark_expr_name(expr: Any, this_file: str) -> Any:
         expr._suggested_name = suggested
     return expr
 
-
-def resolve_shared_wire_name(
-    suggested_name: Optional[str],
-    used_names: set[str],
-    index: int,
-) -> tuple[str, int]:
-    if suggested_name:
-        base = sanitize_signal_name(suggested_name)
-        if base:
-            name = base
-            suffix = 0
-            while name in used_names:
-                suffix += 1
-                name = f"{base}_{suffix}"
-            return name, index
-
-    return f"sig_{index}", index + 1

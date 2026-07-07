@@ -109,7 +109,7 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
 
     def to_netlist(self, name: Optional[str] = None, with_clock: bool = False, with_reset: bool = False) -> 'Netlist':
         module = Netlist(
-            name or f"comp_{get_rand_hash()}",
+            name or self.name,  # deterministic default: the component's class name
             with_clock=with_clock,
             with_reset=with_reset,
         )

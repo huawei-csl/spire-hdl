@@ -43,7 +43,12 @@ class Netlist:
         self.component : Optional["Component"] = None
 
     # Signal constructors
+    def _check_port_name(self, name: str) -> None:
+        if any(p.name == name for p in self._ports):
+            raise ValueError(f"Duplicate port name {name!r}")
+
     def input(self, typ: HDLType, name: str) -> Signal:
+        self._check_port_name(name)
         s = Signal(typ=typ, kind="input", name=name)
         self._signals.append(s)
         self._ports.append(s)
@@ -54,10 +59,12 @@ class Netlist:
             signal.kind = "input"
         if id(signal) in [id(s) for s in self._signals]:
             raise ValueError("Signal already exists in module.")
+        self._check_port_name(signal.name)
         self._signals.append(signal)
         self._ports.append(signal)
 
     def output(self, typ: HDLType, name: str) -> Signal:
+        self._check_port_name(name)
         s = Signal(typ=typ, kind="output", name=name)
         self._signals.append(s)
         self._ports.append(s)
@@ -68,6 +75,7 @@ class Netlist:
             signal.kind = "output"
         if id(signal) in [id(s) for s in self._signals]:
             raise ValueError("Signal already exists in module.")
+        self._check_port_name(signal.name)
         self._signals.append(signal)
         self._ports.append(signal)
 
@@ -365,6 +373,7 @@ class _SignalCollector(ExprVisitor[None]):
         self.port_ids = {id(p) for p in module._ports}
         self.in_list = set(self.port_ids)
         self.name_to_sig: Dict[str, "Signal"] = {p.name: p for p in module._ports}
+        self._auto_ix = 0  # per-netlist counter for canonical auto-wire names
 
     def run(self, seeds: List["Signal"]) -> None:
         for s in seeds:
@@ -373,6 +382,12 @@ class _SignalCollector(ExprVisitor[None]):
     def visit_signal(self, s: Signal) -> None:
         sid = id(s)
         if sid not in self.port_ids:
+            if getattr(s, "_auto_generated", False) and getattr(s, "_anonymous_name", False):
+                # Canonical per-netlist numbering in traversal order: emission output is a pure function of
+                # the graph, independent of how many builds preceded it in this process. Suggested names keep
+                # their base; _uniquify suffixes any collision per netlist as usual.
+                s.name = f"sig_{self._auto_ix}"
+                self._auto_ix += 1
             self._uniquify(s)
             if sid not in self.in_list:
                 self.m._signals.append(s)

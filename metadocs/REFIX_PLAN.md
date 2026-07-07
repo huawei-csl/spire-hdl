@@ -211,6 +211,9 @@ issues2_repros as slow-marked seeded tests.
 - 0.7, 1.1 re-applied per guide + §2.1 (signedness-preserving `_fit_result`; identity rules re-typed) and the
   in-place-mutation fix (simplify a clone, or re-canonicalize the module after rewrites so sim/AIGER/emission agree
   post-call), §2.8.
+- If the pure-emission refactor happens here (emit from a clone / overlay), fold wire naming into it: an
+  id→emitted-name overlay removes the last emission-time mutation, and content-derived names (hash of the CSE
+  structural key) become an option for diff-local regeneration output — both noted during the §2.5 redesign.
 - Until this phase: simplify stays opt-in with the Phase-0 docstring caveat. Safe to defer because the default path
   never runs it.
 
