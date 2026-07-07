@@ -22,9 +22,9 @@ each item's commit message cites the same ids. An item is not `applied` without 
 | Item | Source | Status | Notes |
 |---|---|---|---|
 | Width-isolation pass (emission-time, always on) | I2 §1.1, §1.2, §1.5, §1.6; I 13.2; I 0.1 (all-signed half) | applied | src/spire/width_isolation.py + ir.py hook, after simplify/balance/cse so pattern matchers see original nesting; flat-safe 1-bit boolean cones stay inline (preserves _minimize_emit's flat-PPA path, flag-free); flipped 13 strict xfails (all §1.1/§1.5/§1.6/13.2 shapes, unsigned fuzz, ss ordered compares + narrow compound compare — alignment Resize wires carry declared signedness); FpMulSN(5,10) structure cost +47 wires (~+8.7%); fast sweep 134 passed; full suite 552/19/32xf/12xp/0 fail = baseline + exactly the 13 flips |
-| Signed compares re-fix on isolated operands | I 0.1, I2 §1.3 | pending | |
-| Mixed-arith alignment re-fix | I 0.2, I2 §1.4 | pending | |
-| Ternary emission per charter C1 | I2 §1.5 | pending | |
+| Signed compares re-fix on isolated operands | I 0.1, I2 §1.3 | applied | mixed compares promoted to max+1 signed at construction (op_cmp) — exact integer compare per charter §2; NO $signed() wrapping (declared signedness carries the island — avoids the §1.3 trap; guard test green). Sim semantics corrected for mixed compares: baseline coerced-to-signed (u8==s-8 was true), now exact (false) — charter authority case |
+| Mixed-arith alignment re-fix | I 0.2, I2 §1.4 | applied | `_align_mixed_arith`: mixed operands materialized at result width per own signedness (op_add/sub/mul, covers unary minus); exact as pattern arithmetic mod 2^w; §1.4 poisoning structurally gone (isolated nodes). Bonus: AIGER-signed fuzz conformant — exporter's mixed paths (0.3-0.5) no longer exercised by operator-built IR (Phase-4 audit still due); 0.6 (multi-bit mux selector, 720 mism.) pinned as dedicated strict xfail. Harness 95 pass / 1 xfail (only 0.6) |
+| Ternary emission per charter C1 | I2 §1.5 | applied | discharged by the width-isolation pass (mixed-sign muxes get an explicitly-typed boundary wire); mux_operand shape green |
 | Const validation + boundary-literal emission | I2 §2.2, §2.7, R P9, charter C4 | pending | |
 | Negative shift amounts rejected | I2 §2.6, charter C3 | pending | |
 | Identifier legality | I2 §2.4, charter C6 | pending | |

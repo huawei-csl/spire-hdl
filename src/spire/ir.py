@@ -159,8 +159,7 @@ class Netlist:
                 if apply_structural_cse(self):
                     self.collect_signals()
             # Width isolation (always on, last — the passes above want the original nesting): wire every remaining
-            # inline compound operand so IEEE context re-sizing cannot diverge from the IR's node-width semantics
-            # (docs/README_semantics.md §2, backend conformance).
+            # inline compound operand so IEEE context re-sizing cannot diverge from node-width semantics.
             from spire.width_isolation import apply_width_isolation
             if apply_width_isolation(self):
                 self.collect_signals()

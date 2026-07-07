@@ -588,18 +588,28 @@ def z_ext(expr: Expr, width: int) -> Expr:
 
 # -----------------------------
 
+def _align_mixed_arith(a: Expr, b: Expr, t: HDLType) -> tuple:
+    """Materialize mixed-signedness operands at the result width, each extended per its own signedness."""
+    if a.typ.signed == b.typ.signed:
+        return a, b
+    return fit_width(a, t), fit_width(b, t)
+
+
 def op_add(a: Expr, b: Expr) -> Expr:
     t = add_result_type(a, b)
+    a, b = _align_mixed_arith(a, b, t)
     return mark_expr_name(Op2(a, b, "+", t), __file__)
 
 
 def op_sub(a: Expr, b: Expr) -> Expr:
     t = add_result_type(a, b)
+    a, b = _align_mixed_arith(a, b, t)
     return mark_expr_name(Op2(a, b, "-", t), __file__)
 
 
 def op_mul(a: Expr, b: Expr) -> Expr:
     t = mul_result_type(a, b)
+    a, b = _align_mixed_arith(a, b, t)
     return mark_expr_name(Op2(a, b, "*", t), __file__)
 
 
@@ -622,19 +632,25 @@ def op_shift(a: Expr, b: Expr, sym: str) -> Expr:
 
 
 def op_cmp(a: Expr, b: Expr, sym: str) -> Expr:
+    if a.typ.signed != b.typ.signed:
+        # Mixed signedness: promote both operands to a signed type one bit wider than the widest operand, so both
+        # values are represented exactly and the comparison is an exact integer compare (signed via declarations).
+        t_p = HDLType(max(a.typ.width, b.typ.width) + 1, signed=True)
 
-    # for verilog emmission we need to align widths for all compares, and if either is signed, align as signed
+        def _promote(e: Expr) -> Expr:
+            if isinstance(e, Const):
+                return Const(e.value, t_p)
+            if e.typ.signed:
+                return fit_width(e, t_p)
+            return fit_type(e, t_p)  # zero-extend, then a declared-signed wire
+
+        return mark_expr_name(Op2(_promote(a), _promote(b), sym, Bool()), __file__)
+
+    # Uniform signedness: align widths; each operand extends per the common signedness.
     w = max(a.typ.width, b.typ.width)
-    t_target = HDLType(w, signed=a.typ.signed or b.typ.signed)
-    # if a is not const
-    if not isinstance(a, Const):
-        a_al = fit_width(a, t_target)
-    else:
-        a_al = a
-    if not isinstance(b, Const):
-        b_al = fit_width(b, t_target)
-    else:
-        b_al = b
+    t_target = HDLType(w, signed=a.typ.signed)
+    a_al = a if isinstance(a, Const) else fit_width(a, t_target)
+    b_al = b if isinstance(b, Const) else fit_width(b, t_target)
     return mark_expr_name(Op2(a_al, b_al, sym, Bool()), __file__)
 
 

@@ -1,22 +1,12 @@
 """Emission-time width isolation: named-wire boundaries around inline compound operands.
 
-Spire semantics (docs/README_semantics.md §2) evaluate every expression node self-determined at its own
-`typ.width`/`typ.signed`; IEEE-1364 instead re-sizes context-determined operands to the width/signedness of the
-whole enclosing expression, with no intermediate wrap. Any compound operand emitted inline can therefore compute a
-different value after synthesis than in simulation (wrapped subtraction, `~`, shifts, dropped carries, and the
-signedness poisoning of unsigned concats/slices inside signed expressions).
-
-This pass runs once per emission, after the optional simplify/balance/CSE passes (which want to see the original
-nesting), and rewrites the driver DAG so that every remaining non-leaf operand is referenced through a declared
-wire: `assign sig_k = <child>;` evaluates the child at exactly its node width (LHS width = node width) with its
-declared signedness, which is precisely the §2 semantics. The IR consumers (simulator, AIGER export, pattern
-matchers) are unaffected in value; only netlist structure changes — the same contract as CSE.
-
-The one exception is kept for quality of results: pure width-1 unsigned boolean logic (`& | ^ ~ nand`, `==`/`!=`
-over 1-bit operands, 1-bit muxes, bit-selects of named signals) is value-identical inline and stays inline when its
-consumer evaluates it in a 1-bit or self-determined position. This preserves the flat cones the FSM bit-level
-emitter builds for PPA (mapping is structurally sensitive; see `optimize/fsm/_minimize_emit.py`), independent of
-when `flat_emit` was active.
+Spire evaluates every expression node at its own width and wraps there; IEEE-1364 re-sizes inline operands to the
+enclosing expression's width/signedness with no intermediate wrap, so an inline compound operand can synthesize to
+a different value than it simulates. This pass runs once per emission (after simplify/balance/CSE, which want the
+original nesting) and rewires every remaining non-leaf operand through a declared wire, whose assignment evaluates
+it at exactly its node width and signedness. Values are unchanged; only netlist structure changes — same contract
+as CSE. Exception, kept for PPA: width-1 unsigned boolean logic stays inline in 1-bit/self-determined positions
+(preserves the flat cones of the FSM bit-level emitter, independent of when `flat_emit` was active).
 """
 from __future__ import annotations
 

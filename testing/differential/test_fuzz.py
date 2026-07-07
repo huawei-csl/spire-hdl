@@ -1,8 +1,7 @@
 """Seeded random-circuit fuzz: simulator vs IEEE text evaluation vs AIGER round-trip.
 
-Fixed seeds keep runs deterministic. The unsigned generator profile avoids the operators that are known-divergent at
-the current baseline so it must pass; the full profile (mixed signedness) carries strict xfail marks naming the
-owning issues and flips green as the emitter/AIGER fixes land.
+Fixed seeds keep runs deterministic. Both signedness profiles are conformance guarantees across all three backends;
+known exporter defects too narrow for the generator get pinned as dedicated strict-xfail shapes below.
 """
 from __future__ import annotations
 
@@ -39,7 +38,6 @@ def test_fuzz_sim_vs_verilog_unsigned():
     _run(_cmp_verilog, seed_base=1000, signed_ok=False)
 
 
-@pytest.mark.xfail(strict=True, reason="ISSUES 0.1/0.2 + ISSUES2 §1: emitted Verilog diverges on signed/nested shapes")
 def test_fuzz_sim_vs_verilog_signed():
     _run(_cmp_verilog, seed_base=2000, signed_ok=True)
 
@@ -48,6 +46,28 @@ def test_fuzz_sim_vs_aiger_unsigned():
     _run(diff_sim_vs_aiger, seed_base=3000, signed_ok=False)
 
 
-@pytest.mark.xfail(strict=True, reason="ISSUES 0.3-0.6: AIGER signedness handling (extension, multiplier dispatch, eq)")
 def test_fuzz_sim_vs_aiger_signed():
+    # Conformant since the operator builders normalize mixed signedness (promoted compares, pre-materialized
+    # extensions): the AIGER exporter's own mixed-sign paths are no longer exercised by operator-built IR.
     _run(diff_sim_vs_aiger, seed_base=4000, signed_ok=True)
+
+
+@pytest.mark.xfail(strict=True, reason="ISSUES 0.6: AIGER ternary lowering uses only bit 0 of a multi-bit selector")
+def test_aiger_mux_selector_multibit():
+    # The generator above only builds 1-bit selectors (mux(a < b, ...)), so this exporter defect needs its own
+    # shape. The emitted-Verilog side of the same netlist conforms.
+    import itertools
+
+    from spire.expr import UInt, mux
+
+    from .harness import diff_sim_vs_aiger, fresh_netlist
+
+    m = fresh_netlist("mux_sel3")
+    s = m.input(UInt(3), "s")
+    c = m.input(UInt(4), "c")
+    d = m.input(UInt(4), "d")
+    y = m.output(UInt(4), "y")
+    y <<= mux(s, c, d)
+    vectors = list(itertools.product(range(8), range(16), range(16)))
+    bad = diff_sim_vs_aiger(m, ["s", "c", "d"], vectors)
+    assert not bad, f"{len(bad)} mismatches; first: {bad[0]}"

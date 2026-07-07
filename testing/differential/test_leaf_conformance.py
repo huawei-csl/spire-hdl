@@ -49,26 +49,14 @@ ORDERED_CMP = {"lt", "le", "gt", "ge"}
 ARITH = {"add", "sub", "mul"}
 
 
-def _baseline_xfail(op: str, sa: bool, sb: bool):
-    """Expected-divergent leaf shapes at the current baseline, with the issue that owns them.
-
-    All-signed ordered compares conform since width isolation: the operand-alignment `Resize` wires carry declared
-    signedness, so the emitted comparison island stays signed. Only mixed-signedness semantics remain open.
-    """
-    if op in ARITH and sa != sb:
-        return "ISSUES 0.2: mixed signed/unsigned +/-/* emits unsigned Verilog"
-    if op in ORDERED_CMP and sa != sb:
-        return "ISSUES 0.1: mixed-signedness ordered compares emit an unsigned island"
-    return None
-
-
 def _binary_params():
+    # Every combination is a conformance guarantee. History: mixed-sign +,-,* and any-signed ordered compares
+    # diverged until width isolation (all-signed compares) and the mixed-signedness alignment/promotion in the
+    # operator builders (the rest) landed.
     for op in BINARY_OPS:
         for sa in (False, True):
             for sb in (False, True):
-                reason = _baseline_xfail(op, sa, sb)
-                marks = [pytest.mark.xfail(strict=True, reason=reason)] if reason else []
-                yield pytest.param(op, sa, sb, id=f"{op}-{'s' if sa else 'u'}{'s' if sb else 'u'}", marks=marks)
+                yield pytest.param(op, sa, sb, id=f"{op}-{'s' if sa else 'u'}{'s' if sb else 'u'}")
 
 
 @pytest.mark.parametrize("op,sa,sb", list(_binary_params()))
@@ -86,11 +74,7 @@ def test_leaf_binary(op, sa, sb):
 def _unary_params():
     for op in UNARY_OPS:
         for sa in (False, True):
-            reason = None
-            if op == "neg" and sa:
-                reason = "ISSUES 0.2: unary minus builds `0 - a` (a mixed-sign op) — unsigned Verilog"
-            marks = [pytest.mark.xfail(strict=True, reason=reason)] if reason else []
-            yield pytest.param(op, sa, id=f"{op}-{'s' if sa else 'u'}", marks=marks)
+            yield pytest.param(op, sa, id=f"{op}-{'s' if sa else 'u'}")
 
 
 @pytest.mark.parametrize("op,sa", list(_unary_params()))

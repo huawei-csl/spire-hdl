@@ -3,7 +3,8 @@
 Each shape drives a compound subexpression into a position where IEEE-1364 context rules could re-size it (operand
 of a wider op, comparison island, ternary branch, extension concat, shift, flat emission). The simulator defines the
 expected value (docs/README_semantics.md §2); the assertion is zero divergence against the IEEE evaluation of the
-emitted text. Known-divergent shapes at the current baseline carry strict xfail marks naming the owning issue.
+emitted text. All shapes are conformance guarantees; a shape may only gain a strict xfail mark together with the
+issue-tracker entry that owns the divergence.
 """
 from __future__ import annotations
 
@@ -12,9 +13,6 @@ import pytest
 from spire.expr import Bool, SInt, UInt, cat, flat_emit, mux
 
 from .harness import diff_sim_vs_verilog, format_mismatches, fresh_netlist, sweep
-
-XF = pytest.mark.xfail  # applied per-shape below with strict=True
-
 
 def shape_sub_plus(m):  # (a - b) + c, unsigned: inner sub must wrap at 5 bits
     a, b, c = m.input(UInt(4), "a"), m.input(UInt(4), "b"), m.input(UInt(8), "c")
@@ -126,25 +124,26 @@ def shape_not_signed_plus(m):  # (~s8) + s8: unsigned ~ result mixed into signed
 
 
 SHAPES = [
-    # (builder, flat_emit?, strict-xfail reason or None). Shapes without a reason are conformance guarantees;
-    # the §1.1/§1.5/§1.6-family entries flipped green when emission-time width isolation landed.
+    # (builder, flat_emit?, strict-xfail reason or None). All shapes are conformance guarantees now: the
+    # §1.1/§1.5/§1.6 family flipped with emission-time width isolation, the mixed-signedness shapes with the
+    # operand alignment/promotion in the operator builders.
     (shape_sub_plus, False, None),
     (shape_sub_plus_right, False, None),
     (shape_not_plus_one, False, None),
-    (shape_mixed_inner, False, "ISSUES 0.2: mixed-sign op emits an unsigned expression"),
+    (shape_mixed_inner, False, None),
     (shape_signed_shr, False, None),
     (shape_var_shl, False, None),
     (shape_cmp_compound_signed, False, None),  # all-signed island; also guards the ISSUES2 §1.3 $signed trap
     (shape_cmp_compound_signed_narrow, False, None),  # isolation keeps the alignment wire signed
     (shape_cmp_compound_unsigned, False, None),
     (shape_flat_eq, True, None),
-    (shape_neg_plus, False, "ISSUES 0.2: unary minus (`0 - a`) is a mixed-sign op"),
+    (shape_neg_plus, False, None),
     (shape_mux_operand, False, None),
     (shape_sub_times, False, None),
     (shape_controls, False, None),
     (shape_masked_sub, False, None),
     (shape_cmp_in_arith, False, None),
-    (shape_not_signed_plus, False, "ISSUES 0.2: unsigned ~ result mixed into signed arithmetic"),
+    (shape_not_signed_plus, False, None),
 ]
 
 
