@@ -35,8 +35,8 @@ each item's commit message cites the same ids. An item is not `applied` without 
 
 | Item | Source | Status | Notes |
 |---|---|---|---|
-| Control flow: chain + condition-state scoping | I 2.3, I2 §4.1–4.3 | pending | |
-| Control flow minors | I2 §4.4–4.7 | pending | |
+| Control flow: chain + condition-state scoping | I 2.3, I2 §4.1–4.3, §4.8; R R6/I 13.1 | applied | redesign: `fresh_condition_scope` (save/clear/restore at component construction) + strong-ref identity fingerprint on pending chains (kills §4.8's id-reuse hazard); 13.1 limitation REMOVED (component between if_/else_ now works); conditional patch moved from `__ilshift__` to `assign` (§4.2) with composite packing (§4.1); 10 new scoping tests |
+| Control flow minors | I2 §4.4, §4.7 | applied | case-value representability check; _ConditionalContext entered-guard. (§4.5 arr[i]=x and §4.6 State subclassing → composite/state change sets). CS8 fallout fixed en route: test_array2 reg init packed numerically (was an Array-of-Consts `.to_bits()` pattern — note: in-tree evidence for the declined const-folding variant). Full suite 609/19/13xf/12xp/0 fail |
 | Sharing/CSE re-fixes | I 1.2–1.6, 2.6, I2 §2.5 | pending | |
 | Component/IO re-fixes | I 2.1, 2.2, 2.5, 2.7, 4.5 | pending | |
 | Composite port naming (depth-safe) | I 4.8-equiv, I2 §5.1 guard | pending | ships with ≥2-depth tests |

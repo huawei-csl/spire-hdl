@@ -192,7 +192,9 @@ def build_matmul_accum_reg_module():
     C_width = C_init.width
 
     # Register holding C as a flat bit-vector
-    c_reg = m.reg(UInt(C_width), "c_reg", init=C_init.to_bits())
+    # Register init must be a direct constant: pack the known values numerically (LSB-first like to_bits()).
+    init_value = sum(v << (i * acc_w) for i, v in enumerate([10, 20, 30, 40]))
+    c_reg = m.reg(UInt(C_width), "c_reg", init=init_value)
 
     # --- Combinational unpack: C_prev from c_reg bits ---
     # Build an Array of wires with same shape as C_init

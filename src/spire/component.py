@@ -15,6 +15,7 @@ except ImportError:
     from typing_extensions import Self  # type: ignore
 
 from spire.analyzer import GraphReport
+from spire.control_structures import fresh_condition_scope
 from spire.visitor import expr_children
 
 
@@ -36,8 +37,11 @@ class _ComponentMeta(abc.ABCMeta):
     """
 
     def __call__(cls, *args, **kwargs):
-        obj = super().__call__(*args, **kwargs)   # runs the full __init__ chain (ABCMeta enforces abstractness)
-        obj._finalize()
+        # Construction always elaborates with clean condition state: an enclosing if_ gates assignments, not
+        # elaboration, and pending if-chains cannot leak in either direction across the component boundary.
+        with fresh_condition_scope():
+            obj = super().__call__(*args, **kwargs)   # runs the full __init__ chain (ABCMeta enforces abstractness)
+            obj._finalize()
         return obj
 
 

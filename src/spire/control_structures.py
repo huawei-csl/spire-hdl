@@ -22,10 +22,12 @@ Usage::
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable, Iterable, List, Optional
+import contextlib
+from dataclasses import dataclass, field
+from typing import Callable, Iterable, List, Optional, Tuple
 
-from spire.expr import Expr, ExprLike, Signal, as_expr, mux
+from spire.expr import Const, Expr, ExprLike, Signal, as_expr, mux
+from spire.hdl_traits import BitSerializable
 
 
 # Condition stack helpers
@@ -34,6 +36,36 @@ class _ConditionState:
     active: List[Expr] = []
     pending_if_chain: Optional["_IfChain"] = None
     switch_stack: List["_SwitchState"] = []
+
+
+@contextlib.contextmanager
+def fresh_condition_scope():
+    """Run a block with empty condition/switch/pending-chain state, restoring the caller's state afterwards.
+
+    Component construction wraps elaboration in this scope: a component builds the same structure no matter where
+    it is constructed (an enclosing ``if_`` gates *assignments*, not elaboration), and a trailing ``if_`` chain
+    inside ``elaborate()`` can neither escape to the caller nor swallow the caller's own pending chain.
+
+    Plain Python functions share the caller's scope by design (conditions apply to what a helper assigns); a helper
+    that wants isolation can wrap its body in this context manager itself.
+    """
+    saved = (_ConditionState.active, _ConditionState.pending_if_chain, _ConditionState.switch_stack)
+    _ConditionState.active, _ConditionState.pending_if_chain, _ConditionState.switch_stack = [], None, []
+    try:
+        yield
+    finally:
+        _ConditionState.active, _ConditionState.pending_if_chain, _ConditionState.switch_stack = saved
+
+
+def _current_scope() -> Tuple[tuple, tuple]:
+    return (tuple(_ConditionState.active), tuple(_ConditionState.switch_stack))
+
+
+def _same_scope(a: Tuple[tuple, tuple], b: Tuple[tuple, tuple]) -> bool:
+    # Element-wise identity: tuple == would invoke Expr.__eq__ (which builds hardware).
+    return (len(a[0]) == len(b[0]) and len(a[1]) == len(b[1])
+            and all(x is y for x, y in zip(a[0], b[0]))
+            and all(x is y for x, y in zip(a[1], b[1])))
 
 
 def _bool_const(value: bool) -> Expr:
@@ -70,6 +102,9 @@ def _combined_condition() -> Optional[Expr]:
 class _IfChain:
     covered: Expr
     closed: bool = False
+    # The condition/switch ambience (strong refs) in which the chain was left pending; elif_/else_ may only claim
+    # it from the identical ambience, so a trailing chain in one case_/branch can't be continued in another.
+    scope: Optional[Tuple[tuple, tuple]] = None
 
     def branch(self, condition: ExprLike, *, context: str) -> Expr:
         if self.closed:
@@ -94,12 +129,19 @@ class _ConditionalContext:
         _validate_bool(condition, context="Conditional")
         self._condition = condition
         self._on_exit = on_exit
+        self._entered = False
 
     def __enter__(self):
+        if self._entered:
+            raise RuntimeError("Conditional context is already active")
         _push_condition(self._condition)
+        self._entered = True
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        if not self._entered:
+            raise RuntimeError("Conditional context is not active")
+        self._entered = False
         _pop_condition()
         if self._on_exit is not None:
             self._on_exit()
@@ -115,6 +157,16 @@ def _clear_pending_chain_if_needed() -> None:
         _set_pending_chain(None)
 
 
+def _claim_pending_chain(context: str) -> _IfChain:
+    chain = _ConditionState.pending_if_chain
+    if chain is None:
+        raise RuntimeError(f"{context} must follow an if_ or elif_ block")
+    if chain.scope is None or not _same_scope(chain.scope, _current_scope()):
+        raise RuntimeError(f"{context} does not follow an if_/elif_ in the same scope "
+                           f"(the pending chain was left in a different branch or switch case)")
+    return chain
+
+
 def if_(condition: ExprLike) -> _ConditionalContext:
     """Context manager representing an `if` branch."""
 
@@ -123,6 +175,7 @@ def if_(condition: ExprLike) -> _ConditionalContext:
     cond = chain.branch(condition, context="if")
 
     def _on_exit():
+        chain.scope = _current_scope()
         _set_pending_chain(chain)
 
     return _ConditionalContext(cond, on_exit=_on_exit)
@@ -131,12 +184,11 @@ def if_(condition: ExprLike) -> _ConditionalContext:
 def elif_(condition: ExprLike) -> _ConditionalContext:
     """Context manager representing an `elif` branch."""
 
-    if _ConditionState.pending_if_chain is None:
-        raise RuntimeError("elif_ must follow an if_ or another elif_ block")
-    chain = _ConditionState.pending_if_chain
+    chain = _claim_pending_chain("elif_")
     cond = chain.branch(condition, context="elif")
 
     def _on_exit():
+        chain.scope = _current_scope()
         _set_pending_chain(chain)
 
     return _ConditionalContext(cond, on_exit=_on_exit)
@@ -145,9 +197,7 @@ def elif_(condition: ExprLike) -> _ConditionalContext:
 def else_() -> _ConditionalContext:
     """Context manager representing an `else` branch."""
 
-    if _ConditionState.pending_if_chain is None:
-        raise RuntimeError("else_ must follow an if_ or elif_ block")
-    chain = _ConditionState.pending_if_chain
+    chain = _claim_pending_chain("else_")
     cond = chain.default()
 
     def _on_exit():
@@ -171,7 +221,14 @@ class _SwitchState:
 
         merged: Optional[Expr] = None
         for value in cases:
-            cmp = self._selector == as_expr(value)
+            value_expr = as_expr(value)
+            if isinstance(value_expr, Const):
+                try:
+                    Const(value_expr.value, self._selector.typ)  # representability check only
+                except ValueError:
+                    raise ValueError(f"case value {value_expr.value} can never match the "
+                                     f"{self._selector.typ.width}-bit selector") from None
+            cmp = self._selector == value_expr
             _validate_bool(cmp, context="case comparison")
             merged = cmp if merged is None else (merged | cmp)
 
@@ -286,17 +343,21 @@ def _apply_active_conditions_to_expr(signal: Signal, rhs: ExprLike) -> ExprLike:
 
 
 def _patch_signal_assignments() -> None:
+    """Wrap `Signal.assign` — the one assignment primitive (`<<=` routes through it) — so every driver update,
+    including direct `.assign()` calls, respects the active conditions."""
     global _PATCHED
     if _PATCHED:
         return
 
-    original_ilshift = Signal.__ilshift__
+    original_assign = Signal.assign
 
-    def conditional_ilshift(self: Signal, rhs: ExprLike):
+    def conditional_assign(self: Signal, rhs):
+        if isinstance(rhs, BitSerializable) and not isinstance(rhs, Expr):
+            rhs = rhs.to_bits()  # pack composites before gating, as the unconditional path does
         wrapped_rhs = _apply_active_conditions_to_expr(self, rhs)
-        return original_ilshift(self, wrapped_rhs)
+        return original_assign(self, wrapped_rhs)
 
-    Signal.__ilshift__ = conditional_ilshift  # type: ignore[assignment]
+    Signal.assign = conditional_assign  # type: ignore[assignment]
 
     _PATCHED = True
 
@@ -304,4 +365,4 @@ def _patch_signal_assignments() -> None:
 _patch_signal_assignments()
 
 
-__all__ = ["if_", "elif_", "else_", "switch_", "case_", "default"]
+__all__ = ["if_", "elif_", "else_", "switch_", "case_", "default", "fresh_condition_scope"]
