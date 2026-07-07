@@ -18,8 +18,9 @@ The dynamic form (``IORecord(**fields)``) is primary because a Component's IO us
 ``__init__`` arguments (widths, depths, ...), which class-level templates cannot see.
 
 ``Input`` / ``Output`` are ``Signal`` subclasses defined in :mod:`spire.expr` (siblings of
-``Wire`` / ``Register``); they are re-exported here for convenience. A field built without an
-explicit name carries the ``_io_autoname`` flag, and ``IORecord`` fills its name from the field key.
+``Wire`` / ``Register``); they are re-exported here for convenience. Record fields are named from
+their field key — the full field path for nested composites. Field keys win: a ``name=`` given at
+leaf construction applies to standalone signals only.
 """
 from __future__ import annotations
 

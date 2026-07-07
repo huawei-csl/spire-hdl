@@ -53,9 +53,8 @@ class HDLComposite(BitSerializable, Assignable):
         return [(str(i), c) for i, c in enumerate(self.to_list_first_level())]
 
     def _assign_port_names(self, prefix: str) -> None:
-        """Give every leaf a hierarchical port name (``prefix_<key>_...``) from its field/index
-        path, so nested bundles emit unique, readable ports (``up_valid``, ``bus_addr``,
-        ``data_0``) instead of colliding on bare leaf names."""
+        """Name every leaf ``<prefix>_<field/index path>``. Rebuilt from scratch each call, so
+        outer re-walks never duplicate segments."""
         for key, child in self._named_children():
             full = f"{prefix}_{key}"
             if isinstance(child, HDLComposite):

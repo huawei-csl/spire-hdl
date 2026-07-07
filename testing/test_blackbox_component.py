@@ -18,6 +18,7 @@ from spire.expr import (
     reset_shared_cache,
 )
 from spire.component import Component, CustomVerilogComponent
+from spire.io_record import Input, IORecord, Output
 from spire.simulator import Simulator
 
 
@@ -26,18 +27,18 @@ from spire.simulator import Simulator
 # ---------------------------------------------------------------------------
 
 class BlackboxAdder(CustomVerilogComponent):
-    """No Python model. The custom Verilog string is the only implementation."""
+    """No Python model. The custom Verilog string is the only implementation.
+
+    IO must be an ``IORecord``: a legacy dataclass IO is re-wrapped (and re-named) on every
+    ``get_ios()`` read, so emitter uniquification of colliding leaf names would not stick when
+    the collector's peer-seeding re-reads a blackbox's IO (see test_multiple_blackboxes...).
+    """
 
     def __init__(self):
-        @dataclass
-        class IO:
-            a: Signal
-            b: Signal
-            sum: Signal
-        self.io = IO(
-            a   = Signal(typ=UInt(8), kind="input"),
-            b   = Signal(typ=UInt(8), kind="input"),
-            sum = Signal(typ=UInt(9), kind="output"),
+        self.io = IORecord(
+            a   = Input(UInt(8)),
+            b   = Input(UInt(8)),
+            sum = Output(UInt(9)),
         )
         self.elaborate()
 

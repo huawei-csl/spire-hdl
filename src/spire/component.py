@@ -78,7 +78,7 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         ...
 
     def get_ios(self) -> "CompositeRecord":
-        """Return this component's IO as an composite record — the single IO normalization point.
+        """Return this component's IO as a composite record — the single IO normalization point.
 
         Default: normalize ``self.io`` (dataclass / dict / namedtuple / ``IORecord``) via
         ``_to_composite``. Override for components whose IO is not a simple stored ``self.io``

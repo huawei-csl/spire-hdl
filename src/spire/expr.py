@@ -414,17 +414,15 @@ class Wire(Signal):
 
 # explicit IO ports — Signal with a preset direction (siblings of Wire/Register).
 # Used as IORecord fields; standalone `x = Input(UInt(8))` self-names via the same inference
-# as Wire/Register. `_io_autoname` marks "no explicit name given" so IORecord may override the
-# name from its field key (the robust source inside an `IORecord(a=Input(...))` call).
+# as Wire/Register. Inside a record, leaves are always named from their field path (the robust
+# source inside an `IORecord(a=Input(...))` call) — field keys win over any name= given here.
 class Input(Signal):
     def __init__(self, typ: HDLType, name: Optional[str]=None):
         super().__init__(typ, kind="input", name=name)   # name inferred by Signal when None
-        self._io_autoname = name is None
 
 class Output(Signal):
     def __init__(self, typ: HDLType, name: Optional[str]=None):
         super().__init__(typ, kind="output", name=name)  # name inferred by Signal when None
-        self._io_autoname = name is None
 
 
 # -----------------------------

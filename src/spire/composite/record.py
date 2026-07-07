@@ -39,14 +39,12 @@ class CompositeRecord(HDLComposite):
 
     def __init__(self, **field_values: object) -> None:
         for field_name, val in field_values.items():
-            # Direct Signal port: a leaf built without an explicit name (`_io_autoname`)
-            # inherits the field key as its port name.
+            # Direct Signal port: named by its field key (field keys win over any construction name).
             if isinstance(val, Signal):
-                if getattr(val, "_io_autoname", False):
-                    val.name = field_name
-                    val._io_autoname = False
-            # Nested bundle/array: name its leaves hierarchically by the field path
-            # (``up`` + ``valid`` -> ``up_valid``) so nested-interface ports don't collide.
+                val.name = field_name
+            # Nested bundle/array: leaves are named by the full field path (``up`` + ``valid`` ->
+            # ``up_valid``). Names are rebuilt from this record as the root, so an enclosing
+            # record's later walk replaces them wholesale — no duplicated path segments at depth.
             elif isinstance(val, HDLComposite):
                 val._assign_port_names(field_name)
             setattr(self, field_name, val)
