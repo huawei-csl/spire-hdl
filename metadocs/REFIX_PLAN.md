@@ -73,6 +73,10 @@ represent RTL reality (power-on X before the first reset — 3.4/§3.5; X on out
    `metadocs/` and are committed via .gitignore whitelist entries; the rest of `metadocs/` stays ignored. The
    semantics reference (`docs/README_semantics.md`) is a normal committed doc and deliberately carries no
    plan/branch/process references.
+7. Interaction protocol: Claude applies each change set in the worktree, updates REFIX_STATUS.md in the same change
+   set, and hands over with a suggested one-line commit message (no phase/plan references — cross-referencing lives
+   in the status table); Felix reviews in his own window and makes every commit himself. Next change set starts only
+   after the review/commit (or feedback).
 
 ---
 
