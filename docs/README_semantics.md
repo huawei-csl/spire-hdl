@@ -70,7 +70,9 @@ Backend conformance (Domain A):
 2. **Reset**: asynchronous assert. State elements whose RTL has a reset arm load their init/reset value both on a
    bare reset assertion and on any clocked step while reset is held. State elements whose RTL has **no** reset arm —
    registered-read capture registers, memory array contents — hold their value through both paths. The simulator
-   must implement the hold on both paths, matching the RTL always-block structure.
+   must implement the hold on both paths, matching the RTL always-block structure. Init/reset values are constants
+   (a register rejects a dynamic init expression at construction): an async reset arm loads set/clear pins in real
+   cells, so a computed reset value is not implementable — model it as an explicit mux instead.
 3. **Power-on**: RTL registers without an `initial` block are X until the first reset; the 2-state simulator starts
    at the declared init value. Convention: simulation and testbench flows assert reset before relying on register
    state, and generated replay testbenches begin with the reset event. This divergence is documented, not hidden.

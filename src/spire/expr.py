@@ -371,7 +371,10 @@ class Signal(Expr, Assignable):
     def set_init(self, init: ExprLike):
         if self.kind != "reg":
             raise TypeError("init can only be set on registers")
-        self._init = fit_width(as_expr(init), self.typ)
+        e = as_expr(init)
+        if not isinstance(e, Const):
+            raise ValueError("Register init must be a constant; build an explicit mux for dynamic reset values")
+        self._init = Const(e.value, self.typ)  # re-typed to the register; representability-checked by Const
 
     def to_verilog(self) -> str:
         return self.name
