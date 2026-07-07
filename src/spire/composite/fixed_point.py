@@ -332,10 +332,29 @@ class FixedPoint(HDLComposite):
     ) -> "FixedPoint":
         return self._binary_op(other, "mul", out_type=out_type, q=q)
 
+    def neg(
+        self,
+        *,
+        out_type: Optional[FixedPointType] = None,
+        q: ARITHQuant = ARITHQuant.WrpTrc,
+    ) -> "FixedPoint":
+        """Arithmetic negation: one extra MSB, signed result (also for unsigned operands)."""
+        bits = self.bits if self.signed else fit_type(self.bits, SInt(self.bits.typ.width + 1))
+        raw = -bits
+        full_type = FixedPointType(width_total=raw.typ.width, width_frac=self.width_frac, signed=True)
+        if out_type is None:
+            return FixedPoint(full_type, bits=raw)
+        if not out_type.signed:
+            raise ValueError("Output FixedPointType.signed must be True for negation")
+        return FixedPoint(out_type, bits=self._quantize_bits(raw, full_type, out_type, q))
+
     # Operator overloads (default: full precision, WrpTrc)
 
     def __add__(self, other: "FixedPoint") -> "FixedPoint":
         return self.add(other)
+
+    def __neg__(self) -> "FixedPoint":
+        return self.neg()
 
     def __sub__(self, other: "FixedPoint") -> "FixedPoint":
         return self.sub(other)

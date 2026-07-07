@@ -94,3 +94,48 @@ def test_mixed_sign_mul_rejected():
     fb = FixedPoint(tb, bits=_sig(m, "b", tb))
     with pytest.raises(ValueError, match="sign mismatch"):
         fa.mul(fb)
+
+
+@pytest.mark.parametrize("q", [ARITHQuant.WrpTrc, ARITHQuant.WrpRnd])
+def test_neg_matches_exact_math(q):
+    for signed in (False, True):
+        for wt, wf in ((4, 2), (5, 3)):
+            ta = FixedPointType(width_total=wt, width_frac=wf, signed=signed)
+            outs = [FixedPointType(width_total=4, width_frac=1, signed=True),
+                    FixedPointType(width_total=6, width_frac=4, signed=True)]
+            for out in outs:
+                reset_shared_cache()
+                m = Netlist(f"fx_neg_{q.name}", with_clock=False, with_reset=False)
+                fa = FixedPoint(ta, bits=_sig(m, "a", ta))
+                y = m.output(UInt(out.width_total), "y")
+                y <<= fa.neg(out_type=out, q=q).bits
+
+                bad, text = diff_sim_vs_verilog(m, ["a"], exhaustive(wt))
+                assert not bad, f"neg/{q.name} {ta}→{out}: sim/Verilog diverge\n{text}"
+
+                sim = Simulator(m)
+                for pa in range(1 << wt):
+                    sim.set("a", pa)
+                    sim.eval()
+                    va = Fraction(_decode_int(pa, wt, signed), 1 << wf)
+                    scaled = -va * (1 << out.width_frac)
+                    if q == ARITHQuant.WrpRnd and scaled.denominator > 1:
+                        scaled += Fraction(1, 2)
+                    want = math.floor(scaled) % (1 << out.width_total)
+                    got = sim.get("y") % (1 << out.width_total)
+                    assert got == want, f"neg {ta}→{out}: a={pa} got={got} want={want}"
+
+
+def test_dunder_neg_full_precision():
+    ta = FixedPointType(width_total=4, width_frac=2, signed=True)
+    reset_shared_cache()
+    m = Netlist("fx_negfp", with_clock=False, with_reset=False)
+    fa = FixedPoint(ta, bits=_sig(m, "a", ta))
+    r = -fa
+    assert r.signed and r.ftype.width_total == 5
+    y = m.output(UInt(5), "y")
+    y <<= r.bits
+    sim = Simulator(m)
+    sim.set("a", 0b1000)  # -8/4 = -2.0 → +2.0 = 8/4, needs the extra MSB
+    sim.eval()
+    assert sim.get("y") % 32 == 8
