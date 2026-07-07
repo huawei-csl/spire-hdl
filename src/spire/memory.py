@@ -54,6 +54,13 @@ class _RWPort:
     mask: "Optional[Signal]" = None
 
 
+@dataclass
+class _MemNextState:
+    """One memory's next state for this edge: a full-array reset value, or a list of (addr, data, mask, chunk_w)."""
+    reset_value: "int | None"
+    writes: list
+
+
 class _MemoryArray(Signal):
     """Sim-only multi-port array storage for `custom_verilog` primitives (Middle path B).
 
@@ -179,40 +186,47 @@ class _MemoryArray(Signal):
         from spire.simulator import _to_bits  # local import (lazy to avoid cycles)
         return [_to_bits(v, self.typ.width) for v in self.init]
 
-    def step(self, sim) -> None:
-        """One clock-edge update: reset arm (priority) then writes (last-write-wins order).
+    def compute_next_state(self, sim) -> "_MemNextState":
+        """Evaluate this edge's update against pre-edge state: reset arm (priority), else enabled writes.
 
-        Reads are combinational (`_ArrayIndex`); a registered read is a capture `Register`
-        in the primitive, whose next-state the simulator evaluates *before* calling `step`
-        (so it samples pre-edge memory → readFirst). The store therefore only commits writes.
+        Mirrors the simulator's register handling: compute everything first, commit afterwards
+        (``commit_next_state``), so no state element observes a half-committed edge — Verilog NBA semantics.
         """
         from spire.simulator import _to_bits  # lazy, avoids cycles
         ev = sim._eval_signal_bits
-        arr = sim._mem_state[id(self)]
         w = self.typ.width
 
         if self.reset is not None and ev(self.reset.enable) & 1:
-            rv = _to_bits(ev(self.reset.value), w)
+            return _MemNextState(reset_value=_to_bits(ev(self.reset.value), w), writes=[])
+        writes = []
+        for wp in self.write_ports:
+            if not (ev(wp.enable) & 1):
+                continue
+            a = _to_bits(ev(wp.addr), wp.addr.typ.width)
+            if not (0 <= a < self.depth):
+                continue
+            d = _to_bits(ev(wp.data), w)
+            writes.append((a, d, None if wp.mask is None else ev(wp.mask), wp.chunk_w))
+        return _MemNextState(reset_value=None, writes=writes)
+
+    def commit_next_state(self, sim, nxt: "_MemNextState") -> None:
+        """Commit a next state produced by ``compute_next_state`` (last-write-wins order)."""
+        arr = sim._mem_state[id(self)]
+        w = self.typ.width
+        if nxt.reset_value is not None:
             for i in range(self.depth):
-                arr[i] = rv
-        else:
-            for wp in self.write_ports:
-                if not (ev(wp.enable) & 1):
-                    continue
-                a = _to_bits(ev(wp.addr), wp.addr.typ.width)
-                if not (0 <= a < self.depth):
-                    continue
-                d = _to_bits(ev(wp.data), w)
-                if wp.mask is None:
-                    arr[a] = d
-                else:
-                    m = ev(wp.mask)
-                    cur = arr[a]
-                    for c in range(w // wp.chunk_w):
-                        if (m >> c) & 1:
-                            bits = ((1 << wp.chunk_w) - 1) << (c * wp.chunk_w)
-                            cur = (cur & ~bits) | (d & bits)
-                    arr[a] = cur
+                arr[i] = nxt.reset_value
+            return
+        for a, d, m, chunk_w in nxt.writes:
+            if m is None:
+                arr[a] = d
+            else:
+                cur = arr[a]
+                for c in range(w // chunk_w):
+                    if (m >> c) & 1:
+                        bits = ((1 << chunk_w) - 1) << (c * chunk_w)
+                        cur = (cur & ~bits) | (d & bits)
+                arr[a] = cur
 
 
 class _ArrayIndex(Expr):

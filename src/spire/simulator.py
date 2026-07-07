@@ -74,6 +74,8 @@ class _SimExprEval(ExprVisitor[int]):
             bv = self.visit(e.b)
             shift = _to_bits(bv, max(e.b.typ.width, 32))
             if op == "<<":
+                if shift >= tw:
+                    return 0
                 return _to_bits(av << shift, tw)
             else:
                 src_w = e.a.typ.width
@@ -241,17 +243,18 @@ class Simulator(SimulatorBase):
             if self.m.with_clock:
                 self._in[_sid(self.m.clk)] = 0
             next_vals = self._compute_next_state()
+            next_mem_vals = [(m, m.compute_next_state(self)) for m in self.mems]  # against pre-edge state
             for sid, v in next_vals.items():
                 self._reg[sid] = v
-            for m in self.mems:
-                m.step(self)
+            for m, nxt in next_mem_vals:
+                m.commit_next_state(self, nxt)
             if self.m.with_clock:
                 self._in[_sid(self.m.clk)] = 1
                 self._in[_sid(self.m.clk)] = 0
             self._time_steps += 1
+            self._invalidate()  # watches must see post-edge state, not stale pre-edge caches
             self._capture_watches()
             self.record_expr_snapshot()
-            self._invalidate()
         return self
 
     def reset(self, asserted: bool = True):
@@ -266,12 +269,15 @@ class Simulator(SimulatorBase):
                 else:
                     v = 0
                 self._reg[_sid(r)] = _to_bits(v, r.typ.width)
-            self._invalidate()
+        self._invalidate()  # the rst line changed either way — combinational cones must recompute
+        self._capture_watches()
         return self
 
     def deassert_reset(self):
         if self.m.with_reset:
             self._in[_sid(self.m.rst)] = 0
+            self._invalidate()
+            self._capture_watches()
         return self
 
     # Peek, for raw outputs and inputs
@@ -375,6 +381,8 @@ class Simulator(SimulatorBase):
             visiting.remove(key)
             bits = _resize_bits(drv_bits, s._driver.typ.width, s.typ.width, s._driver.typ.signed)
         else:
+            if s.kind == "mem":
+                raise TypeError(f"'{s.name}' is a memory — use get_mem() to read its contents")
             raise TypeError(f"Unknown signal kind: {s.kind}")
 
         self._cache_sig[sid] = bits
@@ -436,6 +444,10 @@ class Simulator(SimulatorBase):
                 break
         if reg is None:
             raise KeyError(f"{reg_name} is not a register.")
+        if self.m.with_reset and self._in.get(_sid(self.m.rst), 0):
+            # While reset is asserted, the next state is the init value, not the driver.
+            init_bits = _to_bits(reg._init.value if reg._init is not None else 0, reg.typ.width)
+            return self._bits_to_int(init_bits)
         drv = reg._driver
         if drv is None:
             raise ValueError(f"Register '{reg_name}' has no next-state.")
@@ -477,9 +489,9 @@ class Simulator(SimulatorBase):
             elif isinstance(e, Signal) and e.kind == "reg":
                 bits = self._reg[_sid(e)]  # use the register state
             elif isinstance(e, Signal):
-                bits = self._cache_sig[id(e)]
+                bits = self._eval_signal_bits(e)
             else:
-                bits = self._eval_signal_bits(e) if isinstance(e, Signal) else self._eval_expr_bits(e)
+                bits = self._eval_expr_bits(e)
             out[name] = self._bits_to_int(bits)
         self._watch_values = out
 
