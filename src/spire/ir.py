@@ -402,7 +402,8 @@ class _SignalCollector(ExprVisitor[None]):
             parent = getattr(s, "_memory_parent", None)
             if parent is not None:
                 self.visit(parent)
-            if s._driver is not None:
+            if s._driver is not None and not (sid in self.port_ids and s.kind == "input"):
+                # Never cross this module's own input ports: their drivers belong to an enclosing design.
                 self.visit(s._driver)
         # Blackbox support: visiting any IO wire of a blackbox triggers seeding from the peer IO wires too.
         # Without this, the parent's input-side wiring wouldn't be reached (blackbox outputs have no driver chain

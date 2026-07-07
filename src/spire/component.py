@@ -254,6 +254,8 @@ class CustomVerilogComponent(Component):
         - for memory, follows store ↔ port-wire edges so state reachable only through a store is tagged too;
         - for sub-components, stops at any signal owned by a *different* Component (it self-tags) — neither
           tagging nor crossing it;
+        - stops at this component's own *input* leaves: external values enter only through the IO boundary
+          (a signal captured directly at construction and used by ``elaborate`` would be absorbed as internal);
         - for blackboxes, sets ``self._is_blackbox`` when no output had an elaborate driver — the cue the
           collector uses to peer-seed the inputs.
         """
@@ -281,6 +283,8 @@ class CustomVerilogComponent(Component):
             if nid not in io_ids:
                 node._no_emit_decl = True
                 node._no_emit_drive = True
+            elif node.kind == "input":
+                continue  # own input leaf: the IO boundary — its driver is enclosing-context wiring
             if node._driver is not None:
                 stack.append(node._driver)
             if isinstance(node, _MemoryArray):
