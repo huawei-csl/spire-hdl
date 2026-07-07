@@ -37,6 +37,33 @@ def test_boundary_literal_emission():
     assert Const(-7, SInt(4)).to_verilog() == "-4'sd7"
 
 
+def test_inferred_keyword_name_is_sanitized():
+    from spire.expr import Register, Wire
+
+    reg = Register(UInt(4), init=0)  # the Python variable name is a Verilog keyword
+    wire = Wire(UInt(4))
+    assert reg.name == "reg_"
+    assert wire.name == "wire_"
+
+
+@pytest.mark.parametrize("bad", ["output", "wire", "", "3bad", "has space", "unié"])
+def test_explicit_illegal_signal_name_rejected_at_emission(bad):
+    from spire.expr import UInt
+
+    m = fresh_netlist("bad_names")
+    a = m.input(UInt(4), bad)
+    y = m.output(UInt(4), "y")
+    y <<= a
+    with pytest.raises(ValueError, match="not a legal Verilog identifier"):
+        m.to_verilog()
+
+
+@pytest.mark.parametrize("bad", ["my design", "module", "3mod", ""])
+def test_illegal_module_name_rejected(bad):
+    with pytest.raises(ValueError, match="not a legal Verilog identifier"):
+        fresh_netlist(bad)
+
+
 @pytest.mark.parametrize("cval,cw", [(-8, 4), (-1, 1), (-7, 4)])
 def test_boundary_const_conformance(cval, cw):
     # A most-negative (or ordinary negative) literal as an arithmetic operand must survive context extension.

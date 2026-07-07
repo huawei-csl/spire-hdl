@@ -14,11 +14,10 @@ def test_const_returns_value():
 
 
 def test_const_width_masked():
-    # 8-bit Const initialized with a wider value should mask in the evaluator.
-    c = Const(0x123, UInt(8))
-    # The constructor stores .value as int(value) (no truncation), but the
-    # evaluator masks to typ.width.
-    assert eval_with(c, {}) == 0x23
+    # Out-of-range Const values are rejected at construction, so the evaluator can never see one.
+    with pytest.raises(ValueError, match="not representable"):
+        Const(0x123, UInt(8))
+    assert eval_with(Const(0x23, UInt(8)), {}) == 0x23
 
 
 def test_op2_add_with_signal_binding():

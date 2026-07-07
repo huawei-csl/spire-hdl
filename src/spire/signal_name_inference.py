@@ -6,6 +6,24 @@ import re
 from typing import Any, Optional
 
 _VALID_VERILOG_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
+
+# IEEE 1364-2005 reserved words, plus the SystemVerilog ones tools hit when reading with -sv.
+VERILOG_KEYWORDS = frozenset("""
+always and assign automatic begin buf bufif0 bufif1 case casex casez cell cmos config deassign default defparam
+design disable edge else end endcase endconfig endfunction endgenerate endmodule endprimitive endspecify endtable
+endtask event for force forever fork function generate genvar highz0 highz1 if ifnone incdir include initial inout
+input instance integer join large liblist library localparam macromodule medium module nand negedge nmos nor
+noshowcancelled not notif0 notif1 or output parameter pmos posedge primitive pull0 pull1 pulldown pullup
+pulsestyle_onevent pulsestyle_ondetect rcmos real realtime reg release repeat rnmos rpmos rtran rtranif0 rtranif1
+scalared showcancelled signed small specify specparam strong0 strong1 supply0 supply1 table task time tran tranif0
+tranif1 tri tri0 tri1 triand trior trireg unsigned use uwire vectored wait wand weak0 weak1 while wire wor xnor xor
+logic bit byte int shortint longint always_comb always_ff always_latch enum struct union typedef unique priority
+packed interface modport var void return break continue do final
+""".split())
+
+
+def is_legal_verilog_identifier(name: str) -> bool:
+    return bool(_VALID_VERILOG_IDENT_RE.match(name)) and name not in VERILOG_KEYWORDS
 # Matches `x = Signal(...)` / `x = Wire(...)` / `x = Register(...)` / `x = Input(...)` / `x = Output(...)`
 # (including the keyword-argument form used in IO bundles, e.g. `a = Input(...)`). One regex covers all of
 # them since Wire/Register/Input/Output are Signal subclasses that route their name inference through Signal.
@@ -26,6 +44,8 @@ def sanitize_signal_name(name: str) -> str:
         return ""
     if cleaned[0].isdigit():
         cleaned = f"sig_{cleaned}"
+    if cleaned in VERILOG_KEYWORDS:
+        cleaned = f"{cleaned}_"
     if not _VALID_VERILOG_IDENT_RE.match(cleaned):
         return ""
     return cleaned

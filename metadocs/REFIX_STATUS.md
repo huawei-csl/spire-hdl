@@ -27,7 +27,7 @@ each item's commit message cites the same ids. An item is not `applied` without 
 | Ternary emission per charter C1 | I2 §1.5 | applied | discharged by the width-isolation pass (mixed-sign muxes get an explicitly-typed boundary wire); mux_operand shape green |
 | Const validation + boundary-literal emission | I2 §2.2, §2.7, R P9 | applied | Const.__init__ raises on unrepresentable values (kills P9 + §2.7 at the root; simplify's raw folds now crash instead of silently wrong — acceptable, simplify is opt-in/experimental until its phase); most-negative literals emit `$signed(w'd<pattern>)` (old `-w'sd` form proven divergent: 256/256); Resize const path masks instead of constructing invalid Consts. Also fixed harness evaluator fidelity: `-w'sd` now parsed as unary minus per IEEE (was folded into the literal — would have masked §2.2) |
 | Negative shift amounts rejected | I2 §2.6, charter C3 | applied | op_shift ValueError for const amounts < 0 (both directions) |
-| Identifier legality | I2 §2.4, charter C6 | pending | |
+| Identifier legality | I2 §2.4, charter C6 | applied | keyword set + suffixing in sanitize_signal_name (inferred `reg` → `reg_`); explicit names checked at emission (AIGER importer's transient `y[0]` names stay legal pre-grouping); module names checked at construction. CS6 suite fallout: test_const_width_masked repurposed (out-of-range Const premise now impossible) |
 | Register `init=` cone collection | I2 §2.3 | pending | |
 | `flat_emit` scope decision | I 13.2, I2 §1.6 | pending | |
 

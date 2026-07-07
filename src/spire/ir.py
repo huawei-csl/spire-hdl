@@ -18,11 +18,14 @@ from spire.expr import (Bool, Expr, ExprLike, HDLType, Signal, UInt, WIRE_LIKE_K
                                fit_width, get_shared_wires)
 from spire.memory import _MemoryArray
 from spire.analyzer import _Analyzer, GraphReport
+from spire.signal_name_inference import is_legal_verilog_identifier
 from spire.visitor import ExprVisitor, expr_children
 
 
 class Netlist:
     def __init__(self, name: str, with_clock: bool = True, with_reset: bool = True):
+        if not is_legal_verilog_identifier(name):
+            raise ValueError(f"Module name {name!r} is not a legal Verilog identifier")
         self.name = name
         self.with_clock = with_clock
         self.with_reset = with_reset
@@ -168,6 +171,9 @@ class Netlist:
         # provides their value. Memory stores (`_MemoryArray`) are sim-only and always no-emit, so they and their
         # rdata registers fall through these checks without special-casing.
         for s in self._signals:
+            if not is_legal_verilog_identifier(s.name):
+                raise ValueError(f"Signal name {s.name!r} ({s.kind}) is not a legal Verilog identifier — rename it "
+                                 f"(reserved words and non-ASCII characters are not allowed)")
             if s._driver is not None or s._no_emit_drive:
                 continue
             if self.is_global_io(s, "output"):
