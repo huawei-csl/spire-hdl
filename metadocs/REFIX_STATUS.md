@@ -37,7 +37,8 @@ each item's commit message cites the same ids. An item is not `applied` without 
 |---|---|---|---|
 | Control flow: chain + condition-state scoping | I 2.3, I2 §4.1–4.3, §4.8; R R6/I 13.1 | applied | redesign: `fresh_condition_scope` (save/clear/restore at component construction) + strong-ref identity fingerprint on pending chains (kills §4.8's id-reuse hazard); 13.1 limitation REMOVED (component between if_/else_ now works); conditional patch moved from `__ilshift__` to `assign` (§4.2) with composite packing (§4.1); 10 new scoping tests |
 | Control flow minors | I2 §4.4, §4.7 | applied | case-value representability check; _ConditionalContext entered-guard. (§4.5 arr[i]=x and §4.6 State subclassing → composite/state change sets). CS8 fallout fixed en route: test_array2 reg init packed numerically (was an Array-of-Consts `.to_bits()` pattern — note: in-tree evidence for the declined const-folding variant). Full suite 609/19/13xf/12xp/0 fail |
-| Sharing/CSE re-fixes | I 1.2–1.6, 2.6, I2 §2.5 | pending | |
+| Sharing/CSE correctness (1.2/1.3/1.4) | I 1.2, 1.3, 1.4 | applied | adopt-as-is per guide, plus the tests the old branch never wrote (all three fail at baseline): visitor cache pins nodes via (node, result) tuples; CSE redirects the first duplicate unconditionally; force_share honored regardless of prior reference count. Note: width isolation already masks 1.4's emission symptom — fix is mechanism correctness |
+| Sharing determinism/name hygiene (1.6, 2.6, §2.5) | I 1.6, 2.6, I2 §2.5 | pending | next change set; 1.5 (stale best AIG) moved to the AIGER phase |
 | Component/IO re-fixes | I 2.1, 2.2, 2.5, 2.7, 4.5 | pending | |
 | Composite port naming (depth-safe) | I 4.8-equiv, I2 §5.1 guard | pending | ships with ≥2-depth tests |
 | Composite re-fixes + minors | I 4.1–4.6, I2 §5.2–5.10, charter C5 | pending | |

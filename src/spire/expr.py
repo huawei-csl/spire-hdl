@@ -105,7 +105,7 @@ def _maybe_share(e: "Expr", force_share=False) -> "Expr":
 
     cnt_share = 1  # at what count start sharing
     opportunistic = _SharedCache.opportunistic and cnt == cnt_share
-    if (force_share and cnt <= 1) or opportunistic:
+    if force_share or opportunistic:
         sig = _create_new_shared_wire(e.typ, getattr(e, "_suggested_name", None))
         sig._driver = e  # continuous assignment: assign sig = <original expr>;
         _SharedCache.expr2sig[uid] = sig

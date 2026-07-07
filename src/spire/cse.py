@@ -167,7 +167,7 @@ def apply_structural_cse(module) -> int:
     #      >= 2 members (covers criterion 1).
     key_to_instances: dict = defaultdict(list)
     for e in walker.all_ops:
-        key_to_instances[walker._cache[id(e)]].append(e)
+        key_to_instances[walker._cache[id(e)][1]].append(e)  # cache holds (node, key) — node pinned
 
     # 4. For each class that qualifies (multi-member OR high fan-out on any member), create one
     #    shared wire. First instance in the class is the driver; every other instance in the class
@@ -186,11 +186,9 @@ def apply_structural_cse(module) -> int:
         # Every OTHER instance in the class redirects to the wire.
         for other in insts[1:]:
             redirect[id(other)] = sig
-        # The first instance stays as the driver of the wire. Parents that reference it will be
-        # rewritten below to point at the wire too (except the wire itself, whose _driver stays
-        # as `first`).
-        if refcount[id(first)] >= 2:
-            redirect[id(first)] = sig
+        # The first instance stays as the driver of the wire; every parent reference to it (however many)
+        # redirects to the wire, so the shared logic emits exactly once.
+        redirect[id(first)] = sig
         wires_created += 1
 
     if not redirect:
