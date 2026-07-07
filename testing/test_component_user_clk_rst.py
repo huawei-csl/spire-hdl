@@ -46,3 +46,21 @@ def test_io_leaf_named_clk_rst_rejected(leaf):
 
     with pytest.raises(ValueError, match="framework|with_clock"):
         _Bad().to_netlist()
+
+
+def test_dict_io_keeps_field_names():
+    reset_shared_cache()
+
+    class _DictIO(Component):
+        def __init__(self):
+            self.io = {"foo": Input(UInt(4)), "bar": Output(UInt(4))}
+            self.elaborate()
+
+        def elaborate(self):
+            self.io["bar"] <<= self.io["foo"]
+
+    m = _DictIO().to_netlist()
+    assert [p.name for p in m._ports] == ["foo", "bar"]
+    # and the generated record class must not carry a Signal-comparing dataclass __eq__
+    rec = _DictIO().get_ios()
+    assert "__eq__" not in type(rec).__dict__

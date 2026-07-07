@@ -88,7 +88,9 @@ def _to_composite(obj: Any) -> "CompositeRecord":
         pairs = list(obj.items())
     else:  # plain object with __dict__
         pairs = list(vars(obj).items())
-    DynIO = make_dataclass("DynIO", [(n, type(v)) for n, v in pairs], bases=(CompositeRecord,))
+    # init=False so CompositeRecord.__init__ runs (field-key → port naming); eq=False so no dataclass __eq__
+    # is generated (it would compare Signals, i.e. build hardware).
+    DynIO = make_dataclass("DynIO", [(n, type(v)) for n, v in pairs], bases=(CompositeRecord,), init=False, eq=False)
     return DynIO(**{n: v for n, v in pairs})
 
 

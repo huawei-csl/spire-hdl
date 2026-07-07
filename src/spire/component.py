@@ -1,4 +1,5 @@
 import abc
+import warnings
 from dataclasses import make_dataclass
 
 from spire.expr import Signal, UInt
@@ -144,16 +145,23 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
                 setattr(self.io, sig.name, sig)
             else:
                 raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
-        self.elaborate()  # re-elaborate to rebuild internal structure
+        # Re-running a real elaborate() would re-drive outputs over the imported logic; only no-op
+        # ImportedComponent shells re-elaborate (harmlessly).
+        if type(self).elaborate is ImportedComponent.elaborate:
+            self.elaborate()
+        else:
+            warnings.warn("from_module: skipping elaborate() — the imported module already drives the IO",
+                          RuntimeWarning, stacklevel=2)
         self._finalize()
         # No inlining step: if this imported component is later embedded in a parent, the parent's
         # emitter classifies its ports as internal wires by membership (see ir.py).
+        return self
 
     def from_verilog(self, verilog_str: str, top=None, group=True) -> Self:
         from spire.aig.aig_yosys import aig_file_to_aag_lines_via_yosys
 
         aag_lines = verilog_to_aag_lines_via_yosys(verilog_str, top=top, embed_symbols=True, no_startoffset=True)
-        self.from_aag_lines(aag_lines, group=group)
+        return self.from_aag_lines(aag_lines, group=group)
 
     def from_aig_file(self, aig_path: str, map_file: str|None = None, group=True) -> Self:
         from spire.aig.aig_yosys import aig_file_to_aag_lines_via_yosys
@@ -166,7 +174,7 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         from spire.aiger import AigerImporter
 
         m = AigerImporter(aag_lines).get_spire_module()
-        self.from_module(m, group=group)
+        return self.from_module(m, group=group)
 
     @classmethod
     def from_netlist(cls, net: "Netlist") -> "Component":
@@ -197,7 +205,8 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
             io_fields.append((field_name, Signal))
             values[field_name] = sig
 
-        IO = make_dataclass("IO", io_fields, bases=(CompositeRecord,))
+        # init=False: CompositeRecord.__init__ names leaves by field key; eq=False: no Signal-comparing __eq__.
+        IO = make_dataclass("IO", io_fields, bases=(CompositeRecord,), init=False, eq=False)
         return ImportedComponent(IO(**values))
 
     def get_spec(self) -> Dict[str, UInt]:
