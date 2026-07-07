@@ -31,7 +31,7 @@ def mask(w):
 # ------------------------- Parsing -------------------------
 
 TOK = re.compile(r"""
-    (?P<lit>-?\d+'s?[bdh][0-9a-fA-F_xzXZ]+)
+    (?P<lit>\d+'s?[bdh][0-9a-fA-F_xzXZ]+)
   | (?P<num>\d+)
   | (?P<id>[A-Za-z_$][A-Za-z0-9_$]*)
   | (?P<sym>\{\{|\}\}|[(){}\[\]?:,])

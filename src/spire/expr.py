@@ -308,6 +308,16 @@ class Const(Expr):
     def __init__(self, value: int, typ: HDLType):
         self.value = int(value)
         self.typ = typ
+        w = typ.width
+        if w == 0:
+            lo = hi = 0  # zero-width placeholders (Concat) may only hold 0
+        elif typ.signed:
+            lo, hi = -(1 << (w - 1)), (1 << (w - 1)) - 1
+        else:
+            lo, hi = 0, (1 << w) - 1
+        if not lo <= self.value <= hi:
+            kind = f"SInt({w})" if typ.signed else f"UInt({w})"
+            raise ValueError(f"Const value {self.value} is not representable in {kind}")
 
     def to_verilog(self) -> str:
         if self.typ.is_bool:
@@ -317,9 +327,12 @@ class Const(Expr):
 
         val = int(self.value)
 
-        # For negatives, use unary minus + *signed* literal: -<width>'sd<abs>
         if val < 0:
-            return f"-{self.typ.width}'sd{abs(val)}"
+            w = self.typ.width
+            if val == -(1 << (w - 1)):
+                # `-w'sd<2^(w-1)>` would read back as +2^(w-1) in a wider context; emit the pattern reinterpreted.
+                return f"$signed({w}'d{val & ((1 << w) - 1)})"
+            return f"-{w}'sd{abs(val)}"
 
         # Non-negative: choose signedness from the declared type
         base = "sd" if self.typ.signed else "d"
@@ -508,11 +521,12 @@ class Resize(Expr):
         if aw == tw:
             return self.a.to_verilog()
         
-        # If operand is a constant, just re-emit it with the target width/signedness.
-        # This avoids patterns like (8'sd0)[7] and nested replications.
+        # If operand is a constant, re-emit its resized value directly (avoids patterns like (8'sd0)[7]).
+        # Truncation keeps low bits, extension follows the source sign — Python's `&` on negatives does both.
         if isinstance(self.a, Const):
-            adapted = Const(self.a.value, HDLType(tw, signed=self.a.typ.signed, is_bool=(tw == 1)))
-            return adapted.to_verilog()
+            pattern = self.a.value & ((1 << tw) - 1)
+            v = pattern - (1 << tw) if self.typ.signed and (pattern >> (tw - 1)) & 1 else pattern
+            return Const(v, HDLType(tw, signed=self.typ.signed, is_bool=(tw == 1))).to_verilog()
         
         if aw > tw:
             # truncate LSBs kept (common hardware pattern)
@@ -623,6 +637,8 @@ def op_not(a: Expr) -> Expr:
 
 
 def op_shift(a: Expr, b: Expr, sym: str) -> Expr:
+    if isinstance(b, Const) and b.value < 0:
+        raise ValueError(f"Shift amount must be >= 0, got {b.value}")
     # if b is const, widen on left shift; otherwise keep width
     if isinstance(b, Const) and sym == "<<":
         t = HDLType(a.typ.width + b.value, signed=a.typ.signed)
