@@ -3,7 +3,7 @@ from enum import Enum
 from typing import List, Optional, Union, Sequence, Type, TypeVar, Generic
 
 from spire.composite.base import HDLComposite
-from spire.expr import Const, Expr, ExprLike, HDLType, Resize, Wire, as_expr, fit_width
+from spire.expr import Const, Expr, ExprLike, HDLType, Resize, SInt, Wire, as_expr, fit_type, fit_width, reinterpret
 from spire.hdl_traits import BitSerializable
 
 # -----------------------------
@@ -152,10 +152,10 @@ class FixedPoint(HDLComposite):
     # Internal helpers for arithmetic
     # ---------------------------------
 
-    def _check_compatible(self, other: "FixedPoint") -> None:
+    def _check_compatible(self, other: "FixedPoint", *, allow_mixed_sign: bool = False) -> None:
         if not isinstance(other, FixedPoint):
             raise TypeError(f"Expected FixedPoint, got {type(other)}")
-        if self.ftype.signed != other.ftype.signed:
+        if not allow_mixed_sign and self.ftype.signed != other.ftype.signed:
             raise ValueError("FixedPoint sign mismatch: " f"{self.ftype.signed} vs {other.ftype.signed}")
 
     @staticmethod
@@ -186,18 +186,22 @@ class FixedPoint(HDLComposite):
         frac_diff = full_type.width_frac - out_type.width_frac
 
         if frac_diff > 0:
-            # We have more fractional bits in full_type than in out_type → drop LSBs
-            if q == ARITHQuant.WrpRnd and frac_diff > 0:
-                # Add 0.5 LSB before truncation for rounding
-                rnd_val = 1 << (frac_diff - 1)
-                rnd_const = Const(
-                    rnd_val,
-                    HDLType(raw.typ.width, signed=False, is_bool=False),
-                )
-                expr = expr + fit_width(rnd_const, expr.typ)
+            # More fractional bits in full_type than in out_type → drop LSBs.
+            if q == ARITHQuant.WrpRnd:
+                # Add 0.5 LSB before truncation for rounding (widens by one bit).
+                expr = expr + Const(1 << (frac_diff - 1), HDLType(frac_diff, signed=False))
 
-            # Logical right shift by frac_diff; width stays the same
-            expr = expr >> frac_diff
+            # Drop by slicing the kept top bits and reinterpreting to the source signedness, so the final
+            # resize sign-extends (two's-complement floor). A logical >> would corrupt negative values.
+            if frac_diff >= expr.typ.width:
+                # Everything dropped: the floor is the sign (signed → 0 / −1), else 0.
+                if full_type.signed:
+                    expr = reinterpret(expr[expr.typ.width - 1], SInt(1))
+                else:
+                    expr = Const(0, HDLType(1, signed=False))
+            else:
+                kept = expr[frac_diff:expr.typ.width]
+                expr = reinterpret(kept, SInt(kept.typ.width)) if full_type.signed else kept
 
         elif frac_diff < 0:
             # Need more fractional bits in out_type → shift left
@@ -218,7 +222,7 @@ class FixedPoint(HDLComposite):
         Compute the raw Expr and full-precision FixedPointType for
         add/sub/mul before quantization.
         """
-        self._check_compatible(other)
+        self._check_compatible(other, allow_mixed_sign=op in ("add", "sub"))
 
         if op in ("add", "sub"):
             # Align fractional bits
@@ -233,6 +237,14 @@ class FixedPoint(HDLComposite):
             if shift_b > 0:
                 b = b << shift_b
 
+            # Promote to a signed full type when the signs differ or when subtracting unsigned operands
+            # (underflow must yield a genuine negative value): zero-extend by one bit, reinterpret signed.
+            if self.signed != other.signed or (op == "sub" and not self.signed):
+                if not a.typ.signed:
+                    a = fit_type(a, SInt(a.typ.width + 1))
+                if not b.typ.signed:
+                    b = fit_type(b, SInt(b.typ.width + 1))
+
             # Equalize widths before add/sub
             wa, wb = a.typ.width, b.typ.width
             w_common = max(wa, wb)
@@ -245,7 +257,7 @@ class FixedPoint(HDLComposite):
             full_type = FixedPointType(
                 width_total=raw.typ.width,
                 width_frac=full_frac,
-                signed=self.signed,
+                signed=raw.typ.signed,
             )
             return raw, full_type
 
@@ -281,9 +293,10 @@ class FixedPoint(HDLComposite):
                 bits = Resize(bits, out_type.width_total)
             return FixedPoint(out_type, bits=bits)
 
-        # Out type given explicitly
-        if out_type.signed != self.signed:
-            raise ValueError("Output FixedPointType.signed must match operand sign " f"({out_type.signed} vs {self.signed})")
+        # Out type given explicitly: its signedness must match the (possibly promoted) full type
+        if out_type.signed != full_type.signed:
+            raise ValueError(f"Output FixedPointType.signed must be {full_type.signed} for this operation "
+                             f"(unsigned subtraction and mixed-sign add/sub promote to signed)")
 
         bits_q = self._quantize_bits(raw, full_type, out_type, q)
         return FixedPoint(out_type, bits=bits_q)
