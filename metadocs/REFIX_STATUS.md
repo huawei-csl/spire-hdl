@@ -7,6 +7,42 @@ Conventions: **Item** = plan phase step; **Source** = issue ids it discharges (I
 R = REAUDIT.md); **Status** = `pending` → `in progress` → `applied` (awaiting review) → `committed <sha>`;
 each item's commit message cites the same ids. An item is not `applied` without its failing-then-passing test.
 
+## Parked state (2026-07-08) — where everything is and how to resume
+
+**Review flow**: Felix reviews/commits on this branch (`fix/issue-review-v2`); the autonomous run's results
+live on the reference branch `fix/issue-review-v2-auto` (tip `f17f6b8`, 11 commits, checked out in the
+`../spire-hdl-autocheck` worktree) and get replayed here one commit at a time via `git cherry-pick -n`.
+
+1. **Stash `refix-reset-attr-wip`** — the reworked replay commit 1 (reset/init parity redesigned in review:
+   PUBLIC `Register(reset='high_active'|'low_active'|None)` + `m.reg(reset=...)` instead of the private
+   `_sim_no_reset` tag; `Netlist.reg` returns a real `Register`; emission groups always blocks per reset kind
+   (+ initial block for armless inits); polarity-aware `_reg_in_reset` drives reset()/rst-held-step/peek_next;
+   AIGER folds ITE per register; `no_rst_reg` = `Register(..., reset=None)`; 9 tests). Validated: full suite
+   663/19/13xf/12xp/0 fail. Restore: `git stash apply 10e9c8f03033942d14e8d5d84a787011860b576f` (re-find by
+   tag via `git stash list | grep refix-reset-attr-wip`, drop by its current stash@{n} after applying).
+   Suggested message: "Registers get a public reset kind (high/low/None); sim, emission and AIGER honor it on all paths". NOTE: the memory-validation commit was later staged standalone (its `no_rst_reg` dependencies reverted to plain `Register`), so applying this stash afterwards will conflict in `_ram_template.py` + the four primitive files — resolve by taking the stash's `no_rst_reg` helper/call sites on top of the committed validation changes.
+2. **Stash `refix-composite-wip`** (`27a5829c667b80689a8a4f21cd2849b9d393808e`) — the composite re-fixes change
+   set, unchanged; see its row below for contents and apply notes.
+3. **Replay plan after commit 1**: cherry-pick, in order, `00e1a9f, 8b2fa96, c1e96b1, 797b4b3, b0834b3,
+   a51eea5, 0de68b9, 3b6dbd1, d55036f, f17f6b8`. Dry-run verified on a scratch worktree: all picks apply
+   cleanly on top of the reworked commit 1 except a hand-merge of THIS file at `00e1a9f`; the combined tip's
+   full suite = 736 passed + exactly the 10 known `test_output_stationary_matmul` failures (see 4) — no
+   semantic interference from the rework.
+4. **Uncommitted work parked in `../spire-hdl-autocheck`** (auto branch working tree; cumulative snapshots in
+   `../spire-refix-patches/00..03`): (a) the fix for the 10 failures above — the §11.2/§11.4 operator-mode
+   guard gains `carriers_signed` (SInt-carrier cores like output-stationary infer signedness correctly;
+   Winograd stays strict — its pre-adder outputs are UInt-laundered); fold into the `f17f6b8` review or commit
+   as a fix-up. (b) hygiene cluster: §15.8 (FTZ-boundary warning acknowledged via pytest.warns + directed
+   corner test 0x3BFF×0x0400), §15.9/§13.5 (debug script main guard), §11.8 (seeded .dat vectors, relative tb
+   data_file), §11.6. (c) §15.2 PPA selection-mode functional battery (replaces the never-runnable fingerprint
+   reference test). (d) Phase 7 simplify: cherry-picks `ae53f99` (0.7) + `b535286` (1.1) plus §2.1
+   (signedness-preserving `_fit_result`, slice/op1 identities routed through it; teeth-checked tests) and §2.8
+   (pinned balancer visited set). (e) Phase 8 partials: picks `4170034`/`fd62447`/`37c3ef4` + §14.1/§14.2
+   README fixes. STILL OPEN there: §11.7, §13.1–13.4/13.6–13.9, §14.3–14.7, §16.1–16.8.
+5. **Future design item**: `ClockDomain(clock=..., reset=...)` construction context — the Register-level
+   `reset` attribute in (1) is its first half; multi-clock needs a design doc (per-domain sim scheduling,
+   AIGER is single-clock).
+
 ## Phase 0 — scaffolding
 
 | Item | Source | Status | Notes |
@@ -38,7 +74,7 @@ each item's commit message cites the same ids. An item is not `applied` without 
 | Control flow: chain + condition-state scoping | I 2.3, I2 §4.1–4.3, §4.8; R R6/I 13.1 | applied | redesign: `fresh_condition_scope` (save/clear/restore at component construction) + strong-ref identity fingerprint on pending chains (kills §4.8's id-reuse hazard); 13.1 limitation REMOVED (component between if_/else_ now works); conditional patch moved from `__ilshift__` to `assign` (§4.2) with composite packing (§4.1); 10 new scoping tests |
 | Control flow minors | I2 §4.4, §4.7 | applied | case-value representability check; _ConditionalContext entered-guard. (§4.5 arr[i]=x and §4.6 State subclassing → composite/state change sets). CS8 fallout fixed en route: test_array2 reg init packed numerically (was an Array-of-Consts `.to_bits()` pattern — note: in-tree evidence for the declined const-folding variant). Full suite 609/19/13xf/12xp/0 fail |
 | Sharing/CSE correctness (1.2/1.3/1.4) | I 1.2, 1.3, 1.4 | applied | adopt-as-is per guide, plus the tests the old branch never wrote (all three fail at baseline): visitor cache pins nodes via (node, result) tuples; CSE redirects the first duplicate unconditionally; force_share honored regardless of prior reference count. Note: width isolation already masks 1.4's emission symptom — fix is mechanism correctness |
-| Sharing determinism/name hygiene (1.6, 2.6, §2.5) | I 1.6, 2.6, I2 §2.5 | applied | duplicate-port ValueError on all four creation paths (incl. implicit clk/rst); default netlist name = class name; §2.5 redesigned deeper than the old branch: construction wire names are provisional, the collector assigns canonical per-netlist names (suggested base or sig_N in traversal order) — same-process re-emission byte-identical with NO manual reset, composition-safe. 3 tests, all fail at pre-fix state. 1.5 moved to AIGER phase |
+| Sharing determinism/name hygiene (1.6, 2.6, §2.5) | I 1.6, 2.6, I2 §2.5 | applied | duplicate-port ValueError on all four creation paths (incl. implicit clk/rst); default netlist name = class name; §2.5 redesigned deeper than the old branch: construction wire names are provisional, the collector assigns primary per-netlist names (suggested base or sig_N in traversal order) — same-process re-emission byte-identical with NO manual reset, composition-safe. 3 tests, all fail at pre-fix state. 1.5 moved to AIGER phase |
 | Component/IO: clk/rst are framework-only | I 2.1 | applied | DESIGN DECISION (review): clocking is implicit-only via with_clock/with_reset — IO leaves named clk/rst are rejected with guidance (2.1's silent drop → loud error; guide's "adopt" overridden; zero in-tree io-clk users; keeps room for future clock-domain contexts). Tests: framework-flag path incl. sim; both leaf names rejected |
 | Component/IO: dict-IO names, importer hygiene | I 4.5, 2.5, 2.7 (+R P7) | applied | make_dataclass(init=False, eq=False) at both DynIO sites (field-key naming restored: foo/bar not input_6_0; no Signal-comparing __eq__); from_module/from_verilog/from_aag_lines return self; from_module re-elaborates only no-op ImportedComponent shells (else warn+skip; no in-tree caller affected) |
 | Component/IO: custom-Verilog ownership | I 2.2, R R2 (R5 structurally impossible) | applied | DESIGN DECISION (review): boundary-only, no ownership stamping — the tag walk stops at the component's own INPUT leaves (external values enter only through the IO boundary; contract documented in the tagging docstring); token-stamping prototype rejected as heavyweight for its one extra pattern (constructor-captured externals — inherently non-modular for custom Verilog, now documented as absorbed). R2: collector no longer crosses input-PORT drivers → standalone child after embedding excludes the parent cone. Net src diff: +7/−1 lines. 2 tests fail pre-fix |
@@ -52,7 +88,7 @@ each item's commit message cites the same ids. An item is not `applied` without 
 | Item | Source | Status | Notes |
 |---|---|---|---|
 | 5.1 with async-ROM exemption | I 5.1, I2 §6.4 guard | applied | guard moved up-front in to_verilog_lines and now counts ALL registers (incl. `_no_emit_drive`-tagged primitive internals) plus memories with `needs_clock()` (new `_MemoryArray` method: any write port or reset arm); write-less unregistered ROMs stay clockless (§6.4 exemption by construction — never counted); registered-read ROMs are caught via their internal Register. Old dead inner guard deleted (guide). Actionable message names an offending signal and says with_clock=True. 5 tests (FIFO default-emit raises / clocked emits, async ROM clockless, registered ROM requires clock, plain reg still guarded); FIFO + registered-ROM cases fail at baseline. Residual (unchanged from old fix): a custom block referencing rst with with_reset=False is not generically detectable. Full suite 654/19/13xf/12xp/0 fail |
-| Memory/FIFO re-fixes + via_reg parity | I 5.2–5.8, I2 §6.1–6.3, §6.5–6.7 | pending | |
+| Memory/FIFO re-fixes + via_reg parity | I 5.2–5.8, I2 §6.1–6.3, §6.5–6.7 (+ deferred I 3.4, I2 §3.1, §3.5) | STASHED (part) / ON REFERENCE (rest) | The reset/init-parity portion (I 5.3 redo, §3.1 both-paths hold, §6.1 via_reg data cells, I 3.4 initial block) is **stashed as `refix-reset-attr-wip`** after the review rework to the public `Register(reset=...)` attribute — restore instructions and the validated tally (663/0) are in 'Parked state' §1 at the top of this file. STAGED NOW (review order changed: skipped ahead of the stashed reset-parity part): memory validation/emission (5.2 rejected via shared `check_ruw_mask` on MemoryPrimitive AND RamPrimitive; §6.2 `norm_elem_values` validates init/reset_value against the element type and stores bit patterns — negative literals emit masked `8'd255`, never `8'd-1`, all four primitives; §6.3 via_reg out-of-range read default rebased on Const 0 = the shared convention, charter §3.4; §6.7 primary primitives emit the LIVE `_store.name` so collector-uniquified array names reach the custom Verilog — via_reg text can't, documented; 5.4 via_reg parity kwargs with NotImplementedError; 5.5/5.6/5.7 doc/message honesty; 6 tests, all fail at baseline) — cherry-picked standalone from `00e1a9f` with the reset-parity dependencies reverted (plain `Register` capture regs; no `no_rst_reg`). Full suite 660/19/13xf/12xp/0 fail. Still awaiting replay: interface wiring (5.8, §6.5, §6.6) = `8b2fa96`; the differential golden-model battery = `c1e96b1` |
 
 ## Phase 4 — backends (AIGER, decorators)
 

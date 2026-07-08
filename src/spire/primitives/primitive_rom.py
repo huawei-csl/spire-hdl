@@ -21,7 +21,7 @@ from spire.expr import Bool, Register, Signal, UInt, mux
 from spire.component import CustomVerilogComponent
 from spire.io_record import IORecord, Input, Output
 from spire.primitives.primitive_memory import _elem_bit_width, _next_uid
-from spire.primitives._ram_template import ram_block
+from spire.primitives._ram_template import norm_elem_values, ram_block
 
 
 class RomIO(IORecord):
@@ -75,6 +75,8 @@ class RomPrimitive(CustomVerilogComponent):
         self._init = list(init)
         self._registered_read = registered_read
         self._elem_w = _elem_bit_width(elem_type)
+        self._init = norm_elem_values(self._init, width=self._elem_w,
+                                      signed=getattr(elem_type, "signed", False), what="init")
         self._addr_w = max(1, (depth - 1).bit_length())
         self._uid = _next_uid()
         self._instance_name = name or f"rom_{self._uid}"
@@ -117,7 +119,7 @@ class RomPrimitive(CustomVerilogComponent):
         if self._registered_read:
             read["en"] = self.io.read_enable.name
         return ram_block(
-            name=self._instance_name, depth=self._depth, elem_w=self._elem_w,
+            name=self._store.name, depth=self._depth, elem_w=self._elem_w,  # live name survives uniquification
             writes=[], reads=[read], reset=None, init=self._init,
             comment=f"--- RomPrimitive (uid={self._uid}, depth={self._depth}, width={self._elem_w}) ---",
         )

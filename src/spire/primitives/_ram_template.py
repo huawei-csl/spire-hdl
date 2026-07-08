@@ -23,6 +23,24 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
+def check_ruw_mask(read_under_write: str, mask_chunks: int) -> None:
+    """writeFirst forwards raw write data; with a write mask that value never exists in memory
+    (per-chunk blending is unimplemented). Reject the combination."""
+    if read_under_write == "writeFirst" and mask_chunks and mask_chunks > 1:
+        raise ValueError("writeFirst read-under-write with mask_chunks > 1 is not supported: "
+                         "forwarding would return the unmasked write data")
+
+
+def norm_elem_values(values: Sequence[int], *, width: int, signed: bool, what: str) -> list[int]:
+    """Validate init/reset element values against the element type and return their two's-complement
+    bit patterns (what the sim stores and the `W'd<v>` literals need — `8'd-1` is illegal Verilog)."""
+    lo, hi = (-(1 << (width - 1)), (1 << (width - 1)) - 1) if signed else (0, (1 << width) - 1)
+    for i, v in enumerate(values):
+        if not (lo <= v <= hi):
+            raise ValueError(f"{what}[{i}] = {v} is not representable in {width}-bit "
+                             f"{'signed' if signed else 'unsigned'} elements")
+    return [v & ((1 << width) - 1) for v in values]
+
 
 def _read_rhs(name: str, r: dict) -> str:
     """The value a read port observes: plain array index, or writeFirst forwarding mux."""
