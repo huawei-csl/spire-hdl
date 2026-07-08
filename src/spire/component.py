@@ -158,9 +158,32 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         return self
 
     def from_verilog(self, verilog_str: str, top=None, group=True) -> Self:
-        from spire.aig.aig_yosys import aig_file_to_aag_lines_via_yosys
+        """Import a design from Verilog SOURCE TEXT — the counterpart of ``to_verilog()``.
+        """
+        import os
+        import tempfile
 
-        aag_lines = verilog_to_aag_lines_via_yosys(verilog_str, top=top, embed_symbols=True, no_startoffset=True)
+        fd, path = tempfile.mkstemp(suffix=".v")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(verilog_str)
+            return self.from_verilog_file(path, top=top, group=group)
+        finally:
+            os.remove(path)
+
+    def from_verilog_file(self, verilog_path: str, top=None, group=True) -> Self:
+        """Import a design from a Verilog file — the counterpart of ``to_verilog_file()``.
+
+        Combinational designs only (AIGER latch import is not implemented).
+        """
+        aag_lines = verilog_to_aag_lines_via_yosys(verilog_path, top=top, embed_symbols=True,
+                                                   no_startoffset=True)
+        header = aag_lines[0].split() if aag_lines else []
+        n_latches = int(header[3]) if len(header) >= 6 else 0
+        if n_latches:
+            raise NotImplementedError(
+                f"from_verilog supports combinational designs only: the input contains "
+                f"{n_latches} register bit(s) (AIGER latch import is not implemented)")
         return self.from_aag_lines(aag_lines, group=group)
 
     def from_aig_file(self, aig_path: str, map_file: str|None = None, group=True) -> Self:

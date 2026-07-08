@@ -190,12 +190,21 @@ verilog = demo.to_verilog(name="LogicDemo")   # synthesizable Verilog (str)
 aag     = demo.to_aag(name="LogicDemo")        # AIGER ASCII lines (list[str])
 net     = demo.to_netlist(name="LogicDemo")    # flat netlist IR (Netlist)
 
-demo2 = Component.from_netlist(net)            # re-import the IR (also: .from_verilog / .from_aag_lines)
+demo2 = Component.from_netlist(net)            # re-import the IR
 
-# equivalence-check the original against the re-imported design (aigverse, on their AIGs)
+# Import Verilog source (yosys-backed; ports map onto the declared IO) — here a round-trip
+# of the text we just emitted; from_verilog_file(path) reads external .v files the same way:
+from spire.component import ImportedComponent
+shell = ImportedComponent(IORecord(a=Input(UInt(8)), b=Input(UInt(8)), sel=Input(Bool()),
+                                   sum=Output(UInt(9)), mask=Output(UInt(2)), out=Output(UInt(8))))
+demo3 = shell.from_verilog(verilog)            # also: .from_verilog_file / .from_aag_lines / .from_aig_file
+
+# equivalence-check the original against both re-imported designs (aigverse, on their AIGs)
 a1 = conv_aag_into_aig(demo.to_aag(name="LogicDemo"), Aig())
 a2 = conv_aag_into_aig(demo2.to_aag(name="LogicDemo"), Aig())
+a3 = conv_aag_into_aig(demo3.to_aag(name="LogicDemo"), Aig())
 assert equivalence_checking(a1, a2)
+assert equivalence_checking(a1, a3)   # the Verilog round-trip is logic-equivalent too
 ```
 
 ## Components and the netlist IR
