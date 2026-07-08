@@ -1,3 +1,5 @@
-aigverse>=0.0.24
+# Exact pins for the native-wheel dependencies: their APIs are still volatile
+# (aigverse 0.1.x removed DepthAig)
+aigverse==0.0.24
 numpy
-pyosys>=0.58
+pyosys==0.58
