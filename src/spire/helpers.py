@@ -6,7 +6,6 @@ import tempfile
 from typing import Callable, List, Optional
 
 from aigverse import DepthAig, aig_cut_rewriting, aig_resubstitution, balancing, sop_refactoring
-from pyosys import libyosys as ys
 
 from spire.aig.aig_aigerverse import _get_aag_sym, conv_aag_into_aig, conv_aig_into_aag
 from spire.arithmetic.int_multipliers.eval.testvector_generation import TestVectors
@@ -282,6 +281,7 @@ def _run_yosys_metric_flow(read_cmd: str, deepsyn: bool = False, auto_top: bool 
 
     try:
         with _suppress_output(stderr=suppress_stderr):
+            from pyosys import libyosys as ys  # lazy: yosys-backed entry points only
             ys.run_pass("design -reset")
             ys.run_pass(read_cmd)
             if auto_top:

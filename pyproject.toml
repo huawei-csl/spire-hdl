@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs", "hatch-requirements-txt"]
+requires = ["hatchling", "hatch-requirements-txt"]
 build-backend = "hatchling.build"
 
 [project]
@@ -8,21 +8,35 @@ version = "0.2.1"
 description = "Spire HDL is a hardware description language for digital circuits."
 authors = [{ name = "Felix Arnold", email = "felix.arnold@h-partners.com" }]
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
 ]
 dynamic = [
     "dependencies"
 ]
 
+[project.urls]
+Homepage = "https://github.com/huawei-csl/spire-hdl"
+Repository = "https://github.com/huawei-csl/spire-hdl"
+Issues = "https://github.com/huawei-csl/spire-hdl/issues"
+
+# Heavyweights used only by eval/plot/benchmark modules, and feature-gated extras, are
+# opt-in — the core library must not force them on every installer.
+[project.optional-dependencies]
+eval = ["matplotlib", "pandas", "tqdm"]
+fsm-opt = ["sympy"]
+arithmetic-explorer = ["dash", "plotly"]
+
 # Data files matching .gitignore patterns (*.aig, *.map, *.csv) are excluded by hatchling
 # unless listed as artifacts; a plain `include` cannot override the VCS-based exclusion.
 [tool.hatch.build]
 artifacts = [
     "src/spire/arithmetic/int_multipliers/data/**",
-    "src/spire/arithmetic/eval/*.json",
     "src/spire/arithmetic/eval/*.csv",
 ]
 
@@ -33,7 +47,9 @@ packages = ["src/spire"]
 # The sdist must keep the src/ layout (no path rewriting), otherwise building the
 # wheel from the sdist finds no "src/spire" package and produces an empty wheel.
 [tool.hatch.build.targets.sdist]
-only-include = ["src/spire"]
+# requirements.txt is the declared dynamic-metadata source: an sdist without it cannot
+# rebuild its own metadata (hatch-requirements-txt raises FileNotFoundError).
+only-include = ["src/spire", "requirements.txt", "README.md", "LICENSE"]
 
 [tool.hatch.metadata.hooks.requirements_txt]
 files = ["requirements.txt"]

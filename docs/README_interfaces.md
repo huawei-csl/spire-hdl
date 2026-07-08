@@ -11,7 +11,7 @@ from spire.interfaces import Flow, Stream, MemPort
 
 ## Philosophy in one minute
 
-Declare an interface **once**, in its canonical *source* / *master* polarity (the producer drives
+Declare an interface **once**, in its natural *source* / *master* polarity (the producer drives
 the data). From that single definition you get the rest:
 
 - **`Flipped(Interface(...))`** — the sink/slave side, with every leaf direction mirrored. One word

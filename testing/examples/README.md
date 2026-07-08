@@ -16,7 +16,7 @@ A comprehensive guide showing how to:
 
 Run the example:
 ```bash
-python examples/component_example.py
+PYTHONPATH=src python testing/examples/component_example.py
 ```
 
 ### simple_component.py
@@ -29,7 +29,7 @@ A minimal example showing the essential steps for creating and using a component
 
 Run the example:
 ```bash
-python examples/simple_component.py
+PYTHONPATH=src python testing/examples/simple_component.py
 ```
 
 ### composing_components.py
@@ -42,19 +42,19 @@ Component world, never touching the IR:
 
 Run the example:
 ```bash
-python examples/composing_components.py
+PYTHONPATH=src python testing/examples/composing_components.py
 ```
 
 ### direct_expression_basics.py
 
 Minimal arithmetic expression example for newcomers:
 - Uses direct expression building (`y = a + b`) with no intermediate wires
-- Uses `+`, `-`, unary `-`, and `Const(..., Int(...))`
+- Uses `+`, `-`, unary `-`, and `Const(..., SInt(...))`
 - Shows both `Const(False, Bool())` and plain `False`
 - Includes a recursive Horner-form polynomial expression example
 - No wires, no slicing, and no boolean operations
 - Starts with `y = a + b` and then extends with constants/unary minus
-- Prints expressions in Verilog form (`assign y = ...`)
+- Prints each expression's Verilog text and its inferred type
 
 Run the example:
 ```bash

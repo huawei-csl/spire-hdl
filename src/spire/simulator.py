@@ -281,10 +281,10 @@ class Simulator(SimulatorBase):
         return self
 
     # Peek, for raw outputs and inputs
-    def peek_outputs(self, *e) -> dict[str, int]:
+    def peek_outputs(self) -> dict[str, int]:
         return {y.name: self.peek(y) for y in self.outputs}
 
-    def peek_inputs(self, *e) -> dict[str, int]:
+    def peek_inputs(self) -> dict[str, int]:
         return {x.name: self.peek(x) for x in self.inputs}
 
     def get_mem(self, ref) -> list[int]:

@@ -115,7 +115,7 @@ class Netlist:
         # own ports. Sub-component IO leaves keep their declared input/output kind, but emit as internal wires.
         return [s for s in self._signals if s.kind in kinds and not self.is_global_io(s)]
 
-    def get_spec(self) -> Dict[str, UInt]:
+    def get_spec(self) -> Dict[str, HDLType]:
         spec = {}
         for p in self._ports:
             spec[p.name] = p.typ

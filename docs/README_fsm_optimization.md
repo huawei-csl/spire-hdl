@@ -56,7 +56,7 @@ Hopcroft to find behavioural-equivalence classes, mutates the State Consts so
 every state in a class shares its representative's value, and runs
 `apply_simplify(module)` to collapse the now-redundant mux branches.
 
-### Worked example — case10 (the canonical 7→4 case)
+### Worked example — case10 (the classic 7→4 case)
 
 ```python
 from spire.state import State, Encoding, state, optimized_fsm
@@ -109,8 +109,8 @@ collapses the now-redundant duplicates so synthesis sees a tight 4-state FSM.
 ### Safety properties
 
 - **Idempotent on already-minimal FSMs.** If no states merge, the wrapper exits without touching anything.
-- **Per-name preservation.** Merged states keep their names (e.g. `S.S3` still exists), they just share the canonical's value. References to `S.S3` elsewhere in the design keep working.
-- **Failure-safe.** When the input domain exceeds 65 536 combinations (`MAX_INPUT_COMBINATIONS`), `extract_transition_table` raises and the wrapper silently skips minimisation rather than producing a wrong result.
+- **Per-name preservation.** Merged states keep their names (e.g. `S.S3` still exists), they just share their representative's value. References to `S.S3` elsewhere in the design keep working.
+- **Failure-safe.** When the input domain exceeds 65 536 combinations (`MAX_INPUT_COMBINATIONS`), `extract_transition_table` raises and the wrapper skips minimisation with a `RuntimeWarning` rather than producing a wrong result.
 
 ---
 
@@ -156,7 +156,7 @@ the design (and any subsequent uses).
 | Strategy | When `"auto"` picks it | Behaviour |
 |----------|------------------------|-----------|
 | `predefined` | `n ≤ 2` | Tries `BINARY` and `GRAY` codes (no widening). 2 cost-fn calls. |
-| `exhaustive` | `n! ≤ 5040` (so `n ≤ 7`) | All permutations of `n` codes from the universe of `2^width`. Up to ~5 040 cost-fn calls. |
+| `exhaustive` | `P(2^width, n) ≤ 5040` — permutations of the FULL code universe, not `n!` | All ways to pick `n` distinct codes out of `2^width`. For a width-matched binary class this is `n!`; for wider classes (e.g. ONEHOT) the space explodes, which is why the ladder gates on the real count. |
 | `swap` | otherwise | Pair-swap accept-on-improvement, 4 random restarts × 200 iters. ~800 cost-fn calls. |
 | `adjacency` | never (opt-in) | Two-stage: synthesis-free weighted-Hamming screen over every encoding (sub-second), then verify the real `cost_fn` on the top `top_k` (default 64). Falls back to `swap` when nested `optimized_fsm` groups are present or the transition table can't be extracted. Faster than `exhaustive`; more robust than `swap` for noisy objectives (e.g. `adp_proxy`). See [`_adjacency.py`](../src/spire/optimize/fsm/_adjacency.py). |
 | `anneal` | never (future work) | Reserved name; currently raises `NotImplementedError`. |
@@ -186,6 +186,8 @@ with optimized_encoding(MyStates, module=m, search="adjacency", top_k=64):
 | `width` | `state_cls._width` | Width of the encoding. Width-changing search (widen for `ONEHOT`, etc.) is **future work** — must equal the current width. |
 | `cost_fn` | `None` | Custom callable `assignment → float`. When `None`, defaults to `make_yosys_cost_fn`. |
 | `top_k` | `64` | `search="adjacency"` only: how many screen-ranked candidates to re-score with the real `cost_fn`. Ignored by other strategies. |
+| `bit_level_emit` | `False` (auto-`True` for `adp_proxy`) | Re-emit the FSM logic as minimised boolean expressions over the state bits, so downstream synthesis cannot re-encode it away. Required for AIG objectives on sequential FSMs — without it every candidate costs `inf` and the wrapper warns and keeps the existing encoding. |
+| `dont_cares` | `True` | Exploit unreachable state codes as don't-cares in the bit-level minimisation. |
 
 ### Custom cost functions
 
@@ -252,7 +254,7 @@ internal `random.Random(0)`) so results are reproducible.
 ### Case 1 — 7-state sequence detector (sequential)
 
 A Moore FSM with four pairs of behaviourally-equivalent states — the
-canonical [`case10`](../testing/fsm/test_nested_wrappers.py) used throughout
+well-known [`case10`](../testing/fsm/test_nested_wrappers.py) used throughout
 the unit tests. Hopcroft merges the 7 states into 4 equivalence classes
 (`{S0,S3}, {S1}, {S2,S4,S6}, {S5}`); the encoding search then picks the
 best bit-assignment over the survivors. Metric: yosys `cells` /
@@ -360,7 +362,7 @@ states that Hopcroft just merged.
   larger search spaces.
 - **Input domain cap** on FSM transition-table extraction:
   `MAX_INPUT_COMBINATIONS = 65 536`. When exceeded, minimization is
-  silently skipped (encoding search still runs).
+  skipped with a `RuntimeWarning` (encoding search still runs).
 - **Single-netlist scope.** `optimized_encoding(state_cls, module=m)`
   optimises one `Netlist` at a time. Designs split across several netlists that
   share a State class need one wrapper per netlist.

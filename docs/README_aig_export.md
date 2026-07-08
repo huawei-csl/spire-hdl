@@ -66,4 +66,4 @@ export, optimize with aigverse, and re-import (regrouping IO) in one call.
 ## Examples
 
 - [`testing/basic_examples/load_aig.py`](../testing/basic_examples/load_aig.py) — import an external `.aig`/`.aag` into a `Component` and simulate it.
-- [`testing/optimize_and_check.py`](../testing/optimize_and_check.py) — export, optimize, and equivalence-check.
+- [`testing/scripts/optimize_and_check.py`](../testing/scripts/optimize_and_check.py) — export, optimize, and equivalence-check.

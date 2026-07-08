@@ -16,7 +16,7 @@
 - **Reduces area and delay vs. a traditional Verilog flow:** optimization is part of the compile
 - **Integrated with ABC and mockturtle:** modern synthesis optimization wired directly into the compilation pipeline
 - **Arithmetic library with automated replacement:** swap adders, multipliers, and FP cores driven by an objective
-- **Cycle-accurate Python simulator"** drive inputs, tick clocks, inspect expressions/outputs without leaving Python
+- **Cycle-accurate Python simulator:** drive inputs, tick clocks, inspect expressions/outputs without leaving Python
 - **Content-addressed optimization cache:** instant re-runs via `@abc_optimized` /`@flowy_optimized` decorators
 
 ## Optimizations built in 💡
@@ -257,7 +257,7 @@ Spire includes structured, bit-packable composites for cleaner interfaces and bu
 - `CompositeRecord` is the bundle of named fields that stays packable to a flat bitvector — build it inline (`CompositeRecord(a=Input(...), ...)`), via a subclass `__init__` calling `super().__init__(...)`, or as a `@dataclass`; declare fields as annotations for IDE autocomplete ([`record.py`](src/spire/composite/record.py)).
 - `FixedPoint` wraps a `Wire` or view with explicit total/frac widths and quantization helpers, keeping arithmetic readable while staying hardware-friendly ([`fixed_point.py`](src/spire/composite/fixed_point.py)).
 - `FloatingPoint` provides an IEEE-style view with `add`/`mul` helpers parameterized by exponent / fraction widths ([`floating_point.py`](src/spire/composite/floating_point.py)).
-- `CompositeRegister` stores any composite in a single register while preserving a structured view via `.value`/`.Q` ([`register.py`](src/spire/composite/register.py)).
+- `CompositeRegister` stores any composite in a single register while preserving a structured view via `.value` ([`register.py`](src/spire/composite/register.py)).
 
 Example:
 
@@ -269,8 +269,8 @@ from spire.composite.register import CompositeRegister
 from spire.expr import UInt, Wire
 
 class Bus(CompositeRecord):
-    data = Wire(UInt(8))
-    valid = Wire(UInt(1))
+    def __init__(self):
+        super().__init__(data=Wire(UInt(8)), valid=Wire(UInt(1)))
 
 payload = Array([Bus(), Bus()])
 acc = FixedPoint(FixedPointType(width_total=16, width_frac=8))
@@ -298,7 +298,7 @@ sim.trace_enabled = True
 sim.eval()
 for _ in range(5):
     sim.step()
-write_vcd(trace_by_names=sim.get_trace_by_names(), filename="run.vcd", top_module=m.name, timescale="1ns")
+write_vcd(trace_by_names=sim.get_trace_by_names(), filename="run.vcd", top_module="LogicDemo", timescale="1ns")
 ```
 
 ## Slices
@@ -311,7 +311,7 @@ Check out the `testing/examples/` directory for practical examples:
 - **[`simple_component.py`](testing/examples/simple_component.py)** – A minimal example showing how to define a Component with IO ports and generate Verilog
 - **[`component_example.py`](testing/examples/component_example.py)** – Comprehensive examples including hierarchical design and simulation
 - **[`composing_components.py`](testing/examples/composing_components.py)** – Shows how to compose a larger `Component` from smaller automatically embedded components
-- **[`direct_expression_basics.py`](testing/examples/direct_expression_basics.py)** – Minimal direct expression examples (`y = a + b`) plus `+`, `-`, unary `-`, `Const(..., Int(...))`, typed/plain `False`, and a recursive Horner polynomial builder
+- **[`direct_expression_basics.py`](testing/examples/direct_expression_basics.py)** – Minimal direct expression examples (`y = a + b`) plus `+`, `-`, unary `-`, `Const(..., SInt(...))`, typed/plain `False`, and a recursive Horner polynomial builder
 - **[`testing/riscv/rv32i.py`](testing/riscv/rv32i.py)** – Minimal RV32I core example; see [`testing/riscv/test_rv32i.py`](testing/riscv/test_rv32i.py) for simulation-based checks.
 
 See the [examples README](testing/examples/README.md) for detailed documentation and key concepts.

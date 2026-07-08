@@ -53,6 +53,8 @@ class TestbenchGenSimulator(SimulatorBase):
     the Verilog testbench that reproduces the stimuli and checks the observed outputs.
     """
 
+    __test__ = False  # not a pytest class despite the Test* name
+
     def __init__(
         self,
         module: "Netlist | Component",

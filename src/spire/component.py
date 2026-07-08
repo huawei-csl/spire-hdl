@@ -2,7 +2,7 @@ import abc
 import warnings
 from dataclasses import make_dataclass
 
-from spire.expr import Signal, UInt
+from spire.expr import HDLType, Signal, UInt
 from spire.memory import _MemoryArray
 
 
@@ -209,7 +209,7 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         IO = make_dataclass("IO", io_fields, bases=(CompositeRecord,), init=False, eq=False)
         return ImportedComponent(IO(**values))
 
-    def get_spec(self) -> Dict[str, UInt]:
+    def get_spec(self) -> Dict[str, HDLType]:
         return {s.name: s.typ for s in self.get_ios().to_list()}
 
     # Deprecated method aliases (renamed for clarity; kept for one release).
