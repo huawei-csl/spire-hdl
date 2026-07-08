@@ -327,7 +327,7 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 |------|--------|-----------|--------|
 | 0 | **CEC** vs `golden.v` (yosys → BLIF, `yosys-abc cec`) — formal, exhaustive | combinational only | **implemented** |
 | 1 | **auto sim harness**: corners + seeded random stimulus (exhaustive for tiny combinational input spaces), **golden-simulated** outputs, frozen `tb.sv` + `vectors.dat` | sequential; combinational where the caller chose sim | **implemented** |
-| 2 | **authored stimulus** (`--stimulus <file>`: a Python `generate(ports, n_vectors, seed)` generator), golden-simulated outputs | protocol-heavy sequential | **implemented** — human path + the rtlscout dv-prep agent (`rtlscout_cli.py dv-prep` / the `rtl-dv-prep` subagent) |
+| 2 | **authored stimulus** (`--stimulus <file>`: a Python `generate(ports, n_vectors, seed)` generator), golden-simulated outputs | protocol-heavy sequential | **implemented** — human path + the rtlscout `rtl-dv-prep` subagent |
 
 - Combinational slots get Tier-0 CEC **by default** at registration; sequential slots register
   fine but stay **unverified** (inserts raise `SlotUnverified`) until a sim tier is frozen with
