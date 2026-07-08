@@ -38,3 +38,34 @@ def test_same_process_reemission_is_byte_identical():
     t2 = _Demo().to_verilog()
     assert "module _Demo (" in t1
     assert t1 == t2
+
+
+@pytest.mark.xfail(strict=True, reason="known: parent emission renames shared child ports in place "
+                                       "(pure-emission plan item; fix = per-netlist naming overlay)")
+def test_child_ports_survive_parent_emission():
+    """Emission must be side-effect-free on construction state: emitting a parent whose ports
+    collide with an embedded child's must not rename the child's ports for later emissions."""
+    class Child(Component):
+        def __init__(self):
+            self.io = IORecord(a=Input(UInt(4)), y=Output(UInt(4)))
+            self.elaborate()
+
+        def elaborate(self):
+            self.io.y <<= self.io.a + 1
+
+    class Parent(Component):
+        def __init__(self):
+            self.io = IORecord(a=Input(UInt(4)), y=Output(UInt(4)))  # collides with the child's
+            self.elaborate()
+
+        def elaborate(self):
+            self.child = Child()
+            self.child.io.a <<= self.io.a
+            self.io.y <<= self.child.io.y
+
+    reset_shared_cache()
+    p = Parent()
+    before = p.child.to_verilog("child_v")
+    p.to_verilog("parent_v")
+    after = p.child.to_verilog("child_v")
+    assert before == after, "child emission changed because the parent was emitted"

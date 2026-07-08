@@ -43,6 +43,13 @@ live on the reference branch `fix/issue-review-v2-auto` (tip `f17f6b8`, 11 commi
    `reset` attribute in (1) is its first half; multi-clock needs a design doc (per-domain sim scheduling,
    AIGER is single-clock).
 
+## Named design items
+
+| Item | Origin | Notes |
+|---|---|---|
+| Pure emission — `to_verilog`/`to_aag` must not mutate construction state | NEW finding (2026-07-08 review): emitting a parent permanently renames an embedded child's ports — the collector's `_uniquify` resolves per-netlist collisions by mutating shared `sig.name` in place, so the rename leaks into every other netlist (strict-xfail repro: `test_emission_determinism.py::test_child_ports_survive_parent_emission`) | Step 1: per-netlist naming overlay (`{signal → emitted name}` map; `sig.name` untouched) — fixes the leak by construction; custom-Verilog blocks need the overlay passed through. Step 2: run the emission graph passes (CSE redirects, width isolation, opt-in simplify) on an emission-side view. Mutation channels today: uniquify renames, CSE redirects, width-isolation rewiring, simplify=True. Subsumes the Phase-7 "pure-emission/naming-overlay options" note. |
+| `ClockDomain` construction context | review discussion (2026-07-08) | `with ClockDomain(...)`: scope default for the `Register(reset=...)` attribute (its Register-level half is in the `refix-reset-attr-wip` stash); multi-clock needs a design doc (per-domain sim scheduling, AIGER is single-clock). |
+
 ## Phase 0 — scaffolding
 
 | Item | Source | Status | Notes |
@@ -105,7 +112,7 @@ live on the reference branch `fix/issue-review-v2-auto` (tip `f17f6b8`, 11 commi
 | Item | Source | Status | Notes |
 |---|---|---|---|
 | Walker/evaluator re-fixes | I 6.1, 0.8 | pending | |
-| Collapse-family design (outputs, observability, guards, post-check) | I2 §7.1–7.5 | §7.5 STAGED standalone; rest ON REFERENCE | STAGED NOW (review order request): §7.5 only — the auto ladder gates exhaustive on the REAL space P(2^width, n) via an early-exit `_perm_count` (n! equals it only when 2^width == n; a 5-state ONEHOT class enumerated ~24 million syntheses = effective hang). Test: ONEHOT class under auto completes bounded + `_perm_count` unit checks; at the pre-fix baseline the behavioral half TIMES OUT rather than failing (that is the finding). The remaining collapse family (§7.1–7.4, §7.6–7.8, 6.13/6.14) stays on `fix/issue-review-v2-auto` commits `0de68b9`/`3b6dbd1` awaiting replay |
+| Collapse-family design (outputs, observability, guards, post-check) | I2 §7.1–7.5 | §7.5 STAGED standalone; rest ON REFERENCE | STAGED NOW (review order request): §7.5 only — the auto ladder gates exhaustive on the REAL space P(2^width, n) via an early-exit `_perm_count` (n! equals it only when 2^width == n; a 5-state ONEHOT class enumerated ~24 million syntheses = effective hang). Test: ONEHOT class under auto completes bounded + `_perm_count` unit checks; at the pre-fix baseline the behavioral half TIMES OUT rather than failing (that is the finding). The remaining collapse family (§7.1–7.4, §7.6–7.8, 6.13/6.14) stays on `fix/issue-review-v2-auto` commits `0de68b9`/`3b6dbd1` awaiting replay. Committed; full suite 664/19/13xf/12xp/0 fail |
 | FSM minors + real post-wrapper test | I 6.13, 6.14, I2 §7.6–7.9, §15.3 | pending | |
 
 ## Phase 6 — arithmetic, multipliers, cores
