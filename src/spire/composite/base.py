@@ -2,6 +2,7 @@
 # High-level composites (Bundle, Array, FixedPoint, ...)
 # -----------------------------
 from __future__ import annotations
+import warnings
 from abc import abstractmethod
 from typing import List, Tuple, Type, TypeVar, Union
 
@@ -51,6 +52,17 @@ class HDLComposite(BitSerializable, Assignable):
         """(local_key, child) pairs for one structural level. Default keys are positional
         indices (``Array`` and friends); records override this with field names."""
         return [(str(i), c) for i, c in enumerate(self.to_list_first_level())]
+
+    def _leaf_paths(self, prefix: str = "") -> List[str]:
+        """Structural field/index path per leaf, in ``to_list()`` order (``bus.hdr.addr``)."""
+        paths: List[str] = []
+        for key, child in self._named_children():
+            p = f"{prefix}.{key}" if prefix else key
+            if isinstance(child, HDLComposite):
+                paths.extend(child._leaf_paths(p))
+            else:
+                paths.append(p)
+        return paths
 
     def _assign_port_names(self, prefix: str) -> None:
         """Name every leaf ``<prefix>_<field/index path>``, with an explicit user-chosen name as
@@ -196,6 +208,11 @@ def _connect_directed(a: Connectable, b: Connectable) -> None:
     al, bl = a._directed_leaves(), b._directed_leaves()
     if len(al) != len(bl):
         raise ValueError(f"connect: leaf-count mismatch ({len(al)} vs {len(bl)})")
+    pa, pb = a._leaf_paths(), b._leaf_paths()
+    if pa != pb:
+        first = next((x, y) for x, y in zip(pa, pb) if x != y)
+        warnings.warn(f"connect: structural field paths differ ({first[0]!r} vs {first[1]!r}); "
+                      f"leaves pair positionally — check the wiring", RuntimeWarning, stacklevel=3)
     for (la, ka), (lb, kb) in zip(al, bl):
         if la.typ.width != lb.typ.width:
             raise ValueError(
@@ -207,6 +224,9 @@ def _connect_directed(a: Connectable, b: Connectable) -> None:
                 f"('{ka}'/'{kb}'). For a feedthrough, wrap your own boundary with .view_as_flipped()."
             )
         src, dst = (la, lb) if ka == "output" else (lb, la)
+        if dst._driver is not None:
+            warnings.warn(f"connect: '{dst.name}' is already driven — connecting a second producer "
+                          f"rewires it and leaves the first dangling", RuntimeWarning, stacklevel=3)
         dst <<= src
 
 
@@ -225,6 +245,9 @@ class _FlippedView:
 
     def _directed_leaves(self) -> "List[Tuple[Signal, str]]":
         return [(leaf, _FLIP_KIND.get(k, k)) for leaf, k in self._inner._directed_leaves()]
+
+    def _leaf_paths(self, prefix: str = "") -> "List[str]":
+        return self._inner._leaf_paths(prefix)
 
     def view_as_flipped(self) -> "_FlippedView":
         return _FlippedView(self)

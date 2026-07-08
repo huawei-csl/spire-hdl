@@ -4,7 +4,7 @@ Declared in canonical *source* polarity (the producer drives ``valid`` + ``data`
 ``ready``). Use ``Flipped(Stream(payload))`` for the sink side.
 """
 from spire.io_record import IORecord, Input, Output
-from spire.expr import Bool
+from spire.expr import Bool, HDLType
 
 
 class Stream(IORecord):
@@ -14,7 +14,7 @@ class Stream(IORecord):
     ``Flipped(Stream(payload))``.
     """
 
-    def __init__(self, payload):
+    def __init__(self, payload: HDLType):
         super().__init__(valid=Output(Bool()), ready=Input(Bool()), data=Output(payload))
 
     def fire(self):

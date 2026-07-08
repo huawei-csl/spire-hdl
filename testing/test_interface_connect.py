@@ -169,3 +169,45 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn()
     print("ok")
+
+
+# ---------------------------------------------------------------------------
+# connect() hygiene: structural path check, double-connect detection, payload types
+# ---------------------------------------------------------------------------
+import warnings
+
+from spire.composite.record import CompositeRecord
+from spire.expr import reset_shared_cache
+from spire.interfaces import Flow as RealFlow, Stream as RealStream
+
+
+def test_connect_warns_on_structural_mismatch():
+    reset_shared_cache()
+    a = CompositeRecord(x=Output(UInt(4)), y=Output(UInt(4)))
+    b = CompositeRecord(x=Input(UInt(4)), z=Input(UInt(4)))  # same shape, different field
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        connect(a, b)
+    assert any("structural field paths differ" in str(w.message) for w in caught)
+
+
+def test_connect_no_warning_when_paths_match():
+    reset_shared_cache()
+    a = RealStream(UInt(8))
+    b = Flipped(RealStream(UInt(8)))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        connect(b, a)
+    assert not [w for w in caught if issubclass(w.category, RuntimeWarning)]
+
+
+def test_connect_warns_on_second_producer():
+    reset_shared_cache()
+    sink = CompositeRecord(d=Input(UInt(4)))
+    p1 = CompositeRecord(d=Output(UInt(4)))
+    p2 = CompositeRecord(d=Output(UInt(4)))
+    connect(sink, p1)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        connect(sink, p2)
+    assert any("already driven" in str(w.message) for w in caught)
