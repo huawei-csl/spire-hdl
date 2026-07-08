@@ -1,12 +1,17 @@
 """S3 tests: the Tier-1/2 sim verification harness + the sim-tier gate path.
 
-Tool-real: verilator (and yosys for the gate's AAG/dedup path) must be on PATH.
+Tool-real: verilator (and yosys for the gate's AAG/dedup path) must be on PATH — verilator has
+no pip wheel, so these skip on plain-pip environments (CI) rather than fail.
 """
 import json
 import os
+import shutil
 import stat
 
 import pytest
+
+pytestmark = pytest.mark.skipif(shutil.which("verilator") is None,
+                                reason="sim tiers need verilator on PATH (no pip wheel)")
 
 from spire import UInt
 from spire.component import Netlist

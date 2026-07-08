@@ -367,3 +367,11 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 `import spire.design_db` is dependency-light: pyosys/aigverse are only imported when an insert or
 splice actually needs them.
 
+**Tool requirements.** A plain pip install is enough to insert and CEC-check — no EDA binaries
+needed: the gate uses the `yosys` binary when installed, otherwise the pyosys wheel in a child
+interpreter. Either way yosys runs in a separate process, so when it fails *on a candidate*
+(an unsupported construct, a non-equivalence) that candidate is cleanly rejected instead of
+taking your process down. Without `yosys-abc`, CEC switches from abc's `cec` to yosys' own
+`equiv` flow (both match ports by name). The one tool that must be installed is verilator — and
+only to *use* the sim tiers; the sim-tier unit tests skip when it is absent.
+

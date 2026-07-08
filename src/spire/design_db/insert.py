@@ -146,17 +146,17 @@ def _materialize_any(design: Any, tdir: Path) -> tuple:
 
 
 def _candidate_aag(design_v: Path, workdir: Path) -> List[str]:
-    """Convert a candidate to AAG via a **subprocess** yosys (dedup hash / ports / metrics).
+    """Convert a candidate to AAG **out of process** (dedup hash / ports / metrics).
 
-    Deliberately not the in-process pyosys path: a pyosys ``log_error`` (e.g. ``write_aiger`` on
-    an async-reset FF) hard-exits the host process — unacceptable for a gate fed arbitrary input.
-    ``async2sync`` legalizes async-reset FFs into AIGER-expressible sync form first; any failure
-    becomes a clean rejection.
+    Never in-process pyosys: a pyosys ``log_error`` (e.g. ``write_aiger`` on an async-reset FF)
+    hard-exits the host process — unacceptable for a gate fed arbitrary input. ``run_yosys``
+    uses the ``yosys`` binary when present, else pyosys inside a child interpreter (plain-pip
+    CI) — either way a failure is a clean rejection. ``async2sync`` legalizes async-reset FFs
+    into AIGER-expressible sync form first.
     """
-    if shutil.which("yosys") is None:
-        raise DesignDBError("yosys not found on PATH — insert unavailable")
+    from spire.design_db._yosys import run_yosys
     out = workdir / "candidate.aag"
-    script = "; ".join([
+    cmds = [
         f"read_verilog -sv {design_v.resolve()}",
         "hierarchy -auto-top",
         "proc",
@@ -166,9 +166,8 @@ def _candidate_aag(design_v: Path, workdir: Path) -> List[str]:
         "clean",
         "aigmap",
         f"write_aiger -ascii -symbols -no-startoffset {out}",
-    ])
-    proc = subprocess.run(["yosys", "-q", "-p", script], cwd=str(workdir),
-                          capture_output=True, text=True, timeout=300)
+    ]
+    proc = run_yosys(cmds, workdir, timeout_s=300)
     if proc.returncode != 0 or not out.exists():
         tail = (proc.stdout + proc.stderr)[-600:]
         raise VerificationFailed(f"candidate could not be converted to an AIG:\n{tail}")

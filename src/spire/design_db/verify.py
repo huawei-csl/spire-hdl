@@ -68,7 +68,8 @@ def default_verification(circuit_class: str) -> Optional[Dict[str, Any]]:
 
 def _synth_to_blif(src: Path, out_blif: Path, cwd: Path, budget_s: float) -> None:
     """Synthesize one Verilog file to flattened BLIF (mirrors rtlscout ``_synth_to_blif``)."""
-    script = "; ".join([
+    from spire.design_db._yosys import run_yosys
+    cmds = [
         f"read_verilog -sv {src}",
         "hierarchy -auto-top",
         "proc", "opt", "techmap", "opt",
@@ -76,10 +77,9 @@ def _synth_to_blif(src: Path, out_blif: Path, cwd: Path, budget_s: float) -> Non
         "async2sync", "dffunmap",
         "clean -purge",
         f"write_blif {out_blif}",
-    ])
+    ]
     try:
-        proc = subprocess.run(["yosys", "-q", "-p", script], cwd=str(cwd),
-                              capture_output=True, text=True, timeout=budget_s)
+        proc = run_yosys(cmds, cwd, timeout_s=budget_s)
     except subprocess.TimeoutExpired:
         raise CECTimeout(timeout_options_message(budget_s)) from None
     if proc.returncode != 0 or not out_blif.exists():
@@ -91,17 +91,31 @@ def cec_check(design_v: Path, golden_v: Path, workdir: Path, *,
               budget_s: float = DEFAULT_CEC_BUDGET_S) -> None:
     """Combinational equivalence of ``design_v`` vs ``golden_v``; raises on any non-PASS outcome.
 
+    Dispatches to one of two engines with the same verdict contract: ``yosys-abc cec`` on
+    named BLIFs when both binaries are installed, else yosys' own ``equiv`` flow (which also
+    pairs ports BY NAME; runs through pyosys in a child on plain-pip installs — aigverse's
+    index-matched ``equivalence_checking`` was rejected for the port-order hazard).
+
     Raises ``VerificationFailed`` (not equivalent), ``CECTimeout`` (budget exceeded — options
     message included), or ``VerificationError`` (tooling problems).
     """
-    if shutil.which("yosys") is None or shutil.which("yosys-abc") is None:
-        raise VerificationError("yosys / yosys-abc not found on PATH — CEC unavailable")
+    from spire.design_db._yosys import have_yosys
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
+    design_v, golden_v = Path(design_v).resolve(), Path(golden_v).resolve()
+    if shutil.which("yosys") is not None and shutil.which("yosys-abc") is not None:
+        return _cec_check_abc(design_v, golden_v, workdir, budget_s)
+    if not have_yosys():
+        raise VerificationError("no yosys available (binary or pyosys wheel) — CEC unavailable")
+    return _cec_check_yosys(design_v, golden_v, workdir, budget_s)
+
+
+def _cec_check_abc(design_v: Path, golden_v: Path, workdir: Path, budget_s: float) -> None:
+    """CEC via flattened BLIFs + ``yosys-abc cec`` (name-matched) — the binary path."""
     design_blif = workdir / "design.blif"
     golden_blif = workdir / "golden.blif"
-    _synth_to_blif(Path(design_v).resolve(), design_blif, workdir, budget_s)
-    _synth_to_blif(Path(golden_v).resolve(), golden_blif, workdir, budget_s)
+    _synth_to_blif(design_v, design_blif, workdir, budget_s)
+    _synth_to_blif(golden_v, golden_blif, workdir, budget_s)
     try:
         proc = subprocess.run(["yosys-abc", "-c", f"cec {golden_blif} {design_blif}; print_stats -S;"],
                               cwd=str(workdir), capture_output=True, text=True, timeout=budget_s)
@@ -115,3 +129,36 @@ def cec_check(design_v: Path, golden_v: Path, workdir: Path, *,
     if "EQUIVALENT" in upper:
         return
     raise VerificationError("could not parse yosys-abc cec verdict:\n" + out[-600:])
+
+
+def _cec_check_yosys(design_v: Path, golden_v: Path, workdir: Path, budget_s: float) -> None:
+    """CEC via yosys' built-in equivalence flow (``equiv_make``/``equiv_simple``) — the
+    no-binary fallback, run out of process through ``run_yosys`` (pyosys child on plain-pip
+    installs). Same verdict contract as the abc path."""
+    from spire.design_db._yosys import run_yosys
+    cmds = [
+        f"read_verilog -sv {golden_v}",
+        "prep -auto-top -flatten", "async2sync", "dffunmap",
+        "rename -top gold", "design -stash gold",
+        f"read_verilog -sv {design_v}",
+        "prep -auto-top -flatten", "async2sync", "dffunmap",
+        "rename -top gate", "design -stash gate",
+        "design -copy-from gold -as gold gold",
+        "design -copy-from gate -as gate gate",
+        "equiv_make gold gate equiv",
+        "hierarchy -top equiv",
+        "equiv_simple",
+        "equiv_status -assert",
+    ]
+    try:
+        proc = run_yosys(cmds, workdir, timeout_s=budget_s)
+    except subprocess.TimeoutExpired:
+        raise CECTimeout(timeout_options_message(budget_s)) from None
+    out = proc.stdout + proc.stderr
+    lower = out.lower()
+    if proc.returncode == 0 and "successfully proven" in lower:
+        return
+    if "unproven" in lower:
+        raise VerificationFailed(
+            "candidate is NOT equivalent to the slot golden (CEC, yosys equiv)\n" + out[-600:])
+    raise VerificationError("yosys equiv CEC failed:\n" + out[-800:])
