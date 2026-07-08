@@ -105,7 +105,7 @@ live on the reference branch `fix/issue-review-v2-auto` (tip `f17f6b8`, 11 commi
 | Item | Source | Status | Notes |
 |---|---|---|---|
 | Walker/evaluator re-fixes | I 6.1, 0.8 | pending | |
-| Collapse-family design (outputs, observability, guards, post-check) | I2 §7.1–7.5 | pending | short design note first |
+| Collapse-family design (outputs, observability, guards, post-check) | I2 §7.1–7.5 | §7.5 STAGED standalone; rest ON REFERENCE | STAGED NOW (review order request): §7.5 only — the auto ladder gates exhaustive on the REAL space P(2^width, n) via an early-exit `_perm_count` (n! equals it only when 2^width == n; a 5-state ONEHOT class enumerated ~24 million syntheses = effective hang). Test: ONEHOT class under auto completes bounded + `_perm_count` unit checks; at the pre-fix baseline the behavioral half TIMES OUT rather than failing (that is the finding). The remaining collapse family (§7.1–7.4, §7.6–7.8, 6.13/6.14) stays on `fix/issue-review-v2-auto` commits `0de68b9`/`3b6dbd1` awaiting replay |
 | FSM minors + real post-wrapper test | I 6.13, 6.14, I2 §7.6–7.9, §15.3 | pending | |
 
 ## Phase 6 — arithmetic, multipliers, cores

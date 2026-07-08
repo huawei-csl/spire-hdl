@@ -90,3 +90,26 @@ def test_width_too_narrow_for_n():
         # apply_encoding would later refuse the width change too, but the
         # search must catch this up front before iterating.
         search_encoding(S5, lambda a: 0.0, strategy="exhaustive", width=2)
+
+
+def test_auto_ladder_gates_on_real_permutation_space():
+    """ISSUES2 7.5: the exhaustive space is P(2^width, n), not n!. Gating on n! sent 5-state
+    ONEHOT classes (P(32,5) = 24,165,120 full syntheses) into an effective hang — at the
+    pre-fix baseline this test does not fail, it times out."""
+    from spire.optimize.fsm._encoding_search import _perm_count
+
+    assert _perm_count(32, 5, 5040) > 5040          # the real ONEHOT-class space
+    assert _perm_count(8, 8, 50000) == 40320        # width-matched: equals n! (8!)
+
+    class S5(State, encoding=Encoding.ONEHOT):
+        A = state(); B = state(); C = state(); D = state(); E = state()
+
+    calls = []
+
+    def cost(assignment):
+        calls.append(1)
+        return float(len(calls))
+
+    got = search_encoding(S5, cost, strategy="auto")
+    assert got is not None
+    assert len(calls) < 5000, f"auto picked exhaustive on a ONEHOT class ({len(calls)} calls)"
