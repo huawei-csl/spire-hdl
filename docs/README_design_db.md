@@ -1,7 +1,8 @@
 # Design DB — a verification-gated library of implementations
 
-> **Status: registration, the verification gate (CEC + sim tiers), the selection decorator, and the
-> CLI are in place.** Remaining: per-technology PPA scoring and the agent fillers (rtlscout-side).
+> **Status: complete.** Registration, the verification gate (CEC + sim tiers), the selection
+> decorator, and the CLI are in place. Generation and enrichment (the campaign filler, the
+> agent flows, per-technology PPA scoring) live in RTLScout — see its README.
 
 `spire.design_db` is a content-addressed store of **correct implementations of a subcircuit**. For
 each subcircuit — a *slot*, keyed by its golden specification — the DB holds any number of
@@ -40,6 +41,11 @@ class Top(Component):
 Parameters: `objective=` (what to minimize — see Selection), `metric=` (measurement system),
 `pin=` (an exact `design_id`; missing ⇒ error — a reproducibility lock), `fill=` (opt-in callable
 invoked once on miss to generate, then re-select), `db=` (explicit DB root).
+
+The `fill=` contract: the hook is called as `fill(spec_key, db_root=…, objective=…, metric=…)`
+and populates the slot **through the insert gate** (anything else is refused); the decorator
+re-selects immediately after it returns, so a successful fill **splices in the same compile**.
+RTLScout ships a ready-made hook (`make_rtlscout_fill` — see its README).
 
 ### First compile with no DB — the bootstrap path
 
@@ -321,7 +327,7 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 |------|--------|-----------|--------|
 | 0 | **CEC** vs `golden.v` (yosys → BLIF, `yosys-abc cec`) — formal, exhaustive | combinational only | **implemented** |
 | 1 | **auto sim harness**: corners + seeded random stimulus (exhaustive for tiny combinational input spaces), **golden-simulated** outputs, frozen `tb.sv` + `vectors.dat` | sequential; combinational where the caller chose sim | **implemented** |
-| 2 | **authored stimulus** (`--stimulus <file>`: a Python `generate(ports, n_vectors, seed)` generator), golden-simulated outputs | protocol-heavy sequential | **implemented (human path)** — the dv-agent filler is rtlscout-side |
+| 2 | **authored stimulus** (`--stimulus <file>`: a Python `generate(ports, n_vectors, seed)` generator), golden-simulated outputs | protocol-heavy sequential | **implemented** — human path + the rtlscout dv-prep agent (`rtlscout_cli.py dv-prep` / the `rtl-dv-prep` subagent) |
 
 - Combinational slots get Tier-0 CEC **by default** at registration; sequential slots register
   fine but stay **unverified** (inserts raise `SlotUnverified`) until a sim tier is frozen with
@@ -361,8 +367,3 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 `import spire.design_db` is dependency-light: pyosys/aigverse are only imported when an insert or
 splice actually needs them.
 
-## Coming next (will extend this page)
-
-- **Per-technology PPA scoring** (`db score`, rtlscout-side) enabling `metric="asap7"` selection.
-- Agent fillers: campaign (`rtlscout fill-db` / the `fill=` hook) and orchestrator/subagent flows,
-  including the dv-agent for authored stimulus on protocol-heavy slots.
