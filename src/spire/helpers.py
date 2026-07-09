@@ -354,6 +354,7 @@ def _run_yosys_heavy_metric_flow(read_cmd: str, auto_top: bool = False,
 
     try:
         with _suppress_output(stderr=suppress_stderr):
+            from pyosys import libyosys as ys  # lazy: yosys-backed entry points only
             ys.run_pass("design -reset")
             ys.run_pass(read_cmd)
             if auto_top:

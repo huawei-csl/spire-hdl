@@ -178,11 +178,15 @@ def test_mmac_core_vector_simulation():
         sim_tb, vectors, decoder=None, print_on_pass=False, test_name="TbGen Simulation"
     )
 
-    write_vector_data_file(vectors, "mmac_core_vectors.dat")
-    sim_tb.to_data_driver_testbench_file(filepath="mmac_core_tb_sim.v", data_file="mmac_core_vectors.dat")
+    import os as _os
+    import tempfile as _tempfile
+    _out = _tempfile.mkdtemp(prefix="mmac_core_")  # don't write into the repo root
+    write_vector_data_file(vectors, _os.path.join(_out, "mmac_core_vectors.dat"))
+    sim_tb.to_data_driver_testbench_file(filepath=_os.path.join(_out, "mmac_core_tb_sim.v"),
+                                         data_file=_os.path.join(_out, "mmac_core_vectors.dat"))
 
     # also save verilog file
-    core.module.to_verilog_file("mmac_core.v")
+    core.module.to_verilog_file(_os.path.join(_out, "mmac_core.v"))
 
     # swact simulation -------------------------------
     switches = sim_and_switch_count(core.module, vectors)

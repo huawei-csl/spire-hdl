@@ -197,6 +197,19 @@ Gate: FSM suite + e2e fuzz green; the three §7 collapse repros (in issues2_repr
 - 8.x per guide (Karatsuba 8.1/8.2, 8.3–8.9) + §10.2 square-width guards on the five SM wrapper classes, §10.3,
   §10.4; vector generators seeded in ALL THREE places (7.5 done completely — §10.1/§10.6/§15.4) with signed-extreme
   vectors added; §10.5, §10.7.
+- NEW (review discussion 2026-07-09): signed multi-input add at the source. build_multi_input_add used to
+  fall back to chained + for any signed operand (the 7.11 sweep restriction treated the symptom); give it
+  real signed/mixed support via sign-extension compression (inverted MSB per signed operand, constants
+  folded into one row, the fused-inner-product C-term identity) so signed chains get the compressor tree.
+- NEW (review discussion 2026-07-09): mixed-format promotion in the dispatch gates. Mixed signed/unsigned
+  nodes currently fall back to the plain IR operator (the 7.8 and 9.1 gates); instead, zero-extend the
+  unsigned operand by one MSB to SInt(w+1) (value-preserving) and run the uniform-signed machinery: full
+  PPG/PPA/FSA selection and DB lookup at (wa, wb+1, signed), then slice the low wa+wb bits and type SInt.
+  Applies to build_multiplier's mixed gate and the fused-MAC chain gate for mixed operand sets (the
+  multi-input adder handles mixed natively since the columns fix; no mixed DB rows needed, the promoted
+  lookup hits the existing signed rows). Validation: exhaustive UxS and SxU batteries across widths plus a
+  QoR spot-measure against the plain-operator fallback. Later QoR squeeze, separate item: native mixed
+  supported_signatures per PPG (the AND array already declares all four, NR4SD one direction).
 - Cores: 9.1, 9.2 per guide + §11.1 (Winograd unsigned — proper widening instead of same-width reinterpret), §11.2
   (`_to_signed` in precomputed-B), §11.3 (arbitrary-K correction, shared with fused.py — extract the helper), §11.4
   (constructor validation / encoding forwarding), §11.5 xfail documentation, §11.7, §11.8.

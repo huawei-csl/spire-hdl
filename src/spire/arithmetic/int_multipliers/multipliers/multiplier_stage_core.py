@@ -490,7 +490,6 @@ class StageBasedMultiplierBasic(Component):
         self.io.y <<= Concat(result_bits[:self.config.out_width])
 
         # debugging
-        self.colums = columns
         self.reduced_columns = reduced_columns
 
 @dataclass

@@ -113,3 +113,20 @@ def set_matrix(sim: Simulator, port2d, vals):
 
 if __name__ == "__main__":
     test_mmac_core_basic_simulation()
+
+
+def test_mmac_winograd_rejects_odd_dim_k():
+    """the Winograd pairing drops the last K-term for odd dim_k — must be rejected."""
+    import pytest
+
+    encoding = Encoding.twos_complement
+    mult_cfg = MultiplierConfig(use_operator=True)
+    add_cfg = AdderConfig(use_operator=True, full_output_bit=True, encoding=encoding)
+    cfg = MMAcCfg(
+        dims=MMAcDims(dim_m=2, dim_n=2, dim_k=3),
+        widths=MMAcWidths(a_width=4, b_width=4, c_width=12),
+        mult_cfg=mult_cfg,
+        add_cfg=add_cfg,
+    )
+    with pytest.raises(ValueError, match="dim_k must be even"):
+        MatmulAccumulateComponent(cfg, signed_io_type=True)

@@ -78,7 +78,7 @@ def fused_inner_product(vec_a: Iterable[Expr], vec_b: Iterable[Expr], c_term: Ex
     if mult_cfg.ppg_opt == PPGOption.BAUGH_WOOLEY:
         # Lift BW's per-product constant corrections (upper, lower) and switch the
         # signed-C addition to BW's algebraic form. All three save area on the BW
-        # baseline; see docs/booth_optim_fused_upper_correction.md and the handoff
+        # baseline; see the Booth upper-correction derivation in docs/README_arithmetic_generator.md (the dedicated doc was never added) and the handoff
         # doc for the algebra and measured gains.
         fused_upper_correction = True
         fused_lower_correction = True
@@ -171,7 +171,10 @@ def fused_inner_product(vec_a: Iterable[Expr], vec_b: Iterable[Expr], c_term: Ex
     reduced_cols = ppa.accumulate(merged_cols)
     filtered_cols = {w: bits for w, bits in reduced_cols.items() if w < result_width}
     result_bits = fsa.resolve(filtered_cols)
-    return Concat(result_bits[:result_width])
+    packed = Concat(result_bits[:result_width])
+    # The bit pattern is the two's-complement product-sum: type it so downstream refits
+    # sign-extend instead of zero-extending (a signed dot chain refit through SInt was wrong).
+    return reinterpret(packed, SInt(result_width)) if is_signed(encoding) else packed
 
 
 class MatmulAccumulateComponent(MatmulAccumulateCore):
@@ -219,13 +222,3 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
                 row.append(y_sig)
             rows.append(Array(row))
         self.Y = Array(rows)
-
-
-@dataclass
-class MatmulAccumulateBuildOut:
-    component: MatmulAccumulateComponent
-    module: Netlist
-    A: Array
-    B: Array
-    C: Array
-    Y: Array

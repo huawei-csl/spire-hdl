@@ -67,7 +67,7 @@ def test_fused_matmul_ppg_dim_k_sweep(ppg_opt, encoding, signed_io_type, dim_k, 
         # BOOTH_OPTIMISED's per-term BW trick is calibrated for out_bits == wa+wb.
         # In the fused matmul out_bits = result_width > wa+wb, which exposes a
         # signal-dependent bias the natural-width algebra cannot cancel. See
-        # docs/booth_optim_fused_upper_correction.md.
+        # the Booth upper-correction derivation in docs/README_arithmetic_generator.md (the dedicated doc was never added).
         request.applymarker(pytest.mark.xfail(
             reason="BOOTH_OPTIMISED unreliable in fused path for out_bits > wa+wb",
             strict=False,

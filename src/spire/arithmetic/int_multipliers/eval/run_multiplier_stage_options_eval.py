@@ -32,8 +32,6 @@ def run_stage_multiplier_demo() -> None:  # pragma: no cover - demonstration onl
                 print(f"Building multiplier with width={width}, signed_a={signed_a}, signed_b={signed_b}, PPG={ppg_opt.name}, PPA={ppa_opt.name}, FSA={fsa_opt.name}")
                 reset_shared_cache()
                 
-                if not signed_a:
-                    continue # debug only
 
                 multiplier = StageBasedMultiplierBasic(
                     a_w=width,

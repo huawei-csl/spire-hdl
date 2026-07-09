@@ -7,7 +7,7 @@
 - unify get and peek (same thing but one is with sign conversion, the other is not)
 - unify log_expression_states and watches in the Simulator.
 - in module there is all_exprs and _collect_signals_from_outputs maybe this can be merged, especially by removing the _signal attribute (maybe still retain it as a cache)
-- add subnormal support for fp add
+- ~~add subnormal support for fp add~~ (done: FpAdd(subnormals=True) is bit-exact incl. subnormal outputs)
 - unify run_vectors_local and run_vectors
 - unify testvector_generation_fp.py and testing/floating_point/fp_testvectors_general.py and  testvector_generation.py
 - rename aggregate types, composite types / the others expr.py (formerly spirehdl.py) should be base type

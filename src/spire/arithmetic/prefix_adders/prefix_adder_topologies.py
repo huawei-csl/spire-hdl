@@ -318,7 +318,7 @@ def analyze_prefix_matrix(
     nodes: PrefixNodes,
     *,
     tie_break: str = "min_k",  # among equal-min-depth splits: "max_k" | "min_k" | "balanced"
-) -> Tuple[PrefixNodes, Dict[Pair, int], Dict[Pair, int], Dict[int, int], int]:
+) -> Tuple[Dict[Pair, int], Dict[Pair, int], Dict[int, int], int]:
     """
     Compute minimal combine-depth for every (i,j) in P (and leaves), choose best splits, and
     return:

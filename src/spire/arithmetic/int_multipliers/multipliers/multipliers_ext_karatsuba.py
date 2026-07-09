@@ -49,7 +49,7 @@ class KaratsubaMultiplier(StageBasedMultiplierBase):
     def __init__(
         self,
         *args,
-        f_aag_lines: Optional[List[str]] = None,
+        f_aag_lines: "Optional[Callable[..., List[str]]]" = None,
         use_compressor=False,
         use_power_of_two_multipliers_only=False,
         karatsuba_only_at_first_level=True,
@@ -173,7 +173,10 @@ class KaratsubaMultiplier(StageBasedMultiplierBase):
         else:
             prod_11 = compressor_sum(
                 config=OutputConfig(
-                    out_width=self.aw + self.bw,
+                    # Local leaf width, not the top-level self.aw+self.bw — this helper runs at
+                    # every recursion depth (functionally benign thanks to the slice below, but
+                    # it oversized the leaf compressor/FSA at inner odd leaves).
+                    out_width=2 * width,
                     optim_type=self.optim_type,
                 ),
                 partials=[t0, t1, t2, t3],
@@ -227,8 +230,11 @@ class KaratsubaMultiplier(StageBasedMultiplierBase):
         # so we don't need to manually extend the operands.
         a_sum = a_lo + a_hi  # width: sum_w = max(lo_w, hi_w) + 1
         b_sum = b_lo + b_hi
-        #sum_w = max(lo_w, hi_w) + 1
-        sum_w = max(lo_w, hi_w) + int(lo_w == hi_w)
+        # The DSL `+` always yields max(w)+1 bits, and for odd n the sum genuinely
+        # needs hi_w+1 bits (e.g. n=7: a_lo<=7, a_hi<=15, sum<=22 > 15). Sizing the
+        # sub-multiplier any narrower makes `core.io.a <<= a_sum` silently truncate
+        # the carry MSB, corrupting products for all odd widths.
+        sum_w = max(lo_w, hi_w) + 1
 
         p1 = self._build_karatsuba(a_sum, b_sum, sum_w, level)  # width: 2*sum_w
 
@@ -257,7 +263,9 @@ class KaratsubaMultiplier(StageBasedMultiplierBase):
 
             prod_2n = compressor_sum(
                 config=OutputConfig(
-                    out_width=self.aw + self.bw,
+                    # Local width, not self.aw + self.bw: this runs at every recursion
+                    # depth, so the top-level width would be wrong below level 1.
+                    out_width=total_w,
                     optim_type=self.optim_type,
                 ),
                 partials=[p0, middle_shift, p2_shift],
@@ -266,7 +274,11 @@ class KaratsubaMultiplier(StageBasedMultiplierBase):
                 fsa_cls=FSAOption.RIPPLE_CARRY.value,
             )
 
-        return prod_2n
+        # This function's contract is "exactly 2*width bits". The combine above is
+        # wider (Concat + add carry / compressor slack); returning it un-sliced makes
+        # the parent's Concat([p0, p2]) misplace p2's weight at every recursion
+        # level below the top.
+        return prod_2n[0:total_w]
 
     # ------------------------------------------------------------------ #
     # Top-level elaboration

@@ -45,8 +45,8 @@ class StageBasedMultiplier(StageBasedMultiplierBase):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        assert self.a_encoding == Encoding.unsigned or self.b_encoding == Encoding.twos_complement, "Only unsigned or two's complement encoding is supported"
-        assert self.b_encoding == Encoding.unsigned or self.b_encoding == Encoding.twos_complement, "Only unsigned or two's complement encoding is supported"
+        assert self.a_encoding in (Encoding.unsigned, Encoding.twos_complement), "Only unsigned or two's complement encoding is supported"
+        assert self.b_encoding in (Encoding.unsigned, Encoding.twos_complement), "Only unsigned or two's complement encoding is supported"
         y_encoding = Encoding.twos_complement if (self.a_encoding == Encoding.twos_complement or self.b_encoding == Encoding.twos_complement) else Encoding.unsigned
 
         def get_type(enc: Encoding,) -> Type:
@@ -461,8 +461,8 @@ class StarMultiplier(StageBasedMultiplierBase):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        assert self.a_encoding == Encoding.unsigned or self.b_encoding == Encoding.twos_complement, "Only unsigned or two's complement encoding is supported"
-        assert self.b_encoding == Encoding.unsigned or self.b_encoding == Encoding.twos_complement, "Only unsigned or two's complement encoding is supported"
+        assert self.a_encoding in (Encoding.unsigned, Encoding.twos_complement), "Only unsigned or two's complement encoding is supported"
+        assert self.b_encoding in (Encoding.unsigned, Encoding.twos_complement), "Only unsigned or two's complement encoding is supported"
         y_encoding = (
             Encoding.twos_complement if (self.a_encoding == Encoding.twos_complement or self.b_encoding == Encoding.twos_complement) else Encoding.unsigned
         )

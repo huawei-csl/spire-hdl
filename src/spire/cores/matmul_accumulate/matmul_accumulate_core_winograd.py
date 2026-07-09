@@ -26,6 +26,10 @@ def inner_product(
     b_list: List[Expr] = list(vec_b)
     if len(a_list) != len(b_list):
         raise ValueError("inner_product: length mismatch")
+    if len(a_list) % 2 != 0:
+        # The Winograd pairing below consumes elements two at a time; an odd tail element
+        # would be silently dropped, producing wrong products.
+        raise ValueError(f"inner_product (Winograd): vector length must be even, got {len(a_list)}")
 
     mult_k_list = []
     dim_k = len(a_list)
@@ -51,34 +55,11 @@ def inner_product(
     return adder_tree(summands, add_cfg)
 
 
-@dataclass
-class MatmulAccumulateIO(CompositeRecord):
-    A: Array  # input
-    B: Array  # input
-    C: Array  # input
-    Y: Array  # output
-
-@dataclass
-class MMAcDims:
-    dim_m: int  # rows of A/C/Y
-    dim_n: int  # cols of B/C/Y
-    dim_k: int  # shared dimension between A and B
-
-@dataclass
-class MMAcWidths:
-    a_width: int
-    b_width: int
-    c_width: int
-
-@dataclass
-class MMAcCfg:
-    dims: MMAcDims
-    widths: MMAcWidths
-    mult_cfg: MultiplierConfig
-    add_cfg: AdderConfig
-
-class MatmulAccumulateCore(Component):
-    io: MatmulAccumulateIO
+# Shared IO/config dataclasses — the local redefinitions created distinct class identities
+# from every other variant (drift risk; matmul_test_vectors type-hints the shared ones).
+from spire.cores.matmul_accumulate.matmul_accumulate_core import (
+    MatmulAccumulateCore, MatmulAccumulateIO, MMAcCfg, MMAcDims, MMAcWidths,
+)
 
 class MatmulAccumulateComponent(MatmulAccumulateCore):
     """Reusable component for matrix multiply-accumulate."""
@@ -90,6 +71,10 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
     ):
 
         self.cfg = cfg
+        if cfg.dims.dim_k % 2 != 0:
+            # The Winograd alpha/beta/pairing loops iterate range(dim_k // 2), silently dropping
+            # the last K-term for odd dim_k and computing wrong results.
+            raise ValueError(f"MatmulAccumulateComponent (Winograd): dim_k must be even, got {cfg.dims.dim_k}")
         self.io_hdl_type = SInt if (is_signed(self.cfg.add_cfg.encoding) and signed_io_type) else UInt
 
         def build_matrix(name: str, width: int, rows: int, cols: int, kind: str = "wire") -> Array:

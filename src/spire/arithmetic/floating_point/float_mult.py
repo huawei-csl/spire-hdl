@@ -50,8 +50,9 @@ class FpMul(Component):
         is_fA_zero = fA == 0
         is_fB_zero = fB == 0
 
-        is_zeroA = is_eA_zero & is_fA_zero
-        is_zeroB = is_eB_zero & is_fB_zero
+        # DAZ: FpMul is always flush-to-zero — subnormal INPUTS are zeros too.
+        is_zeroA = is_eA_zero
+        is_zeroB = is_eB_zero
 
         is_eA_all1 = eA == exp_all_ones
         is_eB_all1 = eB == exp_all_ones

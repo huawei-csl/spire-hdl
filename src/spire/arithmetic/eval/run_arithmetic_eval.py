@@ -340,7 +340,7 @@ def eval_mia(
     from spire.component import Netlist
     from spire.expr import UInt, SInt
     from spire.arithmetic.int_multipliers.stages.ppa_fsa_util import (
-        OutputConfig, compressor_sum,
+        OutputConfig, compressor_sum, compressor_sum_columns, sign_extension_columns,
     )
 
     signed = is_signed(encoding)
@@ -359,7 +359,13 @@ def eval_mia(
     y = m.output(io_type(out_w), "y")
 
     config = OutputConfig(out_width=out_w, optim_type=optim_type)
-    sum_expr = compressor_sum(config, list(operands), ppa_opt.value, fsa_opt.value)
+    if signed:
+        # The signed tree carries the folded sign-extension correction row; build it exactly
+        # like build_multi_input_add so the row measures the deployed circuit.
+        cols = sign_extension_columns(list(operands), out_w)
+        sum_expr = compressor_sum_columns(config, cols, ppa_opt.value, fsa_opt.value)
+    else:
+        sum_expr = compressor_sum(config, list(operands), ppa_opt.value, fsa_opt.value)
     if sum_expr.typ.width > out_w:
         sum_expr = sum_expr[0:out_w]
     y <<= sum_expr
@@ -392,6 +398,8 @@ def sweep_mia(bitwidths: list[int], n_inputs_list: list[int],
         if n_inputs < 3:
             continue
         for encoding in [Encoding.unsigned, Encoding.twos_complement]:
+            # Signed MIA rows measure the tree WITH the folded sign-extension correction row
+            # (built like build_multi_input_add); mixed operand sets look up the signed rows.
             tasks.append((ppa, fsa, n_inputs, n_bits, encoding, optim_type))
 
     return _run_parallel("MIA", tasks, eval_mia, max_workers)

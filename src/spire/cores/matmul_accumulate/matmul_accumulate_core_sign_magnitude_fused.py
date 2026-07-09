@@ -195,19 +195,9 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
             a_row = encoded_A[i, :]
             for j in range(self.cfg.dims.dim_n):
                 b_col = encoded_B[:, j]
-                dot = fused_inner_product(a_row, b_col, encoded_C[i, j], self.cfg.mult_cfg, self.cfg.encoding_cfg)
+                dot = fused_inner_product(a_row, b_col, encoded_C[i, j], self.cfg.mult_cfg, self.cfg.add_cfg.encoding)  # pass an Encoding, not the encoder config
                 y_sig = Signal(name=f"y_{i}_{j}", typ=self.io_hdl_type(dot.typ.width), kind="output")
                 y_sig <<= dot
                 row.append(y_sig)
             rows.append(Array(row))
         self.Y = Array(rows)
-
-
-@dataclass
-class MatmulAccumulateBuildOut:
-    component: MatmulAccumulateComponent
-    module: Netlist
-    A: Array
-    B: Array
-    C: Array
-    Y: Array
