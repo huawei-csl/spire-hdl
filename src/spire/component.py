@@ -270,8 +270,9 @@ class CustomVerilogComponent(Component):
         - tags IO outputs ``_no_emit_drive`` only — the declaration stays (parents reference it) but the
           elaborate ``assign`` is dropped, so the custom block provides the value;
         - for memory, follows store ↔ port-wire edges so state reachable only through a store is tagged too;
-        - for sub-components, stops at any signal owned by a *different* Component (it self-tags) — neither
-          tagging nor crossing it;
+        - for sub-components: a custom-Verilog sub-component is a boundary (neither tagged nor crossed;
+          its own block provides those signals), while a plain component constructed inside ``elaborate()``
+          is part of the simulation model and is absorbed like any other internal signal;
         - stops at this component's own *input* leaves: external values enter only through the IO boundary
           (a signal captured directly at construction and used by ``elaborate`` would be absorbed as internal);
         - for blackboxes, sets ``self._is_blackbox`` when no output had an elaborate driver — the cue the
@@ -296,8 +297,8 @@ class CustomVerilogComponent(Component):
                 stack.extend(expr_children(node))
                 continue
             owner = getattr(node, "_owning_component", None)
-            if owner is not None and owner is not self:
-                continue   # sub-component boundary
+            if owner is not None and owner is not self and hasattr(owner, "custom_verilog"):
+                continue   # self-tagging custom sub-component: its own block provides this signal
             if nid not in io_ids:
                 node._no_emit_decl = True
                 node._no_emit_drive = True

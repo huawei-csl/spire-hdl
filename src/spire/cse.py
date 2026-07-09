@@ -138,9 +138,13 @@ def apply_structural_cse(module) -> int:
 
     Returns the number of shared wires created.
     """
-    # 1. Gather roots: every driver currently attached to a signal.
+    # 1. Gather roots: every driver currently attached to a signal. Suppressed drivers
+    # (`_no_emit_drive`, e.g. the simulation model of a custom-Verilog component) never emit,
+    # so sharing their subtrees would only mint dead wires.
     roots: List[Expr] = []
     for s in module._signals:
+        if getattr(s, "_no_emit_drive", False):
+            continue
         drv = getattr(s, "_driver", None)
         if isinstance(drv, Expr):
             roots.append(drv)

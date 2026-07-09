@@ -79,3 +79,43 @@ def test_standalone_child_after_embedding_excludes_parent_cone():
     child_text = parent.sub.to_netlist().to_verilog()
     assert "parent_wire" not in child_text, child_text  # no parent cone in the standalone child
     assert "* " not in child_text, child_text           # the parent's multiply must not leak in
+
+
+class _PlainInc(Component):
+    def __init__(self):
+        self.io = IORecord(i=Input(UInt(8)), o=Output(UInt(8)))
+        self.elaborate()
+
+    def elaborate(self):
+        self.io.o <<= (self.io.i + 1)[0:8]
+
+
+class _CustomWithModelSub(CustomVerilogComponent):
+    """Custom component whose simulation model is built FROM a plain sub-component."""
+
+    def __init__(self):
+        self.io = IORecord(a=Input(UInt(8)), y=Output(UInt(8)))
+        self.elaborate()
+
+    def elaborate(self):
+        self.inc = _PlainInc()
+        self.inc.io.i <<= self.io.a
+        self.io.y <<= self.inc.io.o
+
+    def custom_verilog(self):
+        return "  assign y = a + 8'd1;"
+
+
+def test_plain_subcomponent_inside_model_is_absorbed():
+    # A plain component constructed inside a custom component's elaborate() is part of the
+    # simulation model: none of its logic (nor the IO glue) may emit next to the custom block.
+    reset_shared_cache()
+    comp = _CustomWithModelSub()
+    text = comp.to_netlist().to_verilog()
+    assert "assign y = a + 8'd1;" in text, text
+    assert "assign o =" not in text and "assign i =" not in text, text
+
+    sim = Simulator(comp.to_netlist("model_sub_sim"))
+    sim.set("a", 41)
+    sim.eval()
+    assert sim.get("y") == 42

@@ -80,3 +80,32 @@ def test_force_share_after_prior_references():
     sim.eval()
     assert sim.get("y0") == 1
     assert sim.get("y1") == 1
+
+
+def test_suppressed_drivers_mint_no_wires():
+    # A custom-Verilog component's simulation model is tagged _no_emit_drive; its subtrees must not
+    # seed CSE, or every duplicated subtree in the model emits a dead `assign sig_N = ...` line.
+    from spire import CustomVerilogComponent, IORecord, Input, Output
+
+    class _Dup(CustomVerilogComponent):
+        def __init__(self):
+            self.io = IORecord(a=Input(UInt(4)), b=Input(UInt(4)), y=Output(UInt(4)))
+            self.elaborate()
+
+        def elaborate(self):
+            t = self.io.a & self.io.b
+            u = self.io.a & self.io.b   # structural duplicate inside the suppressed model
+            self.io.y <<= t | u
+
+        def custom_verilog(self):
+            return "  assign y = a & b;"
+
+    reset_shared_cache()
+    comp = _Dup()
+    v = comp.to_verilog("dup")
+    assert "sig_" not in v, "suppressed simulation model leaked CSE share-wires into the output"
+    # and the model still simulates (tags are emission-only)
+    sim = Simulator(comp.to_netlist("dup_sim", with_clock=False, with_reset=False))
+    sim.set("a", 12).set("b", 10)
+    sim.eval()
+    assert sim.get("y") == 12 & 10
