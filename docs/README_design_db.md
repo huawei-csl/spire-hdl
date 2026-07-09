@@ -135,6 +135,52 @@ pareto_front(key)                                                      # non-dom
 - The resolved `(selected_id, objective, metric)` is recorded in the manifest, so builds are
   reproducible and auditable.
 
+### Temporary selection overrides (what-if compiles)
+
+Force selections to specific designs **without touching source** — for sweeping splice
+combinations, A/B-ing a candidate in context, or reproducing a composition:
+
+```python
+from spire.design_db import selection_overrides
+
+with selection_overrides({"adder8": "verilog:e218599799"}):   # slot -> design_id
+    Top().to_verilog_file("design.v")      # every @from_design_db splice obeys the pins
+```
+
+The same map works **across process boundaries** through the environment — this is how
+rtlscout's `measure_db_compositions.py` measures every splice combination of a run:
+
+```bash
+SPIREHDL_DB_PINS='{"adder8": "verilog:e218599799"}' python design.py
+```
+
+Keys are exact spec_keys or manifest names; values are exact `design_id`s (unknown ⇒ error,
+like `pin=`). An explicit source-level `pin=` always wins over an override, and overridden
+selections are **never recorded** in the manifest — overrides are what-if compiles, not
+library state. Scopes nest (innermost wins) and overlay the environment.
+
+### Looping over a slot's designs
+
+The Python API works on `spec_key`s; starting from a manifest name is one lookup. The per-slot
+index maps every admitted `design_id` to its `source`, `created`, `struct_hash`, and stamped
+`metrics` — and it is **derived from the `designs/` dirs on every read** (the on-disk
+`index.json` is only a self-healing cache for `cat`/`jq`, never an input), so it cannot be out
+of sync with the slot's contents:
+
+```python
+from spire.design_db import DesignDB, select_design
+
+d = DesignDB.open()                                      # --db / $SPIREHDL_DB_PATH / nearest
+spec_key = d.read_json(d.manifest_path)["slots"]["adder8"]["spec_key"]   # name -> key
+
+for design_id, info in d.read_index(spec_key).items():
+    print(design_id, info["source"], info["metrics"]["transistors"])
+    sel = select_design(spec_key, pin=design_id)         # e.g. visit each design exactly
+```
+
+Same from the shell: `spire db show adder8` dumps the slot as JSON with a `"designs"` object
+keyed by `design_id` (`spire db show adder8 | jq -r '.designs | keys[]'`).
+
 **How a design stores its metrics.** Each design's `metrics.json` holds one *self-describing block
 per measurement system* — its raw `metrics` plus an `objectives` map saying which field plays each
 axis (a bare field is local; a `system.field` path borrows from a sibling system). The gate stamps
@@ -375,7 +421,8 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 | `check_design(spec_key, design, *, db=None, budget_s=None) -> dict` | Advisory: run the slot's set oracle against a candidate (no admit, no write). The read-only sibling of `insert_design`; raises the same `VerificationError`s on failure. |
 | `seed_original(spec_key, db=None, budget_s=None) -> InsertResult` | Insert the slot's golden as the baseline candidate (`source="original"`) — a selection floor; stores the slot's `starting_point.py` as its python source when present. |
 | `annotate(spec_key, design_ref, *, tech, values, raw=None, force=False, db=None) -> dict` | Attach a per-technology metric block (`metrics[tech]`) to a stored design; makes `metric=<tech>` selectable. `design_ref` = a `design_id` **or a unique prefix** of one (ambiguous/unknown raises — the looser sibling of `pin=`'s exact match). Writes `metrics.json`; the `index.json` cache refreshes from it. |
-| `select_design(spec_key, *, objective=, metric=, pin=, sources=, record=)` | Deterministic selection → `SelectionResult` (or None on an empty slot). |
+| `select_design(spec_key, *, objective=, metric=, pin=, sources=, record=)` | Deterministic selection → `SelectionResult` (or None on an empty slot). Consults active selection overrides when `pin=` is not given. |
+| `selection_overrides({slot: design_id, …})` / `$SPIREHDL_DB_PINS` | Temporary what-if pins (context manager / env var) — see *Temporary selection overrides*. Never recorded. |
 | `pareto_front(spec_key, objectives=("area","delay"), metric=None)` | The non-dominated set. |
 | `constrained / weighted / lexicographic` | Objective combinators. |
 | `resolve_db_root(db=None)` / `DesignDB` | DB-root resolution / low-level store handle. |

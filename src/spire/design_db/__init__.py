@@ -16,6 +16,7 @@ from spire.design_db.decorator import from_design_db  # noqa: F401
 from spire.design_db.insert import (InsertResult, check_design, insert_design,  # noqa: F401
                                     seed_original)
 from spire.design_db.keys import CANONICAL_TOP, golden_and_key, normalize, port_spec, spec_key  # noqa: F401
+from spire.design_db.overrides import PINS_ENV, selection_overrides  # noqa: F401
 from spire.design_db.select import (SelectionResult, constrained, lexicographic,  # noqa: F401
                                     metric_value, pareto_front, resolve_metric, select_design,
                                     weighted)

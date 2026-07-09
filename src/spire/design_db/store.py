@@ -128,7 +128,7 @@ class DesignDB:
         """Derived index + best-effort refresh of the ``index.json`` cache (kept on disk for
         direct inspection — never authoritative, self-healing on every read)."""
         index = self.derive_index(spec_key)
-        if materialize:
+        if materialize and self.slot_dir(spec_key).is_dir():   # never create a slot on a read
             try:
                 cache = self.slot_dir(spec_key) / "index.json"
                 if self.read_json(cache, None) != index:

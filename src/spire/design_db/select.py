@@ -150,9 +150,32 @@ def select_design(spec_key: str, *, objective: ObjectiveSpec = "area",
     ``pin`` bypasses metrics and demands an exact ``design_id`` — a missing pin is a broken
     reproducibility lock and raises. With ``record=True`` the resolved
     ``(selected_id, objective, metric)`` is written into the manifest.
+
+    When no explicit ``pin`` is given, active **selection overrides** (``$SPIREHDL_DB_PINS`` /
+    ``selection_overrides(...)`` — see ``overrides.py``) are consulted, keyed by spec_key or
+    manifest name; an override behaves like a pin but is never recorded (what-if compiles are
+    not library state).
+
+    Readers never create: the store is opened without auto-creation, so a missing DB reads as
+    an empty slot (returns None) instead of materializing ``./design_db``.
     """
-    d = DesignDB.open(db)
+    d = DesignDB.open(db, create=False)
     index = d.read_index(spec_key)
+
+    overridden = False
+    if pin is None:
+        from spire.design_db.overrides import current_overrides
+        ov = current_overrides()
+        if ov:
+            hit = ov.get(spec_key)
+            if hit is None:                     # manifest names are accepted as override keys
+                man = d.read_json(d.manifest_path, {"slots": {}})
+                for name, entry in man.get("slots", {}).items():
+                    if entry.get("spec_key") == spec_key and name in ov:
+                        hit = ov[name]
+                        break
+            if hit is not None:
+                pin, overridden = hit, True
 
     if pin is not None:
         if pin not in index:
@@ -177,7 +200,7 @@ def select_design(spec_key: str, *, objective: ObjectiveSpec = "area",
         _, design_id, entry = eligible[0]
         result = SelectionResult(design_id, entry, _obj_repr(objective), system)
 
-    if record:
+    if record and not overridden:               # overrides are temporary — never recorded
         d.update_manifest_selection(spec_key, {"selected_id": result.design_id,
                                                "objective": result.objective,
                                                "metric": result.metric})
@@ -187,7 +210,7 @@ def select_design(spec_key: str, *, objective: ObjectiveSpec = "area",
 def pareto_front(spec_key: str, objectives: Sequence[str] = ("area", "delay"), *,
                  metric: Optional[str] = None, db: Optional[Any] = None) -> List[Dict[str, Any]]:
     """The non-dominated set (minimizing all ``objectives``), sorted by the first objective."""
-    d = DesignDB.open(db)
+    d = DesignDB.open(db, create=False)
     index = d.read_index(spec_key)
     if not index:
         return []
