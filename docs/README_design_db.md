@@ -5,11 +5,22 @@
 > agent flows, per-technology PPA scoring) live in RTLScout — see its README.
 
 `spire.design_db` is a content-addressed store of **correct implementations of a subcircuit**. For
-each subcircuit — a *slot*, keyed by its golden specification — the DB holds any number of
-implementations, each **proven correct against the slot's golden** before it is admitted, and each
-carrying metric vectors and provenance. Producers (optimization tools, agents, humans) *insert*
-through the verification gate; consumers *select* by objective. Generation and selection are fully
-decoupled: filling a slot once lets every later build pick from it.
+each subcircuit — a *slot* — the DB holds any number of implementations, each **proven correct
+against the slot's golden** before it is admitted, and each carrying metric vectors and
+provenance. Producers (optimization tools, agents, humans) *insert* through the verification
+gate; consumers *select* by objective. Generation and selection are fully decoupled: filling a
+slot once lets every later build pick from it.
+
+**Slot identity.** A slot is defined by its **`spec_key`** — `sha256(structural golden AAG +
+port spec)`, 64 hex chars, also the slot's directory name — which is what every Python API call
+takes (`select_design(spec_key, …)`, `insert_design(spec_key, …)`, …) and what `register_slot`
+returns. Slots additionally carry a permanent human *name* in the manifest (`name → spec_key`,
+e.g. `adder8`); the CLI resolves either a name or a unique key prefix, so
+`spire db insert cand.py --slot adder8` is one manifest lookup followed by the same key-based
+operation. A name is an **alias, not a second identity**: it can never be re-bound to a
+different structure (re-registering a taken name with changed content raises), so within one DB
+a name is as trustworthy as the key it points to — while `spec_key`s are universal across DBs
+(the same structure always hashes to the same key).
 
 ## Quick start — the decorator
 
@@ -39,8 +50,9 @@ class Top(Component):
 3. **Miss ⇒ the original logic** (one-line note; a build never fails because a slot isn't filled).
 
 Parameters: `objective=` (what to minimize — see Selection), `metric=` (measurement system),
-`pin=` (an exact `design_id`; missing ⇒ error — a reproducibility lock), `fill=` (opt-in callable
-invoked once on miss to generate, then re-select), `db=` (explicit DB root).
+`pin=` (an exact `design_id` — see the format note under Selection; missing ⇒ error),
+`fill=` (opt-in callable invoked once on miss to generate, then re-select), `db=` (explicit
+DB root).
 
 The `fill=` contract: the hook is called as `fill(spec_key, db_root=…, objective=…, metric=…)`
 and populates the slot **through the insert gate** (anything else is refused); the decorator
@@ -111,6 +123,15 @@ pareto_front(key)                                                      # non-dom
   nodes/depth), `"transistors"` (heavy-pipeline Yosys estimate), or a technology (e.g. `"asap7"`,
   once PPA scoring has run). `metric=None` resolves deterministically: technology → transistors →
   aig. Constraints are evaluated in the same system.
+- **`design_id` format** (what `pin=` takes): always `<source>:<hash10>` — the `--source` tag
+  given at insert, a colon, and the first 10 hex chars of the design's structural hash (its
+  AAG content hash). Source tags may themselves contain colons
+  (`agent:rtl-subcircuit-depth:15d010c21e` = source `agent:rtl-subcircuit-depth` + hash
+  `15d010c21e`), so parse from the right. Take ids verbatim from `spire db show <slot>`;
+  `pin=` is **exact** — no prefix matching (unlike `annotate`/`db-score --design`, which are
+  one-shot interactive commands) — because a prefix that is unique today can become ambiguous
+  as the slot grows: a reproducibility lock must not rot. A missing pin raises rather than
+  falling back to a metric selection.
 - The resolved `(selected_id, objective, metric)` is recorded in the manifest, so builds are
   reproducible and auditable.
 
@@ -353,7 +374,7 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 | `insert_design(spec_key, design, *, source, db=None, budget_s=None, python_copy=None, provenance=None) -> InsertResult` | The gate: verify → dedup → stamp metrics → record provenance → admit atomically. `design`: a **`.py` design file** (`build()` — elaborated here, source stored), a spire `Component`/`Netlist`, a Verilog path, or Verilog text. |
 | `check_design(spec_key, design, *, db=None, budget_s=None) -> dict` | Advisory: run the slot's set oracle against a candidate (no admit, no write). The read-only sibling of `insert_design`; raises the same `VerificationError`s on failure. |
 | `seed_original(spec_key, db=None, budget_s=None) -> InsertResult` | Insert the slot's golden as the baseline candidate (`source="original"`) — a selection floor; stores the slot's `starting_point.py` as its python source when present. |
-| `annotate(spec_key, design_ref, *, tech, values, raw=None, force=False, db=None) -> dict` | Attach a per-technology metric block (`metrics[tech]`) to a stored design; makes `metric=<tech>` selectable. Writes `metrics.json`; the `index.json` cache refreshes from it. |
+| `annotate(spec_key, design_ref, *, tech, values, raw=None, force=False, db=None) -> dict` | Attach a per-technology metric block (`metrics[tech]`) to a stored design; makes `metric=<tech>` selectable. `design_ref` = a `design_id` **or a unique prefix** of one (ambiguous/unknown raises — the looser sibling of `pin=`'s exact match). Writes `metrics.json`; the `index.json` cache refreshes from it. |
 | `select_design(spec_key, *, objective=, metric=, pin=, sources=, record=)` | Deterministic selection → `SelectionResult` (or None on an empty slot). |
 | `pareto_front(spec_key, objectives=("area","delay"), metric=None)` | The non-dominated set. |
 | `constrained / weighted / lexicographic` | Objective combinators. |
