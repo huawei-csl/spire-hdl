@@ -52,10 +52,9 @@ def test_fuzz_sim_vs_aiger_signed():
     _run(diff_sim_vs_aiger, seed_base=4000, signed_ok=True)
 
 
-@pytest.mark.xfail(strict=True, reason="ISSUES 0.6: AIGER ternary lowering uses only bit 0 of a multi-bit selector")
 def test_aiger_mux_selector_multibit():
-    # The generator above only builds 1-bit selectors (mux(a < b, ...)), so this exporter defect needs its own
-    # shape. The emitted-Verilog side of the same netlist conforms.
+    # The generator above only builds 1-bit selectors (mux(a < b, ...)), so this shape guards the
+    # exporter's OR-reduced multi-bit selector.
     import itertools
 
     from spire.expr import UInt, mux

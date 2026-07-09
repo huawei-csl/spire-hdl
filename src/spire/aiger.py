@@ -443,65 +443,74 @@ class _AigerExprEval(ExprVisitor[List[int]]):
         a = self.visit(e.a)
         b = self.visit(e.b)
         w_out = e.typ.width
-        signed = getattr(e.a.typ, "signed", False) or getattr(e.b.typ, "signed", False)
+        sa = getattr(e.a.typ, "signed", False)
+        sb = getattr(e.b.typ, "signed", False)
+        signed = sa or sb
+        fit = self._exp._fit_bits
 
-        if op == "&":
-            bits = aig.bv_and(a, b)
-        elif op == "|":
-            bits = aig.bv_or(a, b)
-        elif op == "^":
-            bits = aig.bv_xor(a, b)
-        elif op == "nand":
-            bits = aig.bv_not(aig.bv_and(a, b))
-        elif op == "+":
-            # bv_add zero-extends shorter operands. For signed operands with
-            # w_out wider than the inputs, we must sign-extend first so the
-            # carry propagation matches two's-complement addition.
-            if signed:
-                a = aig._sext(a, w_out)
-                b = aig._sext(b, w_out)
-            bits, _ = aig.bv_add(a, b, w_out=w_out)
-        elif op == "-":
-            if signed:
-                a = aig._sext(a, w_out)
-                b = aig._sext(b, w_out)
-            bits, _ = aig.bv_sub(a, b, w_out=w_out)
+        if op in ("&", "|", "^", "nand"):
+            # Each operand extends per its OWN signedness (never "signed if either").
+            a = fit(a, w_out, signed=sa)
+            b = fit(b, w_out, signed=sb)
+            if op == "&":
+                bits = aig.bv_and(a, b)
+            elif op == "|":
+                bits = aig.bv_or(a, b)
+            elif op == "^":
+                bits = aig.bv_xor(a, b)
+            else:
+                bits = aig.bv_not(aig.bv_and(a, b))
+        elif op in ("+", "-"):
+            a = fit(a, w_out, signed=sa)
+            b = fit(b, w_out, signed=sb)
+            bits, _ = (aig.bv_add if op == "+" else aig.bv_sub)(a, b, w_out=w_out)
         elif op == "*":
-            signed_a = getattr(e.a.typ, "signed", False)
-            signed_b = getattr(e.b.typ, "signed", False)
-            if signed_a or signed_b:
-                bits = aig.bv_mul_baugh_wooley(a, b, w_out=w_out)
-            elif not signed_a and not signed_b:
+            if sa and sb:
+                bits = aig.bv_mul_baugh_wooley(a, b, w_out=w_out)  # assumes BOTH two's-complement
+            elif not sa and not sb:
                 bits = aig.bv_mul_unsigned_pp(a, b, w_out=w_out)
             else:
-                bits = aig.bv_mul_signed(a, b, w_out=w_out, signed_a=signed_a, signed_b=signed_b)
+                # Mixed: extend each per its own signedness to the result width; the pattern
+                # product equals the value product mod 2^w_out.
+                a = fit(a, w_out, signed=sa)
+                b = fit(b, w_out, signed=sb)
+                bits = aig.bv_mul_unsigned_pp(a, b, w_out=w_out)
         elif op == "<<":
             bits = aig.bv_shift_left(a, b, w_out=w_out)
         elif op == ">>":
             bits = aig.bv_shift_right(a, b, w_out=w_out)
         elif op in ("==", "!=", "<", "<=", ">", ">="):
+            # Exact integer compare: extend each operand per its OWN signedness to a common
+            # max+1 width, then compare signed. Uniformly correct for u/u, s/s and mixed.
+            w_cmp = max(len(a), len(b)) + 1
+            a = fit(a, w_cmp, signed=sa)
+            b = fit(b, w_cmp, signed=sb)
             if op in ("==", "!="):
                 eq = aig.bv_eq(a, b)
                 lit = eq if op == "==" else lit_not(eq)
             else:
-                lt = aig.bv_slt(a, b) if signed else aig.bv_ult(a, b)
                 if op == "<":
-                    lit = lt
+                    lit = aig.bv_slt(a, b)
                 elif op == "<=":
-                    lit = lit_not(aig.bv_ult(b, a) if not signed else aig.bv_slt(b, a))
+                    lit = lit_not(aig.bv_slt(b, a))
                 elif op == ">":
-                    lit = aig.bv_ult(b, a) if not signed else aig.bv_slt(b, a)
+                    lit = aig.bv_slt(b, a)
                 else:
-                    lit = lit_not(lt)
+                    lit = lit_not(aig.bv_slt(a, b))
             bits = [lit]
         else:
             raise NotImplementedError(f"Unsupported binary op '{op}'")
 
         # fit result vector
-        return self._exp._fit_bits(bits, w_out, signed=signed if op not in ("==", "!=", "<", "<=", ">", ">=") else False)
+        return fit(bits, w_out, signed=signed if op not in ("==", "!=", "<", "<=", ">", ">=") else False)
 
     def visit_ternary(self, e: Ternary) -> List[int]:
-        sel = self.visit(e.sel)[0]
+        # Any nonzero selector is true (Verilog ?: / simulator semantics): OR-reduce all bits.
+        sel_bits = self.visit(e.sel)
+        aig = self._exp.aig
+        sel = sel_bits[0]
+        for sbit in sel_bits[1:]:
+            sel = aig.mk_or(sel, sbit)
         a = self.visit(e.a)
         b = self.visit(e.b)
         w_out = e.typ.width

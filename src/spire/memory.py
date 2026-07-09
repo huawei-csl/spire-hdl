@@ -188,8 +188,8 @@ class _MemoryArray(Signal):
     def init_sim_state(self) -> "list[int]":
         if self.init is None:
             return [0] * self.depth
-        from spire.simulator import _to_bits  # local import (lazy to avoid cycles)
-        return [_to_bits(v, self.typ.width) for v in self.init]
+        from spire.simulator import _to_unsigned  # local import (lazy to avoid cycles)
+        return [_to_unsigned(v, self.typ.width) for v in self.init]
 
     def compute_next_state(self, sim) -> "_MemNextState":
         """Evaluate this edge's update against pre-edge state: reset arm (priority), else enabled writes.
@@ -197,20 +197,20 @@ class _MemoryArray(Signal):
         Mirrors the simulator's register handling: compute everything first, commit afterwards
         (``commit_next_state``), so no state element observes a half-committed edge — Verilog NBA semantics.
         """
-        from spire.simulator import _to_bits  # lazy, avoids cycles
+        from spire.simulator import _to_unsigned  # lazy, avoids cycles
         ev = sim._eval_signal_bits
         w = self.typ.width
 
         if self.reset is not None and ev(self.reset.enable) & 1:
-            return _MemNextState(reset_value=_to_bits(ev(self.reset.value), w), writes=[])
+            return _MemNextState(reset_value=_to_unsigned(ev(self.reset.value), w), writes=[])
         writes = []
         for wp in self.write_ports:
             if not (ev(wp.enable) & 1):
                 continue
-            a = _to_bits(ev(wp.addr), wp.addr.typ.width)
+            a = _to_unsigned(ev(wp.addr), wp.addr.typ.width)
             if not (0 <= a < self.depth):
                 continue
-            d = _to_bits(ev(wp.data), w)
+            d = _to_unsigned(ev(wp.data), w)
             writes.append((a, d, None if wp.mask is None else ev(wp.mask), wp.chunk_w))
         return _MemNextState(reset_value=None, writes=writes)
 

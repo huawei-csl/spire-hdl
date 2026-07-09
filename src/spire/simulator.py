@@ -19,7 +19,7 @@ class _SimExprEval(ExprVisitor[int]):
         self._visiting: set = set()
 
     def visit_const(self, e: Const) -> int:
-        return _to_bits(e.value, e.typ.width)
+        return _to_unsigned(e.value, e.typ.width)
 
     def visit_signal(self, e: Signal) -> int:
         return self._sim._eval_signal_bits(e)
@@ -27,7 +27,7 @@ class _SimExprEval(ExprVisitor[int]):
     def visit_op1(self, e: Op1) -> int:
         a = self.visit(e.a)
         if e.op == "~":
-            return _to_bits(~a, e.typ.width)
+            return _to_unsigned(~a, e.typ.width)
         raise NotImplementedError(f"Unary op '{e.op}' not implemented.")
 
     def visit_op2(self, e: Op2) -> int:
@@ -38,16 +38,16 @@ class _SimExprEval(ExprVisitor[int]):
             av = self.visit(e.a)
             bv = self.visit(e.b)
             if op == "&":
-                return _to_bits(av & bv, tw)
+                return _to_unsigned(av & bv, tw)
             elif op == "|":
-                return _to_bits(av | bv, tw)
+                return _to_unsigned(av | bv, tw)
             else:
-                return _to_bits(av ^ bv, tw)
+                return _to_unsigned(av ^ bv, tw)
 
         elif op == "nand":  # experimental feature
             av = self.visit(e.a)
             bv = self.visit(e.b)
-            return _to_bits(~(av & bv), tw)
+            return _to_unsigned(~(av & bv), tw)
 
         elif op in ("+", "-"):
             aw = e.a.typ.width
@@ -55,53 +55,43 @@ class _SimExprEval(ExprVisitor[int]):
             av = _resize_bits(self.visit(e.a), aw, tw, e.a.typ.signed)
             bv = _resize_bits(self.visit(e.b), bw, tw, e.b.typ.signed)
             if op == "+":
-                return _to_bits(av + bv, tw)
+                return _to_unsigned(av + bv, tw)
             else:
-                return _to_bits(av - bv, tw)
+                return _to_unsigned(av - bv, tw)
 
         elif op == "*":
             aw = e.a.typ.width
             bw = e.b.typ.width
             a_raw = self.visit(e.a)
             b_raw = self.visit(e.b)
-            a_int = _from_bits_signed(a_raw, aw) if e.a.typ.signed else _to_bits(a_raw, aw)
-            b_int = _from_bits_signed(b_raw, bw) if e.b.typ.signed else _to_bits(b_raw, bw)
+            a_int = _to_signed(a_raw, aw) if e.a.typ.signed else _to_unsigned(a_raw, aw)
+            b_int = _to_signed(b_raw, bw) if e.b.typ.signed else _to_unsigned(b_raw, bw)
             prod = a_int * b_int
-            return _to_bits(prod, tw)
+            return _to_unsigned(prod, tw)
 
         elif op in ("<<", ">>"):
             av = self.visit(e.a)
             bv = self.visit(e.b)
-            shift = _to_bits(bv, max(e.b.typ.width, 32))
+            shift = _to_unsigned(bv, max(e.b.typ.width, 32))
             if op == "<<":
                 if shift >= tw:
                     return 0
-                return _to_bits(av << shift, tw)
+                return _to_unsigned(av << shift, tw)
             else:
                 src_w = e.a.typ.width
-                av_src = _to_bits(av, src_w)
-                return _to_bits(av_src >> shift, tw)
+                av_src = _to_unsigned(av, src_w)
+                return _to_unsigned(av_src >> shift, tw)
 
         elif op in ("==", "!=", "<", "<=", ">", ">="):
-            cw = max(e.a.typ.width, e.b.typ.width)
-            av_bits = _resize_bits(self.visit(e.a), e.a.typ.width, cw, e.a.typ.signed)
-            bv_bits = _resize_bits(self.visit(e.b), e.b.typ.width, cw, e.b.typ.signed)
-            if op in ("==", "!="):
-                eq = av_bits == bv_bits
-                val = 1 if (eq if op == "==" else not eq) else 0
-            else:
-                signed = e.a.typ.signed or e.b.typ.signed
-                ai = _from_bits_signed(av_bits, cw) if signed else av_bits
-                bi = _from_bits_signed(bv_bits, cw) if signed else bv_bits
-                if op == "<":
-                    val = 1 if ai < bi else 0
-                elif op == "<=":
-                    val = 1 if ai <= bi else 0
-                elif op == ">":
-                    val = 1 if ai > bi else 0
-                else:
-                    val = 1 if ai >= bi else 0
-            return _to_bits(val, e.typ.width)
+            # Exact integer compare (charter §2): decode each operand per its OWN signedness.
+            # Operator-built IR arrives same-signed (op_cmp promotes); this also covers raw nodes.
+            aw, bw = e.a.typ.width, e.b.typ.width
+            a_raw, b_raw = self.visit(e.a), self.visit(e.b)
+            ai = _to_signed(a_raw, aw) if e.a.typ.signed else _to_unsigned(a_raw, aw)
+            bi = _to_signed(b_raw, bw) if e.b.typ.signed else _to_unsigned(b_raw, bw)
+            val = {"==": ai == bi, "!=": ai != bi, "<": ai < bi,
+                   "<=": ai <= bi, ">": ai > bi, ">=": ai >= bi}[op]
+            return _to_unsigned(1 if val else 0, e.typ.width)
 
         else:
             raise NotImplementedError(f"Binary op '{op}' not implemented.")
@@ -118,14 +108,14 @@ class _SimExprEval(ExprVisitor[int]):
         for p in e.parts:
             pv = self.visit(p)
             width = p.typ.width
-            acc |= _to_bits(pv, width) << shift
+            acc |= _to_unsigned(pv, width) << shift
             shift += width
-        return _to_bits(acc, e.typ.width)
+        return _to_unsigned(acc, e.typ.width)
 
     def visit_slice(self, e: Slice) -> int:
         av = self.visit(e.a)
         shifted = av >> e.lsb
-        return _to_bits(shifted, e.typ.width)
+        return _to_unsigned(shifted, e.typ.width)
 
     def visit_resize(self, e: Resize) -> int:
         av = self.visit(e.a)
@@ -133,11 +123,11 @@ class _SimExprEval(ExprVisitor[int]):
 
     def visit_array_index(self, e: _ArrayIndex) -> int:
         addr_w = e.addr_wire.typ.width
-        addr = _to_bits(self.visit(e.addr_wire), addr_w)
+        addr = _to_unsigned(self.visit(e.addr_wire), addr_w)
         arr = self._sim._mem_state.get(id(e.mem))
         if arr is None or addr >= len(arr):
             return 0
-        return _to_bits(arr[addr], e.typ.width)
+        return _to_unsigned(arr[addr], e.typ.width)
 
 
 class Simulator(SimulatorBase):
@@ -194,7 +184,7 @@ class Simulator(SimulatorBase):
             if r._init is not None:
                 init_bits = self._eval_expr_bits(r._init)
                 init_bits = _resize_bits(init_bits, r._init.typ.width, r.typ.width, r._init.typ.signed)
-            self._reg[_sid(r)] = _to_bits(init_bits, r.typ.width)
+            self._reg[_sid(r)] = _to_unsigned(init_bits, r.typ.width)
 
         # Memory contents: { id(mem) -> list[int] of length depth }. Initialisation comes from
         # Memory.init_sim_state (zeros, or `init=…` if given).
@@ -212,9 +202,9 @@ class Simulator(SimulatorBase):
     def set(self, ref, value: int):
         s = self._resolve(ref)
         if s.kind == "input":
-            self._in[_sid(s)] = _to_bits(value, s.typ.width)
+            self._in[_sid(s)] = _to_unsigned(value, s.typ.width)
         elif s.kind == "reg":
-            self._reg[_sid(s)] = _to_bits(value, s.typ.width)
+            self._reg[_sid(s)] = _to_unsigned(value, s.typ.width)
         else:
             raise ValueError("Only inputs and regs can be set directly.")
         self._invalidate()
@@ -226,7 +216,7 @@ class Simulator(SimulatorBase):
         bits = self._eval_signal_bits(s)
         if signed is None:
             signed = s.typ.signed
-        return _from_bits_signed(bits, s.typ.width) if signed else bits
+        return _to_signed(bits, s.typ.width) if signed else bits
 
     def eval(self) -> "Simulator":
         """(Re)compute combinational network. (Lazy by default; this just clears caches.)"""
@@ -268,7 +258,7 @@ class Simulator(SimulatorBase):
                     v = _resize_bits(v, r._init.typ.width, r.typ.width, r._init.typ.signed)
                 else:
                     v = 0
-                self._reg[_sid(r)] = _to_bits(v, r.typ.width)
+                self._reg[_sid(r)] = _to_unsigned(v, r.typ.width)
         self._invalidate()  # the rst line changed either way — combinational cones must recompute
         self._capture_watches()
         return self
@@ -341,7 +331,7 @@ class Simulator(SimulatorBase):
                     v = _resize_bits(init_bits, r._init.typ.width, r.typ.width, r._init.typ.signed)
                 else:
                     v = 0
-                res[_sid(r)] = _to_bits(v, r.typ.width)
+                res[_sid(r)] = _to_unsigned(v, r.typ.width)
             else:
                 drv = r._driver
                 if drv is None:
@@ -358,10 +348,10 @@ class Simulator(SimulatorBase):
             return self._cache_sig[sid]
 
         if self.m.is_global_io(s, "input"):
-            bits = _to_bits(self._in.get(_sid(s), 0), s.typ.width)
+            bits = _to_unsigned(self._in.get(_sid(s), 0), s.typ.width)
 
         elif s.kind == "reg":
-            bits = _to_bits(self._reg.get(_sid(s), 0), s.typ.width)
+            bits = _to_unsigned(self._reg.get(_sid(s), 0), s.typ.width)
 
         elif s.kind in WIRE_LIKE_KINDS:
             if s._driver is None:
@@ -446,7 +436,7 @@ class Simulator(SimulatorBase):
             raise KeyError(f"{reg_name} is not a register.")
         if self.m.with_reset and self._in.get(_sid(self.m.rst), 0):
             # While reset is asserted, the next state is the init value, not the driver.
-            init_bits = _to_bits(reg._init.value if reg._init is not None else 0, reg.typ.width)
+            init_bits = _to_unsigned(reg._init.value if reg._init is not None else 0, reg.typ.width)
             return self._bits_to_int(init_bits)
         drv = reg._driver
         if drv is None:
@@ -540,11 +530,11 @@ def _mask(w: int) -> int:
     return (1 << w) - 1 if w > 0 else 0
 
 
-def _to_bits(v: int, w: int) -> int:
+def _to_unsigned(v: int, w: int) -> int:
     return int(v) & _mask(w)
 
 
-def _from_bits_signed(bits: int, w: int) -> int:
+def _to_signed(bits: int, w: int) -> int:
     if w == 0:
         return 0
     sign = (bits >> (w - 1)) & 1
@@ -553,17 +543,17 @@ def _from_bits_signed(bits: int, w: int) -> int:
 
 def _resize_bits(bits: int, from_w: int, to_w: int, signed: bool) -> int:
     """Truncate or extend a value in two's complement as needed."""
-    bits = _to_bits(bits, from_w)
+    bits = _to_unsigned(bits, from_w)
     if to_w == from_w:
         return bits
     if to_w < from_w:
         # Truncate LSBs kept (matches Verilog slicing)
-        return _to_bits(bits, to_w)
+        return _to_unsigned(bits, to_w)
     # Extend
     if signed:
-        val = _from_bits_signed(bits, from_w)
-        return _to_bits(val, to_w)
-    return _to_bits(bits, to_w)
+        val = _to_signed(bits, from_w)
+        return _to_unsigned(val, to_w)
+    return _to_unsigned(bits, to_w)
 
 
 def _sid(s: "Signal") -> int:
