@@ -86,6 +86,7 @@ Deeper guides for specific features:
 - **[Tiled matmul accelerator](docs/README_output_stationary_matmul.md)** — parametrizable signed output-stationary matmul over a `T×T×T` core, with input/output RAMs and a `mode` + RAM-access interface
 - **[Custom Verilog](docs/README_custom_verilog.md)** — emit a raw Verilog block from a `CustomVerilogComponent`, with or without a Python sim model (blackbox)
 - **[AIG / AAG export & import](docs/README_aig_export.md)** — lower a `Component` to an AIGER netlist and read AIG/AAG back in as a `Component`
+- **[Simulation & debugging](docs/README_simulation_debugging.md)** — driving the Python `Simulator`, live inspection (peek/watch, register and memory state), VCD waveforms from a Python run, and running generated testbenches under Verilator/Icarus with waveform viewing (surfer/GTKWave)
 - **[Verilog testbench](docs/README_verilog_testbench.md)** — turn a `Simulator` run into a self-checking, synthesizable Verilog testbench
 - **[Examples](testing/examples/README.md)** — example designs exercising Spire features
 

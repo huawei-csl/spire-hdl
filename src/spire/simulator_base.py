@@ -43,6 +43,14 @@ class SimulatorBase(ABC):
         pass
 
     @abstractmethod
+    def peek_inputs(self) -> Dict[str, int]:
+        pass
+
+    @abstractmethod
+    def get_mem(self, ref) -> List[int]:
+        pass
+
+    @abstractmethod
     def watch(self, what, alias: Optional[str] = None):
         pass
 
@@ -68,6 +76,21 @@ class SimulatorBase(ABC):
 
     @abstractmethod
     def log_expression_states(self, expr_list: Iterable[Expr]):
+        pass
+
+    # Trace capture (VCD-ready history; see spire.various.vcd_writer.write_vcd). Backends also
+    # expose `trace_enabled` (off by default) and `traced_expressions` as plain attributes or
+    # properties; snapshots are recorded at every eval()/step() while enabled.
+    @abstractmethod
+    def record_expr_snapshot(self) -> None:
+        pass
+
+    @abstractmethod
+    def get_traced_expr_names(self) -> Dict[int, str]:
+        pass
+
+    @abstractmethod
+    def get_trace_by_names(self) -> Dict[str, List[int]]:
         pass
 
 

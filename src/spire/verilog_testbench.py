@@ -166,6 +166,12 @@ class TestbenchGenSimulator(SimulatorBase):
     def peek_outputs(self) -> Dict[str, int]:
         return self._sim.peek_outputs()
 
+    def peek_inputs(self) -> Dict[str, int]:
+        return self._sim.peek_inputs()
+
+    def get_mem(self, ref) -> List[int]:
+        return self._sim.get_mem(ref)
+
     # Watch support mirrors the Python simulator by direct delegation.
     def watch(self, what, alias: Optional[str] = None):
         self._sim.watch(what, alias)
@@ -188,6 +194,38 @@ class TestbenchGenSimulator(SimulatorBase):
 
     def log_expression_states(self, expr_list: Iterable[Expr]):
         return self._sim.log_expression_states(expr_list)
+
+    # Trace/VCD capture: the inner simulator records the snapshots during the delegated
+    # eval()/step() calls; these expose its switches and history, so one recorded run can
+    # produce the Python-side VCD as well as the testbench.
+    @property
+    def trace_enabled(self) -> bool:
+        return self._sim.trace_enabled
+
+    @trace_enabled.setter
+    def trace_enabled(self, value: bool) -> None:
+        self._sim.trace_enabled = value
+
+    @property
+    def traced_expressions(self):
+        return self._sim.traced_expressions
+
+    @traced_expressions.setter
+    def traced_expressions(self, exprs) -> None:
+        self._sim.traced_expressions = exprs
+
+    @property
+    def trace_history(self):
+        return self._sim.trace_history
+
+    def record_expr_snapshot(self) -> None:
+        self._sim.record_expr_snapshot()
+
+    def get_traced_expr_names(self) -> Dict[int, str]:
+        return self._sim.get_traced_expr_names()
+
+    def get_trace_by_names(self) -> Dict[str, List[int]]:
+        return self._sim.get_trace_by_names()
 
     # ------------------------------------------------------------------
     # Testbench emission

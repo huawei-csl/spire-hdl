@@ -226,6 +226,13 @@ Gate: simplified-vs-unsimplified differential fuzz (both sim and emitted text) g
 - Examples: §13.3 (aig_example call), §13.4 (slice), §13.6–§13.9.
 - Docs: §14.1–§14.7 (regenerate benchmark tables from the shipped benches or mark them approximate; fix stale
   defaults/claims; the memories/via_reg and FSM sections rewritten against the new behavior).
+- NEW (review request 2026-07-09): simulation and debugging are underrepresented in the docs. Add
+  `docs/README_simulation_debugging.md`: spire-level simulation (Simulator: set/get/eval/step, reset,
+  peek/peek_next/peek_outputs, watch probes, memory inspection), waveforms from a Python run
+  (trace_enabled, get_trace_by_names, write_vcd; view the .vcd in surfer or GTKWave), Verilog export
+  including automated testbench generation (TestbenchGenSimulator; defer to README_verilog_testbench.md
+  for the styles), and the verilator/iverilog commands to compile and run the generated testbench with
+  its default VCD dump. Link the doc from the main README docs index.
 - Packaging: §16.1 (ship requirements.txt in the sdist), §16.2/16.4 (extras: `sympy`, `dash`/`plotly`; demote
   eval-only heavyweights), §16.3 (lazy `helpers` import), §16.5–§16.8; 10.2, 10.5, 10.6 per guide.
 
