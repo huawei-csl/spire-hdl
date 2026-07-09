@@ -1,9 +1,9 @@
-"""Component.from_verilog / from_verilog_file: import round-trips and the sequential gate.
+"""Component.from_verilog / from_verilog_file: combinational and sequential import round-trips.
 
 `from_verilog(str)` mirrors `to_verilog() -> str` (temp file, delegates to the file variant);
-`from_verilog_file(path)` mirrors `to_verilog_file`. Sequential designs are rejected with one
-clear error (AIGER latch import is not implemented). Misuse guards were removed in review:
-bad paths / non-Verilog text reach yosys, whose errors end the process.
+`from_verilog_file(path)` mirrors `to_verilog_file`. Registers arrive as 1-bit AIGER latches
+and become registers on the surrounding design's global clock. Misuse guards were removed in
+review: bad paths / non-Verilog text reach yosys, whose errors end the process.
 """
 import pytest
 
@@ -48,23 +48,43 @@ def test_from_verilog_file_roundtrip_exhaustive(tmp_path):
     _check_exhaustive(_shell().from_verilog_file(str(p)))
 
 
-@pytest.mark.parametrize("with_reset", [False, True])
-def test_sequential_designs_rejected_loudly(with_reset):
-    """Both register flavors funnel to ONE catchable error (async-reset FFs used to kill the
-    interpreter in yosys's AIGER backend; clock-only ones died in the minimal AAG reader)."""
+class _Acc(Component):
+    """Accumulator: register feedback plus input, so latch state feeds the AND network."""
 
-    class Acc(Component):
-        def __init__(self):
-            self.io = IORecord(d=Input(UInt(4)), q=Output(UInt(4)))
-            self.elaborate()
+    def __init__(self):
+        self.io = IORecord(d=Input(UInt(4)), q=Output(UInt(4)))
+        self.elaborate()
 
-        def elaborate(self):
-            r = Register(UInt(4), init=0, name="r")
-            r <<= self.io.d
-            self.io.q <<= r
+    def elaborate(self):
+        r = Register(UInt(4), init=0, name="r")
+        r <<= r + self.io.d
+        self.io.q <<= r
+
+
+def test_from_verilog_sequential_roundtrip_differential():
+    """Reimported registers must clock identically to the original: 50 cycles, exact match.
+    The absorbed clock stays out of the port list, and latch init-0 matches the sim start."""
+    reset_shared_cache()
+    src = _Acc().to_verilog("acc", with_clock=True, with_reset=False)
+    shell = ImportedComponent(IORecord(d=Input(UInt(4)), q=Output(UInt(4)))).from_verilog(src)
 
     reset_shared_cache()
-    src = Acc().to_verilog("acc", with_clock=True, with_reset=with_reset)
+    ref = Simulator(_Acc().to_netlist("orig", with_clock=True, with_reset=False))
+    dut = Simulator(shell.to_netlist("reimported", with_clock=True, with_reset=False))
+    for t, d in enumerate((7 * i + 3) % 16 for i in range(50)):
+        for sim in (ref, dut):
+            sim.set("d", d)
+            sim.eval()
+        assert ref.get("q") == dut.get("q"), f"cycle {t}: ref={ref.get('q')} dut={dut.get('q')}"
+        ref.step()
+        dut.step()
+
+
+def test_from_verilog_reset_port_rejected_with_guidance():
+    """A with_reset export folds rst into a DATA input, whose name collides with the
+    framework-injected reset; the import must say so, not fail later or silently rename."""
+    reset_shared_cache()
+    src = _Acc().to_verilog("acc", with_clock=True, with_reset=True)
     shell = ImportedComponent(IORecord(d=Input(UInt(4)), q=Output(UInt(4))))
-    with pytest.raises(NotImplementedError, match="combinational designs only"):
+    with pytest.raises(ValueError, match="port named 'rst'.*reserved"):
         shell.from_verilog(src)

@@ -73,7 +73,7 @@ class _AIG:
         if a == lit_not(b):
             return lit_const0()
 
-        # canonical order on RHS for caching
+        # fixed operand order on RHS for caching
         if a > b:
             a, b = b, a
         key = (a, b)
@@ -727,6 +727,8 @@ class SpireAdapter(AbstractAdapter):
         self.m: Netlist = module
         self._pi_count = 0
         self._po_count = 0
+        self._latch_count = 0
+        self._latch_names: set = set()
 
     def _bit_type(self):
         return Bool()
@@ -759,6 +761,32 @@ class SpireAdapter(AbstractAdapter):
 
     def AND(self, a, b):
         return a & b
+
+    def latch(self, init, name=None):
+        """AIGER latch → 1-bit netlist register. init None (uninitialized) is kept as init-less;
+        the simulator starts it at 0 and a with_reset re-emission resets it to 0."""
+        reg_name = self._latch_reg_name(name)
+        return self.m.reg(self._bit_type(), reg_name, init=None if init is None else int(init))
+
+    def latch_next(self, latch_node, next_node):
+        latch_node <<= next_node
+
+    def _latch_reg_name(self, symbol: Optional[str]) -> str:
+        # A yosys latch symbol can hold two space-separated names, e.g. "q[0] r[0]": first the net the
+        # latch drives, then the register itself. We keep only the final name, the register's own.
+        # That name is later emitted as a Verilog identifier (`reg <name>;`), so characters not allowed
+        # there ([, ], $, ...) are replaced by an underscore (r[0] -> r_0_).
+        base = (symbol or "").split()[-1] if symbol and symbol.split() else ""
+        base = "".join(c if (c.isalnum() or c == "_") else "_" for c in base)
+        if not base or base[0].isdigit():
+            base = f"lat{self._latch_count}"
+        self._latch_count += 1
+        name, k = base, 1
+        while name in self._latch_names:
+            name = f"{base}_{k}"
+            k += 1
+        self._latch_names.add(name)
+        return name
 
 class AigerImporter:
 

@@ -193,7 +193,8 @@ net     = demo.to_netlist(name="LogicDemo")    # flat netlist IR (Netlist)
 demo2 = Component.from_netlist(net)            # re-import the IR
 
 # Import Verilog source (yosys-backed; ports map onto the declared IO) — here a round-trip
-# of the text we just emitted; from_verilog_file(path) reads external .v files the same way:
+# of the text we just emitted; from_verilog_file(path) reads external .v files the same way.
+# Sequential designs import too: their registers land on the surrounding design's global clock.
 from spire.component import ImportedComponent
 shell = ImportedComponent(IORecord(a=Input(UInt(8)), b=Input(UInt(8)), sel=Input(Bool()),
                                    sum=Output(UInt(9)), mask=Output(UInt(2)), out=Output(UInt(8))))

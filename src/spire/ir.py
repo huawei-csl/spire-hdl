@@ -261,6 +261,9 @@ class Netlist:
         lines.append("// Sequential logic")
         emit_regs = [r for r in regs if not r._no_emit_drive]
         if emit_regs:
+            if self.clk is None:
+                raise ValueError(f"module '{self.name}' contains registers but was built with "
+                                 f"with_clock=False; registers need the global clock")
             sens = f"posedge {self.clk.name}"
             if self.with_reset:
                 sens += f" or posedge {self.rst.name}"
@@ -378,7 +381,7 @@ class _SignalCollector(ExprVisitor[None]):
         self.port_ids = {id(p) for p in module._ports}
         self.in_list = set(self.port_ids)
         self.name_to_sig: Dict[str, "Signal"] = {p.name: p for p in module._ports}
-        self._auto_ix = 0  # per-netlist counter for canonical auto-wire names
+        self._auto_ix = 0  # per-netlist counter for the auto-wire naming scheme
 
     def run(self, seeds: List["Signal"]) -> None:
         for s in seeds:

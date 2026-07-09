@@ -137,10 +137,14 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         if group:
             IOCollector().group(module, self.get_spec())
 
-        # Map the AIG module's ports to this component's IO fields.
-        # Use _ports (which have canonical grouped names after group())
-        # rather than _signals (which may contain renamed duplicates).
+        # Map the module's ports onto this component's IO fields, from _ports (final grouped names
+        # after group()), not _signals (which may contain renamed duplicates).
         for sig in module._ports:
+            # Component IO reserves these names (to_netlist injects them); an rst data input is usually a folded reset.
+            if sig.name in ("clk", "rst"):
+                raise ValueError(
+                    f"imported design has a data port named {sig.name!r}, reserved for the framework-injected "
+                    f"clock/reset; rename it in the source (a with_reset export folds its reset into an input)")
             if sig.kind in ('input', 'output'):
                 setattr(self.io, sig.name, sig)
             else:
@@ -174,16 +178,10 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
     def from_verilog_file(self, verilog_path: str, top=None, group=True) -> Self:
         """Import a design from a Verilog file — the counterpart of ``to_verilog_file()``.
 
-        Combinational designs only (AIGER latch import is not implemented).
+        Sequential designs work too: registers arrive as 1-bit AIGER latches on the global clock and start at 0.
         """
         aag_lines = verilog_to_aag_lines_via_yosys(verilog_path, top=top, embed_symbols=True,
                                                    no_startoffset=True)
-        header = aag_lines[0].split() if aag_lines else []
-        n_latches = int(header[3]) if len(header) >= 6 else 0
-        if n_latches:
-            raise NotImplementedError(
-                f"from_verilog supports combinational designs only: the input contains "
-                f"{n_latches} register bit(s) (AIGER latch import is not implemented)")
         return self.from_aag_lines(aag_lines, group=group)
 
     def from_aig_file(self, aig_path: str, map_file: str|None = None, group=True) -> Self:
@@ -203,11 +201,8 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
     def from_netlist(cls, net: "Netlist") -> "Component":
         """Wrap a netlist's ports as a Component IO (shares Signal objects, no copy).
 
-        Absorbs the former ``Netlist.to_component()`` — this is the spec-free reinsertion path
-        (e.g. an optimized AIG with no predefined Component subclass). Port names that are not valid
-        Python identifiers (e.g. bit-ports ``a[0]``) are sanitized for the IO field name; the Signal
-        keeps its original ``.name`` so codegen/analysis are unaffected. Returns an
-        ``ImportedComponent`` (a concrete trivial subclass), so the ABC contract holds.
+        Spec-free reinsertion (absorbs the former ``Netlist.to_component()``), e.g. for an optimized AIG; returns
+        an ``ImportedComponent``. Non-identifier ports (a[0]) get sanitized field names; the Signal keeps ``.name``.
         """
         port_signals = [p for p in net._ports if p.kind in ("input", "output")]
 
