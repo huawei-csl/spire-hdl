@@ -109,5 +109,5 @@ def test_booth_share_small():
     """this file collected zero tests (only run_test) and crashed on a
     commented-out enum member. The member is re-enabled; this entry pins correctness of the
     share vs no-share configurations at a small dimension."""
-    run_test(2, share=False)
-    run_test(2, share=True)
+    assert run_test(2, share=False), "no-share configuration must simulate correctly"
+    assert run_test(2, share=True), "share configuration must simulate correctly"

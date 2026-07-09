@@ -30,6 +30,19 @@ def inner_product(
     return adder_tree(products, add_cfg)
 
 
+def _check_operator_mode_encodings(mult_cfg, encoding, *, carriers_signed: bool = False) -> None:
+    """Operator-mode multipliers infer signedness from `encodings` or the carrier type. With
+    UInt carriers holding signed patterns and encodings=None, they silently compute unsigned
+    math on signed data — reject that. SInt carriers (signed_io_type=True feeding the operands
+    directly) and unsigned encodings infer correctly and stay valid."""
+    from spire.arithmetic.int_multipliers.eval.testvector_generation import is_signed
+    if getattr(mult_cfg, "use_operator", False) and getattr(mult_cfg, "encodings", None) is None \
+            and is_signed(encoding) and not carriers_signed:
+        raise ValueError("MultiplierConfig(use_operator=True) on a signed-encoding matmul core needs "
+                         "explicit encodings=TwoInputAritEncodings.with_enc(<encoding>): carriers are "
+                         "raw patterns and signedness cannot be inferred from them")
+
+
 @dataclass
 class MatmulAccumulateIO(CompositeRecord):
     A: Array  # input
@@ -68,6 +81,8 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
         signed_io_type: bool = False,
     ):
 
+        _check_operator_mode_encodings(cfg.mult_cfg, cfg.add_cfg.encoding,
+                                       carriers_signed=bool(signed_io_type))
         self.cfg = cfg
         self.io_hdl_type = SInt if (is_signed(self.cfg.add_cfg.encoding) and signed_io_type) else UInt
 

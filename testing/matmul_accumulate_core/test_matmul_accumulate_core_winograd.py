@@ -120,7 +120,7 @@ def test_mmac_winograd_rejects_odd_dim_k():
     import pytest
 
     encoding = Encoding.twos_complement
-    mult_cfg = MultiplierConfig(use_operator=True)
+    mult_cfg = MultiplierConfig(use_operator=True, encodings=TwoInputAritEncodings.with_enc(encoding))
     add_cfg = AdderConfig(use_operator=True, full_output_bit=True, encoding=encoding)
     cfg = MMAcCfg(
         dims=MMAcDims(dim_m=2, dim_n=2, dim_k=3),
@@ -129,4 +129,47 @@ def test_mmac_winograd_rejects_odd_dim_k():
         add_cfg=add_cfg,
     )
     with pytest.raises(ValueError, match="dim_k must be even"):
+        MatmulAccumulateComponent(cfg, signed_io_type=True)
+
+
+def test_mmac_winograd_unsigned_encoding_correct():
+    """unsigned alpha/beta were negated through a same-width signed reinterpret,
+    flipping values >= 2^(w-1); every unsigned Winograd config was wrong."""
+    import pytest
+    from spire.cores.matmul_accumulate.matmul_test_vectors import generate_matmul_vectors
+    from spire.helpers import run_vectors_on_simulator
+    from spire.expr import reset_shared_cache
+
+    reset_shared_cache()
+    encoding = Encoding.unsigned
+    mult_cfg = MultiplierConfig(
+        use_operator=False,
+        multiplier_opt=MultiplierOption.STAGE_BASED_MULTIPLIER,
+        encodings=TwoInputAritEncodings.with_enc(encoding),
+        ppg_opt=PPGOption.AND,
+        ppa_opt=PPAOption.WALLACE_TREE,
+        fsa_opt=FSAOption.RIPPLE_CARRY,
+    )
+    add_cfg = AdderConfig(use_operator=False, fsa_opt=FSAOption.RIPPLE_CARRY, full_output_bit=True,
+                          encoding=encoding)
+    cfg = MMAcCfg(dims=MMAcDims(dim_m=2, dim_n=2, dim_k=2),
+                  widths=MMAcWidths(a_width=4, b_width=4, c_width=12),
+                  mult_cfg=mult_cfg, add_cfg=add_cfg)
+    core = MatmulAccumulateComponent(cfg, signed_io_type=False)
+    module = core.to_module("winograd_unsigned")
+    vectors = generate_matmul_vectors(core, encoding=encoding, num_vectors=30)
+    sim = Simulator(module)
+    run_vectors_on_simulator(sim, vectors, use_signed=False, raise_on_fail=True, print_on_pass=False)
+
+
+def test_operator_mode_without_encodings_rejected_on_signed_core():
+    """/11.4: encodings=None operator multipliers on signed cores computed unsigned math."""
+    import pytest
+
+    encoding = Encoding.twos_complement
+    cfg = MMAcCfg(dims=MMAcDims(dim_m=2, dim_n=2, dim_k=2),
+                  widths=MMAcWidths(a_width=4, b_width=4, c_width=12),
+                  mult_cfg=MultiplierConfig(use_operator=True),
+                  add_cfg=AdderConfig(use_operator=True, full_output_bit=True, encoding=encoding))
+    with pytest.raises(ValueError, match="cannot be inferred"):
         MatmulAccumulateComponent(cfg, signed_io_type=True)

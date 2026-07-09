@@ -217,7 +217,10 @@ class OptimizedSignMagnitudeMultiplier(StageBasedMultiplierBase):
 
         self.mult = mult
 
-        W = self.aw  # assume square for now
+        if self.aw != self.bw:
+            raise ValueError(f"{type(self).__name__} expects square operands (aw == bw); "
+                             f"got {self.aw}x{self.bw} — b's sign/magnitude split is width-hardcoded")
+        W = self.aw
 
         sa = self.io.a[W - 1]
         sb = self.io.b[W - 1]

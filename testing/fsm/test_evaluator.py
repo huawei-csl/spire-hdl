@@ -32,10 +32,10 @@ def test_op2_add_wraps_at_width():
     m = Netlist("t", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     b = m.input(UInt(8), "b")
-    expr = a + b
-    # 8-bit add wraps at 256... but spire's `+` widens to 9 bits by default.
-    # Test the width-mask behaviour by binding values that don't wrap there.
-    assert eval_with(expr, [(a, 200), (b, 100)]) == 300
+    # spire's `+` widens to 9 bits (no wrap at 300); a RAW 8-bit node must wrap.
+    assert eval_with(a + b, [(a, 200), (b, 100)]) == 300
+    from spire.expr import HDLType, Op2
+    assert eval_with(Op2(a, b, "+", HDLType(8, False)), [(a, 200), (b, 100)]) == 44
 
 
 def test_op2_logical_ops():

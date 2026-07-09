@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
+import random
+
 import numpy as np
 
 from spire.composite.array import Array
@@ -21,6 +23,7 @@ def generate_matmul_vectors(
     num_vectors: int,
     sigma: Optional[float] = None,
     encoding_ab_inputs: Optional[Encoding] = None,
+    seed: Optional[int] = 42,
 ) -> List[Tuple[str, Dict[str, int], Dict[str, int]]]:
     """Build flat-dict test vectors for a matmul-accumulate core.
 
@@ -42,6 +45,10 @@ def generate_matmul_vectors(
 
     enc_model = EncodingModel(encoding)
     enc_model_inputs = EncodingModel(encoding_ab_inputs) if encoding_ab_inputs is not None else enc_model
+
+    if seed is not None:  # reproducible regressions (the FP generator in this file already seeds)
+        random.seed(seed)
+        np.random.seed(seed)
 
     vectors: List[Tuple[str, Dict[str, int], Dict[str, int]]] = []
 

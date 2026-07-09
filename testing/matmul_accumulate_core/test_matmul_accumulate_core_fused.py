@@ -64,14 +64,17 @@ def test_fused_matmul_ppg_dim_k_sweep(ppg_opt, encoding, signed_io_type, dim_k, 
     if ppg_opt == PPGOption.BAUGH_WOOLEY and encoding == Encoding.unsigned:
         pytest.skip("BAUGH_WOOLEY only supports signed encodings")
     if ppg_opt == PPGOption.BOOTH_OPTIMISED:
-        # BOOTH_OPTIMISED's per-term BW trick is calibrated for out_bits == wa+wb.
-        # In the fused matmul out_bits = result_width > wa+wb, which exposes a
-        # signal-dependent bias the natural-width algebra cannot cancel. See
-        # the Booth upper-correction derivation in docs/README_arithmetic_generator.md (the dedicated doc was never added).
-        request.applymarker(pytest.mark.xfail(
-            reason="BOOTH_OPTIMISED unreliable in fused path for out_bits > wa+wb",
-            strict=False,
-        ))
+        # BOOTH_OPTIMISED's per-term BW trick is calibrated for out_bits == wa+wb; the fused
+        # result_width > wa+wb exposes a signal-dependent bias. With SEEDED vectors the outcome
+        # is deterministic, so only the configurations that actually exhibit the bias are
+        # xfailed (strict) — the rest are real regression tests, not permanent xpasses.
+        biased = (encoding == Encoding.twos_complement and dim_k in (2, 3, 5, 7)) or \
+                 (encoding == Encoding.unsigned and dim_k in (5, 7))
+        if biased:
+            request.applymarker(pytest.mark.xfail(
+                reason="BOOTH_OPTIMISED bias in fused path for out_bits > wa+wb (seed-42 vector set)",
+                strict=True,
+            ))
 
     mult_cfg = MultiplierConfig(
         ppg_opt=ppg_opt,

@@ -47,6 +47,13 @@ class MMAcFusedCfg:
 
 
 def fused_inner_product(vec_a: Iterable[Expr], vec_b: Iterable[Expr], c_term: Expr, mult_cfg: MultiplierConfig, encoding: Encoding) -> Expr:
+    """Fused y = sum(a_i * b_i) + c as ONE compressor tree (per-product partial products,
+    corrections and the c term all merge into shared columns; a single final-stage adder).
+
+    Supported encodings: Encoding.unsigned and Encoding.twos_complement. The single
+    `encoding` applies to a, b and c alike; mixed or per-operand encodings are not
+    supported. Sign-magnitude has its own variant in matmul_accumulate_core_sign_magnitude_fused.
+    """
     a_list: List[Expr] = list(vec_a)
     b_list: List[Expr] = list(vec_b)
     if len(a_list) != len(b_list):
