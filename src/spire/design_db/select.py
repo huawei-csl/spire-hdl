@@ -141,20 +141,19 @@ def _obj_repr(objective: ObjectiveSpec) -> str:
     return objective if isinstance(objective, str) else repr(objective)
 
 
-def select_design(spec_key: str, *, objective: ObjectiveSpec = "area",
-                  metric: Optional[str] = None, pin: Optional[str] = None,
-                  sources: Optional[Sequence[str]] = None,
-                  db: Optional[Any] = None, record: bool = False) -> Optional[SelectionResult]:
-    """Pick one admitted design of a slot. Returns None when no eligible design exists.
+def pick_design(spec_key: str, *, objective: ObjectiveSpec = "area",
+                metric: Optional[str] = None, pin: Optional[str] = None,
+                sources: Optional[Sequence[str]] = None,
+                db: Optional[Any] = None) -> Optional[SelectionResult]:
+    """Pick one admitted design of a slot — a pure query, no side effects on the library.
+    Returns None when no eligible design exists.
 
     ``pin`` bypasses metrics and demands an exact ``design_id`` — a missing pin is a broken
-    reproducibility lock and raises. With ``record=True`` the resolved
-    ``(selected_id, objective, metric)`` is written into the manifest.
+    reproducibility lock and raises.
 
-    When no explicit ``pin`` is given, active **selection overrides** (``$SPIREHDL_DB_PINS`` /
-    ``selection_overrides(...)`` — see ``overrides.py``) are consulted, keyed by spec_key or
-    manifest name; an override behaves like a pin but is never recorded (what-if compiles are
-    not library state).
+    When no explicit ``pin`` is given, active **temporary selection overrides**
+    (``$SPIREHDL_DB_PINS`` / ``selection_overrides(...)`` — see ``overrides.py``) are
+    consulted, keyed by spec_key or manifest name; an override behaves like a pin.
 
     Readers never create: the store is opened without auto-creation, so a missing DB reads as
     an empty slot (returns None) instead of materializing ``./design_db``.
@@ -162,7 +161,6 @@ def select_design(spec_key: str, *, objective: ObjectiveSpec = "area",
     d = DesignDB.open(db, create=False)
     index = d.read_index(spec_key)
 
-    overridden = False
     if pin is None:
         from spire.design_db.overrides import current_overrides
         ov = current_overrides()
@@ -175,7 +173,7 @@ def select_design(spec_key: str, *, objective: ObjectiveSpec = "area",
                         hit = ov[name]
                         break
             if hit is not None:
-                pin, overridden = hit, True
+                pin = hit
 
     if pin is not None:
         if pin not in index:
@@ -200,10 +198,6 @@ def select_design(spec_key: str, *, objective: ObjectiveSpec = "area",
         _, design_id, entry = eligible[0]
         result = SelectionResult(design_id, entry, _obj_repr(objective), system)
 
-    if record and not overridden:               # overrides are temporary — never recorded
-        d.update_manifest_selection(spec_key, {"selected_id": result.design_id,
-                                               "objective": result.objective,
-                                               "metric": result.metric})
     return result
 
 

@@ -8,12 +8,12 @@
 each subcircuit — a *slot* — the DB holds any number of implementations, each **proven correct
 against the slot's golden** before it is admitted, and each carrying metric vectors and
 provenance. Producers (optimization tools, agents, humans) *insert* through the verification
-gate; consumers *select* by objective. Generation and selection are fully decoupled: filling a
+gate; consumers *pick* by objective. Generation and selection are fully decoupled: filling a
 slot once lets every later build pick from it.
 
 **Slot identity.** A slot is defined by its **`spec_key`** — `sha256(structural golden AAG +
 port spec)`, 64 hex chars, also the slot's directory name — which is what every Python API call
-takes (`select_design(spec_key, …)`, `insert_design(spec_key, …)`, …) and what `register_slot`
+takes (`pick_design(spec_key, …)`, `insert_design(spec_key, …)`, …) and what `register_slot`
 returns. Slots additionally carry a permanent human *name* in the manifest (`name → spec_key`,
 e.g. `adder8`); the CLI resolves either a name or a unique key prefix, so
 `spire db insert cand.py --slot adder8` is one manifest lookup followed by the same key-based
@@ -107,14 +107,14 @@ internally.
 Selection is deterministic and instant — pure functions over the metric vectors stamped at insert:
 
 ```python
-from spire.design_db import select_design, constrained, weighted, lexicographic, pareto_front
+from spire.design_db import pick_design, constrained, weighted, lexicographic, pareto_front
 
-select_design(key, objective="area")                                   # argmin
-select_design(key, objective="delay", metric="aig")                    # explicit system
-select_design(key, objective=constrained(minimize="area", subject_to={"delay": 500}))
-select_design(key, objective=weighted({"area": 1.0, "delay": 0.1}))
-select_design(key, objective=lexicographic(("area", "delay")))
-select_design(key, pin="spire:1a2b3c4d5e")                             # reproducibility lock
+pick_design(key, objective="area")                                   # argmin
+pick_design(key, objective="delay", metric="aig")                    # explicit system
+pick_design(key, objective=constrained(minimize="area", subject_to={"delay": 500}))
+pick_design(key, objective=weighted({"area": 1.0, "delay": 0.1}))
+pick_design(key, objective=lexicographic(("area", "delay")))
+pick_design(key, pin="spire:1a2b3c4d5e")                             # reproducibility lock
 pareto_front(key)                                                      # non-dominated set
 ```
 
@@ -132,8 +132,11 @@ pareto_front(key)                                                      # non-dom
   one-shot interactive commands) — because a prefix that is unique today can become ambiguous
   as the slot grows: a reproducibility lock must not rot. A missing pin raises rather than
   falling back to a metric selection.
-- The resolved `(selected_id, objective, metric)` is recorded in the manifest, so builds are
-  reproducible and auditable.
+- **Picking is a pure query** — nothing is written to the DB or its manifest. For an audit
+  trail of what a *compile* actually spliced, set `$SPIREHDL_DB_SELECTION_LOG=<path>`: every
+  splice appends one JSON line `{spec_key, name, design_id, objective, metric}` there. The
+  compile's caller owns that file — selections are a property of the compiled artifact, not
+  the library (a library-side record could only ever say what the *last* compile chose).
 
 ### Temporary selection overrides (what-if compiles)
 
@@ -168,14 +171,14 @@ index maps every admitted `design_id` to its `source`, `created`, `struct_hash`,
 of sync with the slot's contents:
 
 ```python
-from spire.design_db import DesignDB, select_design
+from spire.design_db import DesignDB, pick_design
 
 d = DesignDB.open()                                      # --db / $SPIREHDL_DB_PATH / nearest
 spec_key = d.read_json(d.manifest_path)["slots"]["adder8"]["spec_key"]   # name -> key
 
 for design_id, info in d.read_index(spec_key).items():
     print(design_id, info["source"], info["metrics"]["transistors"])
-    sel = select_design(spec_key, pin=design_id)         # e.g. visit each design exactly
+    sel = pick_design(spec_key, pin=design_id)         # e.g. visit each design exactly
 ```
 
 Same from the shell: `spire db show adder8` dumps the slot as JSON with a `"designs"` object
@@ -235,7 +238,7 @@ and **after** the annotate above (the `asap7` block is added; the gate's blocks 
                    "objectives": {"area":"area", "delay":"delay"} } }
 ```
 
-Now `select_design(key, objective="area", metric="asap7")` (or `@from_design_db(metric="asap7")`)
+Now `pick_design(key, objective="area", metric="asap7")` (or `@from_design_db(metric="asap7")`)
 ranks on the ASAP7 area. `annotate` builds the block's `objectives` as the identity over the
 standard axes present in `values` (`area | delay | adp | edap`); other numeric keys are stored but
 not selectable; `--raw <file>` optionally stashes the full tool-stats blob under `.raw`. Reserved
@@ -361,8 +364,8 @@ design_db/v1/<spec_key>/        # spec_key = sha256(structural AAG + port spec)
     index.json                  # DERIVED CACHE of the roll-up {design_id -> {struct_hash,
                                 #   metrics, source, created}} — the designs/ dirs are the source
                                 #   of truth; the cache self-heals on every read (inspection aid)
-design_db/v1/manifest.json      # {registered name -> {spec_key, class, selected_id, …}} — names +
-                                #   selection provenance (fcntl-locked writes); counts are derived
+design_db/v1/manifest.json      # {registered name -> {spec_key, class}} — name bindings only
+                                #   (fcntl-locked writes); counts and indexes are derived
 ```
 
 **Concurrency.** Admission is a single atomic directory rename, and the per-slot index is
@@ -421,7 +424,8 @@ method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly
 | `check_design(spec_key, design, *, db=None, budget_s=None) -> dict` | Advisory: run the slot's set oracle against a candidate (no admit, no write). The read-only sibling of `insert_design`; raises the same `VerificationError`s on failure. |
 | `seed_original(spec_key, db=None, budget_s=None) -> InsertResult` | Insert the slot's golden as the baseline candidate (`source="original"`) — a selection floor; stores the slot's `starting_point.py` as its python source when present. |
 | `annotate(spec_key, design_ref, *, tech, values, raw=None, force=False, db=None) -> dict` | Attach a per-technology metric block (`metrics[tech]`) to a stored design; makes `metric=<tech>` selectable. `design_ref` = a `design_id` **or a unique prefix** of one (ambiguous/unknown raises — the looser sibling of `pin=`'s exact match). Writes `metrics.json`; the `index.json` cache refreshes from it. |
-| `select_design(spec_key, *, objective=, metric=, pin=, sources=, record=)` | Deterministic selection → `SelectionResult` (or None on an empty slot). Consults active selection overrides when `pin=` is not given. |
+| `pick_design(spec_key, *, objective=, metric=, pin=, sources=)` | Deterministic pick → `SelectionResult` (or None on an empty slot). A pure query; consults active selection overrides when `pin=` is not given. |
+| `$SPIREHDL_DB_SELECTION_LOG` | Opt-in compile-scoped splice log (one JSON line per `@from_design_db` splice) — see *Selection*. |
 | `selection_overrides({slot: design_id, …})` / `$SPIREHDL_DB_PINS` | Temporary what-if pins (context manager / env var) — see *Temporary selection overrides*. Never recorded. |
 | `pareto_front(spec_key, objectives=("area","delay"), metric=None)` | The non-dominated set. |
 | `constrained / weighted / lexicographic` | Objective combinators. |

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from spire.design_db import DesignDB, insert_design, register_slot, select_design, seed_original
+from spire.design_db import DesignDB, insert_design, register_slot, pick_design, seed_original
 from spire.design_db.cli import main as cli_main
 from spire.design_db.store import DB_ENV, VERSION_DIR
 
@@ -53,7 +53,7 @@ def test_index_is_derived_and_self_healing(db):
     assert cache.exists(), "read_index re-materializes the cache"
 
     cache.write_text("{}")                                # stale/corrupt cache → self-heals
-    sel = select_design(key, objective="area")
+    sel = pick_design(key, objective="area")
     assert sel is not None
     assert json.loads(cache.read_text()) == golden_view
 

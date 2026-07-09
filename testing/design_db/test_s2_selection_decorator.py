@@ -9,7 +9,7 @@ from spire.aiger import AigerExporter
 from spire.component import Netlist
 from spire.design_db import (DesignDBError, cec_check, constrained, from_design_db, insert_design,
                              lexicographic, metric_value, pareto_front, register_slot,
-                             select_design, weighted)
+                             pick_design, weighted)
 from spire.design_db.cli import main as cli_main
 from spire.design_db.store import DB_ENV, DesignDB, VERSION_DIR
 
@@ -39,7 +39,7 @@ def _filled_slot(db):
 def test_argmin_area_transistors_default(db):
     key, index = _filled_slot(db)
     expected = min(index.items(), key=lambda kv: (kv[1]["metrics"]["transistors"]["metrics"]["transistors_heavy"], kv[0]))[0]
-    sel = select_design(key, objective="area")
+    sel = pick_design(key, objective="area")
     assert sel.design_id == expected and sel.metric == "transistors"
 
 
@@ -47,7 +47,7 @@ def test_objective_delay_under_aig_metric(db):
     key, index = _filled_slot(db)
     expected = min(index.items(),
                    key=lambda kv: (kv[1]["metrics"]["aig"]["metrics"]["aig_depth"], kv[0]))[0]
-    sel = select_design(key, objective="delay", metric="aig")
+    sel = pick_design(key, objective="delay", metric="aig")
     assert sel.design_id == expected and sel.metric == "aig"
 
 
@@ -57,28 +57,28 @@ def test_constrained_weighted_lexicographic(db):
     areas = {k: v["metrics"]["transistors"]["metrics"]["transistors_heavy"] for k, v in index.items()}
     min_area_id = min(areas, key=lambda k: (areas[k], k))
     loose = max(depths.values())
-    sel = select_design(key, objective=constrained(minimize="area", subject_to={"delay": loose}))
+    sel = pick_design(key, objective=constrained(minimize="area", subject_to={"delay": loose}))
     assert sel.design_id == min_area_id
-    sel_w = select_design(key, objective=weighted({"area": 1.0, "delay": 0.0}))
+    sel_w = pick_design(key, objective=weighted({"area": 1.0, "delay": 0.0}))
     assert sel_w.design_id == min_area_id
-    sel_l = select_design(key, objective=lexicographic(("area", "delay")))
+    sel_l = pick_design(key, objective=lexicographic(("area", "delay")))
     assert sel_l.design_id == min_area_id
 
 
 def test_constrained_infeasible_returns_none(db):
     key, _ = _filled_slot(db)
-    assert select_design(key, objective=constrained(minimize="area",
+    assert pick_design(key, objective=constrained(minimize="area",
                                                     subject_to={"delay": -1})) is None
 
 
 def test_pin_and_broken_pin(db):
     key, index = _filled_slot(db)
     some_id = sorted(index)[0]
-    assert select_design(key, pin=some_id).design_id == some_id
+    assert pick_design(key, pin=some_id).design_id == some_id
     with pytest.raises(DesignDBError):
-        select_design(key, pin="nope:0000000000")
+        pick_design(key, pin="nope:0000000000")
     with pytest.raises(DesignDBError):
-        select_design(key, objective="area", metric="asap7")   # no technology scored yet
+        pick_design(key, objective="area", metric="asap7")   # no technology scored yet
 
 
 def test_pareto_front_nondominated(db):
@@ -93,12 +93,13 @@ def test_pareto_front_nondominated(db):
                         and (b["area"] < a["area"] or b["delay"] < a["delay"]))
 
 
-def test_selection_recorded_in_manifest(db):
+def test_pick_design_is_a_pure_query(db):
+    """Picking writes nothing: the manifest carries name bindings only, never selections."""
     key, _ = _filled_slot(db)
-    sel = select_design(key, objective="area", record=True)
-    manifest = json.loads((db / VERSION_DIR / "manifest.json").read_text())
-    entry = manifest["slots"]["adder8"]
-    assert entry["selected_id"] == sel.design_id and entry["metric"] == "transistors"
+    before = (db / VERSION_DIR / "manifest.json").read_text()
+    assert pick_design(key, objective="area") is not None
+    assert (db / VERSION_DIR / "manifest.json").read_text() == before
+    assert "selected_id" not in before
 
 
 # --- the decorator -------------------------------------------------------------------------------
@@ -166,9 +167,6 @@ def test_decorator_splices_selected_design(db, tmp_path):
     tv.write_text(top.to_verilog())
     pv.write_text(plain.to_verilog())
     cec_check(tv, pv, tmp_path / "cec")                     # …but must stay equivalent
-    manifest = json.loads((db / VERSION_DIR / "manifest.json").read_text())
-    assert any(e.get("selected_id") for e in manifest["slots"].values()
-               if e["spec_key"] == key)
 
 
 def test_decorator_fill_hook_fires_once(db):
@@ -255,7 +253,7 @@ def test_seed_original_is_floor_and_idempotent(db):
     res = seed_original(key)
     assert res.design_id.startswith("original:") and not res.deduped
     assert seed_original(key).deduped                        # idempotent via structural dedup
-    sel = select_design(key, objective="area")
+    sel = pick_design(key, objective="area")
     assert sel.design_id == res.design_id                    # the floor: only candidate = original
 
 

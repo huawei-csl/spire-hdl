@@ -2,7 +2,7 @@
 
 For each subcircuit (a *slot*, keyed by its golden spec) the DB holds correct implementations,
 each with metric vectors and provenance. Producers (optimization tools, agents, humans) insert
-through the verification gate; consumers select deterministically — most ergonomically via the
+through the verification gate; consumers pick deterministically — most ergonomically via the
 ``@from_design_db`` decorator, which splices the selected implementation in place of the decorated
 function (miss ⇒ the original logic).
 
@@ -12,13 +12,13 @@ the insert gate; S2 adds selection, the decorator, and the ``spire db`` CLI. Hea
 stays dependency-light.
 """
 from spire.design_db.annotate import annotate  # noqa: F401
-from spire.design_db.decorator import from_design_db  # noqa: F401
+from spire.design_db.decorator import SELECTION_LOG_ENV, from_design_db  # noqa: F401
 from spire.design_db.insert import (InsertResult, check_design, insert_design,  # noqa: F401
                                     seed_original)
 from spire.design_db.keys import CANONICAL_TOP, golden_and_key, normalize, port_spec, spec_key  # noqa: F401
 from spire.design_db.overrides import PINS_ENV, selection_overrides  # noqa: F401
 from spire.design_db.select import (SelectionResult, constrained, lexicographic,  # noqa: F401
-                                    metric_value, pareto_front, resolve_metric, select_design,
+                                    metric_value, pareto_front, resolve_metric, pick_design,
                                     weighted)
 from spire.design_db.store import (DB_DIRNAME, DB_ENV, DesignDB, DesignDBError,  # noqa: F401
                                    register_slot, resolve_db_root)

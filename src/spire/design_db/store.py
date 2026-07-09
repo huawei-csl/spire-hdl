@@ -137,7 +137,7 @@ class DesignDB:
                 pass                                 # cache refresh must never break a read
         return index
 
-    # -- manifest (small primary record: name bindings + selection provenance; counts derived)
+    # -- manifest (small primary record: name bindings; counts derived)
 
     def _locked_manifest_write(self, mutate) -> None:
         """Read-modify-write the manifest under an fcntl lock — manifest writes are rare
@@ -161,18 +161,6 @@ class DesignDB:
             manifest["slots"][name] = slot
             return True
         self._locked_manifest_write(_mutate)
-
-    def update_manifest_selection(self, spec_key: str, fields: Dict[str, Any]) -> None:
-        """Record the resolved selection on every manifest entry of this slot."""
-        def _mutate(manifest: Dict[str, Any]) -> bool:
-            changed = False
-            for entry in manifest.get("slots", {}).values():
-                if entry.get("spec_key") == spec_key:
-                    entry.update(fields)
-                    changed = True
-            return changed
-        self._locked_manifest_write(_mutate)
-
 
 def register_slot(module_or_component: Any, db: Optional[str | Path] = None, *,
                   name: Optional[str] = None) -> str:

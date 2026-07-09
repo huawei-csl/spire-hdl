@@ -1,6 +1,6 @@
-"""Temporary selection overrides — force ``select_design`` to specific design_ids.
+"""Temporary selection overrides — force ``pick_design`` to specific design_ids.
 
-Two front doors over one registry, consulted by ``select_design`` whenever no explicit
+Two front doors over one registry, consulted by ``pick_design`` whenever no explicit
 ``pin=`` is given:
 
 - ``$SPIREHDL_DB_PINS`` — a JSON object ``{slot: design_id}`` in the environment. Crosses
@@ -61,7 +61,7 @@ def current_overrides() -> Dict[str, str]:
 
 @contextmanager
 def selection_overrides(pins: Mapping[str, str]) -> Iterator[None]:
-    """Scope-force selections: every ``select_design`` (and therefore every
+    """Scope-force selections: every ``pick_design`` (and therefore every
     ``@from_design_db`` splice) inside the block resolves the listed slots to the given
     design_ids::
 

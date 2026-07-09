@@ -8,7 +8,7 @@ the ``index.json`` cache re-derives from it).
 
 A ``tech`` names a new *measurement system* on the design, written in the same self-describing
 form the gate uses — ``{"metrics": {...}, "objectives": {area→…, delay→…}}`` — so that after
-annotating ``asap7`` the design is selectable with ``select_design(..., metric="asap7")`` /
+annotating ``asap7`` the design is selectable with ``pick_design(..., metric="asap7")`` /
 ``@from_design_db(metric="asap7")``. The ``objectives`` map is the identity over the standard axes
 present (``area``/``delay``/``adp``/``edap``); ``adp`` is derived by selection when unmapped.
 Reserved system names (the gate-stamped ones) are refused; re-annotating an existing system needs

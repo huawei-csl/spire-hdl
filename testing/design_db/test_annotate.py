@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from spire.design_db import annotate, insert_design, register_slot, select_design
+from spire.design_db import annotate, insert_design, register_slot, pick_design
 from spire.design_db.cli import main as cli_main
 from spire.design_db.store import DB_ENV, DesignDBError, VERSION_DIR
 
@@ -123,11 +123,11 @@ def test_annotate_unlocks_metric_selection(db):
     # asap7: make the candidate strictly better, so metric='asap7' must pick it.
     annotate(key, original_id, tech="asap7", values={"area": 120.0, "delay": 90.0})
     annotate(key, cand_id, tech="asap7", values={"area": 100.0, "delay": 88.0})
-    sel = select_design(key, objective="area", metric="asap7", db=db)
+    sel = pick_design(key, objective="area", metric="asap7", db=db)
     assert sel.design_id == cand_id and sel.metric == "asap7"
 
     with pytest.raises(DesignDBError, match="not available"):
-        select_design(key, objective="area", metric="nosuchtech", db=db)
+        pick_design(key, objective="area", metric="nosuchtech", db=db)
 
 
 def test_cli_annotate(db, capsys):

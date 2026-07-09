@@ -11,7 +11,7 @@ pytest.importorskip("pyosys", reason="the no-binary path needs the pyosys wheel"
 from spire import UInt
 from spire.component import Netlist
 from spire.design_db import (VerificationFailed, insert_design, register_slot, seed_original,
-                             select_design)
+                             pick_design)
 from spire.design_db.store import DB_ENV
 
 
@@ -71,4 +71,4 @@ def test_gate_without_binaries(db, no_binaries):
         insert_design(key, WRONG, source="verilog")
     again = insert_design(key, CARRY_SAVE_SWAPPED_PORTS, source="verilog")
     assert again.deduped
-    assert select_design(key, objective="area") is not None
+    assert pick_design(key, objective="area") is not None

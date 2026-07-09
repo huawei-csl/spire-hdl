@@ -62,9 +62,8 @@ def _cmd_ls(args: argparse.Namespace) -> int:
             print(f"(no design DB found — `spire db init` would create {d.root})")
         return 0
     for name, e in sorted(rows.items()):
-        sel = e.get("selected_id", "-")
         print(f"{name:32s} {e.get('class', '?'):13s} designs={counts.get(e.get('spec_key'), 0):<3d} "
-              f"key={e['spec_key'][:12]}…  selected={sel}")
+              f"key={e['spec_key'][:12]}…")
     return 0
 
 

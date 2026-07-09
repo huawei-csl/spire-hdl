@@ -18,10 +18,32 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from spire.design_db import keys as _keys
-from spire.design_db.select import ObjectiveSpec, select_design
+from spire.design_db.select import ObjectiveSpec, pick_design
 from spire.design_db.store import DesignDB, DesignDBError, register_slot
 
 _MISS_NOTED: set = set()
+
+#: opt-in, compile-scoped selection log: when set, every splice appends one JSON line
+#: {spec_key, name, design_id, objective, metric} to this path. The compile's caller owns the
+#: file (create/rotate/read) — selections are a property of the compiled artifact, not the
+#: library, so nothing is ever written into the DB or its manifest.
+SELECTION_LOG_ENV = "SPIREHDL_DB_SELECTION_LOG"
+
+
+def _log_selection(spec_key: str, name: str, sel: Any) -> None:
+    import json as _json
+    import os as _os
+    path = _os.environ.get(SELECTION_LOG_ENV)
+    if not path:
+        return
+    try:
+        with open(path, "a") as fh:
+            fh.write(_json.dumps({"spec_key": spec_key, "name": name,
+                                  "design_id": sel.design_id, "objective": sel.objective,
+                                  "metric": sel.metric}) + "\n")
+    except OSError:
+        pass                                    # observability must never break a compile
+
 
 # Names importable from `spire` that a self-contained starting point may reference freely.
 _ALLOWED_GLOBALS = {"UInt", "SInt", "Bool", "Signal", "Wire", "Register", "Input", "Output",
@@ -84,10 +106,10 @@ def from_design_db(_fn: Optional[Callable[..., Any]] = None, *,
             d = DesignDB.open(db)
             _capture_source(d, key, fn)
 
-            sel = select_design(key, objective=objective, metric=metric, pin=pin, db=db, record=True)
+            sel = pick_design(key, objective=objective, metric=metric, pin=pin, db=db)
             if sel is None and fill is not None:
                 fill(key, db_root=d.root, objective=objective, metric=metric)
-                sel = select_design(key, objective=objective, metric=metric, db=db, record=True)
+                sel = pick_design(key, objective=objective, metric=metric, db=db)
             if sel is None:
                 if key not in _MISS_NOTED:
                     print(f"[spire.design_db] slot {key[:12]}… has no admitted design — "
@@ -95,6 +117,7 @@ def from_design_db(_fn: Optional[Callable[..., Any]] = None, *,
                     _MISS_NOTED.add(key)
                 return fn(*args, **kwargs)                   # the original logic, inline
 
+            _log_selection(key, name or fn.__qualname__, sel)
             aag_lines = _load_design_aag(d, key, sel.design_id)
             spec_ports = d.read_json(d.slot_dir(key) / "spec.json")["ports"]
             spec = {p["name"]: HDLType(p["width"], signed=p["signed"]) for p in spec_ports}
