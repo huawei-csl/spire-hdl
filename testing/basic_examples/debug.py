@@ -39,7 +39,7 @@ def build_round_probe(FW: int) -> Netlist:
     sig_shiftN <<= sig_pre >> sh
 
     frac_trunc = m.output(UInt(FW), "frac_trunc")
-    frac_trunc <<= sig_shiftN[FW - 1 : 0]
+    frac_trunc <<= sig_shiftN[0:FW]
 
     # prefix ORs of sig_pre (LSB upward)
     pref = []

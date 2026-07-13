@@ -102,7 +102,7 @@ multiplier and the adder).
 |-----------|---------|-------------|
 | `abc_script` | `ABC_RECIPES["balanced"]` (`"strash; dch -f; balance"`) | ABC commands to run on the gate-level AIG. Raw string or an `ABC_RECIPES` entry |
 | `prep_script` | `"techmap; opt; abc -fast; opt"` | Yosys passes that lower coarse cells to gates before ABC. Rarely changed |
-| `timeout` | `120` | Wall-clock seconds for the ABC subprocess. Raise for long scripts (e.g. `&deepsyn`/`&transtoch` with big budgets); `None` waits indefinitely |
+| `timeout` | `None` (wait indefinitely) | Wall-clock seconds for the ABC subprocess. Set a number to bound long scripts (e.g. `&deepsyn`/`&transtoch` with big budgets) |
 | `cache_read` | `"both"` | Which caches to consult: `"none"` / `"mem"` / `"disk"` / `"both"` |
 | `cache_write` | `"both"` | Which caches to populate: same values |
 | `cache_dir` | `None` | Override cache directory |
@@ -166,9 +166,10 @@ def optimized_mult(a, b):
 | `nb_runs` | `1` | Number of parallel optimization runs |
 | `nb_workers` | `10` | Parallel workers for multi-run |
 | `iterations` | `1` | MockTurtle iterations per run |
-| `mockturtle_chains` | `1` | Number of MockTurtle chains |
+| `mockturtle_chains` | `10` | Number of MockTurtle chains (effective default from `_DEFAULT_OPTIMIZE_KWARGS`, overridable via `flowy_config.json`) |
 | `mockturtle_chain_len` | `10` | Chain length |
-| `direct` | `False` | `True` = local execution, `False` = Docker |
+| `mockturtle_chain_workers` | `10` | Parallel workers per chain (effective default from `_DEFAULT_OPTIMIZE_KWARGS`) |
+| `direct` | `True` | `True` = local execution, `False` = Docker (effective default from `_DEFAULT_OPTIMIZE_KWARGS`) |
 | `pareto_point` | `None` | Select a specific Pareto-front design (0 = best area) |
 | `cache_read` | `"both"` | Which caches to consult: `"none"` / `"mem"` / `"disk"` / `"both"` |
 | `cache_write` | `"both"` | Which caches to populate: same values |
@@ -190,13 +191,14 @@ Both decorators above share the same two-level cache:
 1. **In-memory** -- keyed by a SHA-256 hash of the Verilog content + non-logic arguments + optimizer parameters.  Instant on repeated calls within the same process.
 2. **Disk** -- stored in `.spire_cache/v1/` as JSON files containing the optimized AAG lines and port spec.  Survives across runs.
 
-Use `clear_optimization_cache()` to reset the in-memory cache, or delete `.spire_cache/` for the disk cache.
+Use `clear_optimization_cache()` to reset the caches — by default it clears the in-memory cache AND removes the versioned disk cache (`.spire_cache/v1/`); pass `disk=False` for in-memory only.
 
 ```python
 from spire.optimize import set_cache_dir, clear_optimization_cache
 
 set_cache_dir("/my/cache/path")   # override default location
-clear_optimization_cache()         # clear in-memory cache
+clear_optimization_cache()         # clears in-memory AND the .spire_cache/v1/ disk cache
+clear_optimization_cache(disk=False)  # in-memory only
 ```
 
 Reads and writes are independently gated by `cache_read` and `cache_write`.  Each takes one of `"none"`, `"mem"`, `"disk"`, `"both"`.

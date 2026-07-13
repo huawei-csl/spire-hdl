@@ -13,27 +13,6 @@ from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_list im
 
 def run_stage_multiplier_ext_demo() -> None:  # pragma: no cover - demonstration only
 
-    class MultiplierEncodings(NamedTuple):
-        a: Encoding
-        b: Encoding
-        y: Encoding
-
-        def with_(self, **changes) -> Self:
-            return self._replace(**changes)
-
-        def set_inputs(self, enc: Encoding) -> Self:
-            return self.with_(a=enc, b=enc)
-
-        def set_output(self, enc: Encoding) -> Self:
-            return self.with_(y=enc)
-
-        def set_all(self, enc: Encoding) -> Self:
-            return self.with_(a=enc, b=enc, y=enc)
-
-        @classmethod
-        def with_enc(cls, enc: Encoding) -> Self:
-            return cls(a=enc, b=enc, y=enc)
-
     config_items = demos1
 
 

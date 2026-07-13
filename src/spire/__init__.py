@@ -28,3 +28,10 @@ __all__ = [
     "Simulator",
     "VERILOG_BANNER",
 ]
+
+# Runtime version: resolved from installed metadata; falls back for src checkouts.
+try:
+    from importlib.metadata import version as _pkg_version
+    __version__ = _pkg_version("spire-hdl")
+except Exception:  # pragma: no cover - not installed (editable/src usage)
+    __version__ = "0.0.0+unknown"

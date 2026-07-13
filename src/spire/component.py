@@ -1,7 +1,8 @@
 import abc
+import warnings
 from dataclasses import make_dataclass
 
-from spire.expr import Signal, UInt
+from spire.expr import HDLType, Signal, UInt
 from spire.memory import _MemoryArray
 
 
@@ -15,6 +16,7 @@ except ImportError:
     from typing_extensions import Self  # type: ignore
 
 from spire.analyzer import GraphReport
+from spire.control_structures import fresh_condition_scope
 from spire.visitor import expr_children
 
 
@@ -36,8 +38,11 @@ class _ComponentMeta(abc.ABCMeta):
     """
 
     def __call__(cls, *args, **kwargs):
-        obj = super().__call__(*args, **kwargs)   # runs the full __init__ chain (ABCMeta enforces abstractness)
-        obj._finalize()
+        # Construction always elaborates with clean condition state: an enclosing if_ gates assignments, not
+        # elaboration, and pending if-chains cannot leak in either direction across the component boundary.
+        with fresh_condition_scope():
+            obj = super().__call__(*args, **kwargs)   # runs the full __init__ chain (ABCMeta enforces abstractness)
+            obj._finalize()
         return obj
 
 
@@ -73,7 +78,7 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         ...
 
     def get_ios(self) -> "CompositeRecord":
-        """Return this component's IO as an composite record — the single IO normalization point.
+        """Return this component's IO as a composite record — the single IO normalization point.
 
         Default: normalize ``self.io`` (dataclass / dict / namedtuple / ``IORecord``) via
         ``_to_composite``. Override for components whose IO is not a simple stored ``self.io``
@@ -105,7 +110,7 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
 
     def to_netlist(self, name: Optional[str] = None, with_clock: bool = False, with_reset: bool = False) -> 'Netlist':
         module = Netlist(
-            name or f"comp_{get_rand_hash()}",
+            name or self.name,  # deterministic default: the component's class name
             with_clock=with_clock,
             with_reset=with_reset,
         )
@@ -113,15 +118,10 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         for sig in self.get_ios().to_list():
             sig: Signal
 
-            # if is clock/reset assign to module clk/rst
-            if sig.name == "clk":
-                if module.clk is None:
-                    module.clk = sig
-                continue
-            if sig.name == "rst":
-                if module.rst is None:
-                    module.rst = sig
-                continue
+            # Clock and reset are framework-provided, never IO leaves: request them via with_clock/with_reset.
+            if sig.name in ("clk", "rst"):
+                raise ValueError(f"IO leaf '{sig.name}': clock/reset are not declared in a component's IO — "
+                                 f"pass with_clock=True / with_reset=True to to_netlist()/to_verilog() instead")
 
             if sig.kind == "input":
                 module.add_input(sig)
@@ -137,24 +137,52 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         if group:
             IOCollector().group(module, self.get_spec())
 
-        # Map the AIG module's ports to this component's IO fields.
-        # Use _ports (which have canonical grouped names after group())
-        # rather than _signals (which may contain renamed duplicates).
+        # Map the module's ports onto this component's IO fields, from _ports (final grouped names
+        # after group()), not _signals (which may contain renamed duplicates).
         for sig in module._ports:
+            # Component IO reserves these names (to_netlist injects them); an rst data input is usually a folded reset.
+            if sig.name in ("clk", "rst"):
+                raise ValueError(
+                    f"imported design has a data port named {sig.name!r}, reserved for the framework-injected "
+                    f"clock/reset; rename it in the source (a with_reset export folds its reset into an input)")
             if sig.kind in ('input', 'output'):
                 setattr(self.io, sig.name, sig)
             else:
                 raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
-        self.elaborate()  # re-elaborate to rebuild internal structure
+        # Re-running a real elaborate() would re-drive outputs over the imported logic; only no-op
+        # ImportedComponent shells re-elaborate (harmlessly).
+        if type(self).elaborate is ImportedComponent.elaborate:
+            self.elaborate()
+        else:
+            warnings.warn("from_module: skipping elaborate() — the imported module already drives the IO",
+                          RuntimeWarning, stacklevel=2)
         self._finalize()
         # No inlining step: if this imported component is later embedded in a parent, the parent's
         # emitter classifies its ports as internal wires by membership (see ir.py).
+        return self
 
     def from_verilog(self, verilog_str: str, top=None, group=True) -> Self:
-        from spire.aig.aig_yosys import aig_file_to_aag_lines_via_yosys
+        """Import a design from Verilog SOURCE TEXT — the counterpart of ``to_verilog()``.
+        """
+        import os
+        import tempfile
 
-        aag_lines = verilog_to_aag_lines_via_yosys(verilog_str, top=top, embed_symbols=True, no_startoffset=True)
-        self.from_aag_lines(aag_lines, group=group)
+        fd, path = tempfile.mkstemp(suffix=".v")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(verilog_str)
+            return self.from_verilog_file(path, top=top, group=group)
+        finally:
+            os.remove(path)
+
+    def from_verilog_file(self, verilog_path: str, top=None, group=True) -> Self:
+        """Import a design from a Verilog file — the counterpart of ``to_verilog_file()``.
+
+        Sequential designs work too: registers arrive as 1-bit AIGER latches on the global clock and start at 0.
+        """
+        aag_lines = verilog_to_aag_lines_via_yosys(verilog_path, top=top, embed_symbols=True,
+                                                   no_startoffset=True)
+        return self.from_aag_lines(aag_lines, group=group)
 
     def from_aig_file(self, aig_path: str, map_file: str|None = None, group=True) -> Self:
         from spire.aig.aig_yosys import aig_file_to_aag_lines_via_yosys
@@ -167,17 +195,14 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         from spire.aiger import AigerImporter
 
         m = AigerImporter(aag_lines).get_spire_module()
-        self.from_module(m, group=group)
+        return self.from_module(m, group=group)
 
     @classmethod
     def from_netlist(cls, net: "Netlist") -> "Component":
         """Wrap a netlist's ports as a Component IO (shares Signal objects, no copy).
 
-        Absorbs the former ``Netlist.to_component()`` — this is the spec-free reinsertion path
-        (e.g. an optimized AIG with no predefined Component subclass). Port names that are not valid
-        Python identifiers (e.g. bit-ports ``a[0]``) are sanitized for the IO field name; the Signal
-        keeps its original ``.name`` so codegen/analysis are unaffected. Returns an
-        ``ImportedComponent`` (a concrete trivial subclass), so the ABC contract holds.
+        Spec-free reinsertion (absorbs the former ``Netlist.to_component()``), e.g. for an optimized AIG; returns
+        an ``ImportedComponent``. Non-identifier ports (a[0]) get sanitized field names; the Signal keeps ``.name``.
         """
         port_signals = [p for p in net._ports if p.kind in ("input", "output")]
 
@@ -198,10 +223,11 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
             io_fields.append((field_name, Signal))
             values[field_name] = sig
 
-        IO = make_dataclass("IO", io_fields, bases=(CompositeRecord,))
+        # init=False: CompositeRecord.__init__ names leaves by field key; eq=False: no Signal-comparing __eq__.
+        IO = make_dataclass("IO", io_fields, bases=(CompositeRecord,), init=False, eq=False)
         return ImportedComponent(IO(**values))
 
-    def get_spec(self) -> Dict[str, UInt]:
+    def get_spec(self) -> Dict[str, HDLType]:
         return {s.name: s.typ for s in self.get_ios().to_list()}
 
     # Deprecated method aliases (renamed for clarity; kept for one release).
@@ -244,8 +270,11 @@ class CustomVerilogComponent(Component):
         - tags IO outputs ``_no_emit_drive`` only — the declaration stays (parents reference it) but the
           elaborate ``assign`` is dropped, so the custom block provides the value;
         - for memory, follows store ↔ port-wire edges so state reachable only through a store is tagged too;
-        - for sub-components, stops at any signal owned by a *different* Component (it self-tags) — neither
-          tagging nor crossing it;
+        - for sub-components: a custom-Verilog sub-component is a boundary (neither tagged nor crossed;
+          its own block provides those signals), while a plain component constructed inside ``elaborate()``
+          is part of the simulation model and is absorbed like any other internal signal;
+        - stops at this component's own *input* leaves: external values enter only through the IO boundary
+          (a signal captured directly at construction and used by ``elaborate`` would be absorbed as internal);
         - for blackboxes, sets ``self._is_blackbox`` when no output had an elaborate driver — the cue the
           collector uses to peer-seed the inputs.
         """
@@ -268,11 +297,13 @@ class CustomVerilogComponent(Component):
                 stack.extend(expr_children(node))
                 continue
             owner = getattr(node, "_owning_component", None)
-            if owner is not None and owner is not self:
-                continue   # sub-component boundary
+            if owner is not None and owner is not self and hasattr(owner, "custom_verilog"):
+                continue   # self-tagging custom sub-component: its own block provides this signal
             if nid not in io_ids:
                 node._no_emit_decl = True
                 node._no_emit_drive = True
+            elif node.kind == "input":
+                continue  # own input leaf: the IO boundary — its driver is enclosing-context wiring
             if node._driver is not None:
                 stack.append(node._driver)
             if isinstance(node, _MemoryArray):

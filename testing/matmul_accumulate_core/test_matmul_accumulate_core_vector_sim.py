@@ -79,8 +79,9 @@ def _build_vectors(core, num_vectors: int) -> list[tuple[str, dict[str, int], di
 
 
 def _build_vectors_encoding(
-    core, encoding: Encoding, num_vectors: int
+    core, encoding: Encoding, num_vectors: int, seed: int = 42
 ) -> TestVectors:
+    np.random.seed(seed)  # reproducible .dat artifacts (the unused _build_vectors already seeds)
     a_width = core.A[0, 0].typ.width
     b_width = core.B[0, 0].typ.width
     c_width = core.C[0, 0].typ.width
@@ -178,11 +179,17 @@ def test_mmac_core_vector_simulation():
         sim_tb, vectors, decoder=None, print_on_pass=False, test_name="TbGen Simulation"
     )
 
-    write_vector_data_file(vectors, "mmac_core_vectors.dat")
-    sim_tb.to_data_driver_testbench_file(filepath="mmac_core_tb_sim.v", data_file="mmac_core_vectors.dat")
+    import os as _os
+    import tempfile as _tempfile
+    _out = _tempfile.mkdtemp(prefix="mmac_core_")  # don't write into the repo root
+    write_vector_data_file(vectors, _os.path.join(_out, "mmac_core_vectors.dat"))
+    # Relative data_file: the tb text stays relocatable (run iverilog from _out); an absolute
+    # $fopen path bakes this machine's temp dir into the artifact.
+    sim_tb.to_data_driver_testbench_file(filepath=_os.path.join(_out, "mmac_core_tb_sim.v"),
+                                         data_file="mmac_core_vectors.dat")
 
     # also save verilog file
-    core.module.to_verilog_file("mmac_core.v")
+    core.module.to_verilog_file(_os.path.join(_out, "mmac_core.v"))
 
     # swact simulation -------------------------------
     switches = sim_and_switch_count(core.module, vectors)

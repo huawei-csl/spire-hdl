@@ -280,8 +280,6 @@ def run_test_one_module(m: Netlist, spec: Dict[str, UInt], vectors, *, decoder=N
     # 3) Verilog → Pyosys → AIGER → AIG
     vpath = write_temp_verilog(m, top_name=m.name)
 
-    # for testing copy vpath to local dir
-    os.system(f"cp {vpath} ./{m.name}.v")
     aag_path, map_path = verilog_to_aag_via_yosys(vpath, top=m.name, embed_symbols=True, no_startoffset=True)
     aig_pyo = read_aag_into_aig(aag_path)
 

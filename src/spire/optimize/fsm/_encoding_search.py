@@ -17,8 +17,18 @@ from __future__ import annotations
 
 import random
 from itertools import permutations
-from math import factorial
 from typing import Callable, Literal, TYPE_CHECKING
+
+
+def _perm_count(m: int, n: int, cap: int) -> int:
+    """P(m, n) = m!/(m-n)! with early exit above ``cap`` — the REAL exhaustive space
+    (permutations of n codes from the full 2^width universe, not n!)."""
+    total = 1
+    for i in range(n):
+        total *= (m - i)
+        if total > cap:
+            return total
+    return total
 
 if TYPE_CHECKING:
     from spire.state import State
@@ -159,9 +169,12 @@ def search_encoding(
         raise NotImplementedError("anneal strategy is future work")
 
     if strategy == "auto":
+        # Gate exhaustive on the REAL space P(2^width, n). n! equals it only when 2^width == n;
+        # gating on n! sent 5-state ONEHOT classes (width 5, P(32,5) ≈ 24 million syntheses)
+        # into an effective hang.
         if n <= 2:
             strategy = "predefined"
-        elif factorial(n) <= exhaustive_budget:
+        elif _perm_count(1 << width, n, exhaustive_budget) <= exhaustive_budget:
             strategy = "exhaustive"
         else:
             strategy = "swap"

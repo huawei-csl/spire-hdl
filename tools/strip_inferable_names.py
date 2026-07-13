@@ -11,9 +11,9 @@ the same name at that call site, i.e. all of:
   * the explicit name string equals that ``lhs`` / field name.
 
 This mirrors ``signal_name_inference`` exactly, so the transformed code builds
-identical Signals. ``Signal("x", T, K)`` (positional) is rewritten to the
-keyword form ``Signal(typ=T, kind=K)`` because, without the leading name, the
-remaining positionals would bind to the wrong parameters.
+identical Signals. ``name`` is the LAST parameter of ``Signal(typ, kind, name)``,
+so dropping a redundant trailing name (positional or keyword) leaves the
+remaining arguments binding exactly as before.
 
 Usage:
     python tools/strip_inferable_names.py            # dry run, prints summary
@@ -65,7 +65,7 @@ def _rebuild(src: str, node: ast.Call, ctor: str, removal) -> str | None:
             parts.append((f"{k.arg}=" if k.arg else "**") + _seg(src, k.value))
     else:  # positional name
         idx = removal[1]
-        role = {1: "typ", 2: "kind"} if ctor == "Signal" else {}
+        role = {}  # name is the LAST positional for all three ctors now — no keywording needed
         for i, a in enumerate(pos):
             if i == idx:
                 continue
@@ -127,7 +127,8 @@ def transform_python(src: str):
         if "name" in kw and isinstance(kw["name"].value, ast.Constant) and isinstance(kw["name"].value.value, str):
             name_str, removal = kw["name"].value.value, ("kw", "name")
         else:
-            idx = {"Signal": 0, "Wire": 1, "Register": 2}[ctor]
+            # Current signatures: Signal(typ, kind, name); Wire(typ, name); Register(typ, init, name)
+            idx = {"Signal": 2, "Wire": 1, "Register": 2}[ctor]
             if len(node.args) > idx and isinstance(node.args[idx], ast.Constant) and isinstance(node.args[idx].value, str):
                 name_str, removal = node.args[idx].value, ("pos", idx)
         if name_str is None:
@@ -156,10 +157,6 @@ def transform_python(src: str):
 # --------------------------------------------------------------------------- #
 # Text (markdown + .py comments): conservative regex
 # --------------------------------------------------------------------------- #
-_T_POS = re.compile(
-    r'(?P<pre>(?:self\.)?(?P<lhs>[A-Za-z_]\w*)\s*=\s*)Signal\(\s*"(?P<nm>[A-Za-z_]\w*)"\s*,\s*'
-    r'(?P<typ>[A-Za-z_]\w*\([^(),]*\)|[A-Za-z_]\w*\(\))\s*,\s*(?P<kind>"[^"]+"|\'[^\']+\')\s*\)'
-)
 _T_KW_SIGNAL = re.compile(
     r'(?P<pre>(?:self\.)?(?P<lhs>[A-Za-z_]\w*)\s*=\s*Signal\()\s*name\s*=\s*"(?P<nm>[A-Za-z_]\w*)"\s*,\s*'
 )
@@ -169,16 +166,12 @@ _T_KW_TAIL = re.compile(  # Wire/Register/Signal with a trailing `, name="x"`
 
 
 def _txt_line(line: str) -> str:
-    def pos(m):
-        return f'{m.group("pre")}Signal(typ={m.group("typ")}, kind={m.group("kind")})' if m.group("lhs") == m.group("nm") else m.group(0)
-
     def kw_sig(m):
         return m.group("pre") if m.group("lhs") == m.group("nm") else m.group(0)
 
     def kw_tail(m):
         return f'{m.group("pre")}{m.group("post")}' if m.group("lhs") == m.group("nm") else m.group(0)
 
-    line = _T_POS.sub(pos, line)
     line = _T_KW_SIGNAL.sub(kw_sig, line)
     line = _T_KW_TAIL.sub(kw_tail, line)
     return line
@@ -235,6 +228,8 @@ def main() -> int:
         elif p.is_dir():
             files += sorted(p.rglob("*.py"))
             files += sorted(p.rglob("*.md"))
+        else:
+            ap.error(f"root does not exist: {r}")
 
     total_sites = total_files = 0
     for f in files:

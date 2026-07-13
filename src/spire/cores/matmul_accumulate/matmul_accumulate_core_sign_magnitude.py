@@ -175,13 +175,3 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
                 row.append(y_sig)
             rows.append(Array(row))
         self.Y = Array(rows)
-
-
-@dataclass
-class MatmulAccumulateBuildOut:
-    component: MatmulAccumulateComponent
-    module: Netlist
-    A: Array
-    B: Array
-    C: Array
-    Y: Array

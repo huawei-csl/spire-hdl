@@ -18,11 +18,14 @@ from spire.expr import (Bool, Expr, ExprLike, HDLType, Signal, UInt, WIRE_LIKE_K
                                fit_width, get_shared_wires)
 from spire.memory import _MemoryArray
 from spire.analyzer import _Analyzer, GraphReport
+from spire.signal_name_inference import is_legal_verilog_identifier
 from spire.visitor import ExprVisitor, expr_children
 
 
 class Netlist:
     def __init__(self, name: str, with_clock: bool = True, with_reset: bool = True):
+        if not is_legal_verilog_identifier(name):
+            raise ValueError(f"Module name {name!r} is not a legal Verilog identifier")
         self.name = name
         self.with_clock = with_clock
         self.with_reset = with_reset
@@ -40,7 +43,12 @@ class Netlist:
         self.component : Optional["Component"] = None
 
     # Signal constructors
+    def _check_port_name(self, name: str) -> None:
+        if any(p.name == name for p in self._ports):
+            raise ValueError(f"Duplicate port name {name!r}")
+
     def input(self, typ: HDLType, name: str) -> Signal:
+        self._check_port_name(name)
         s = Signal(typ=typ, kind="input", name=name)
         self._signals.append(s)
         self._ports.append(s)
@@ -51,10 +59,12 @@ class Netlist:
             signal.kind = "input"
         if id(signal) in [id(s) for s in self._signals]:
             raise ValueError("Signal already exists in module.")
+        self._check_port_name(signal.name)
         self._signals.append(signal)
         self._ports.append(signal)
 
     def output(self, typ: HDLType, name: str) -> Signal:
+        self._check_port_name(name)
         s = Signal(typ=typ, kind="output", name=name)
         self._signals.append(s)
         self._ports.append(s)
@@ -65,6 +75,7 @@ class Netlist:
             signal.kind = "output"
         if id(signal) in [id(s) for s in self._signals]:
             raise ValueError("Signal already exists in module.")
+        self._check_port_name(signal.name)
         self._signals.append(signal)
         self._ports.append(signal)
 
@@ -104,7 +115,7 @@ class Netlist:
         # own ports. Sub-component IO leaves keep their declared input/output kind, but emit as internal wires.
         return [s for s in self._signals if s.kind in kinds and not self.is_global_io(s)]
 
-    def get_spec(self) -> Dict[str, UInt]:
+    def get_spec(self) -> Dict[str, HDLType]:
         spec = {}
         for p in self._ports:
             spec[p.name] = p.typ
@@ -126,7 +137,12 @@ class Netlist:
     # Verilog generation
     def to_verilog_lines(self, collect_signals=True, simplify=False, cse=True,
                           balance_mux_trees=False, balance_mux_min_n=16) -> list[str]:
+        """Emit the module as Verilog source lines.
 
+        Caveat: ``simplify=True`` is experimental — its rewrites are not yet verified to preserve node signedness,
+        and it mutates drivers in place (the module can differ from what was simulated before the call). Leave it
+        off for signed designs and for any emission whose equivalence matters.
+        """
         if collect_signals:
             self.collect_signals()
             # Post-construction peephole simplification (opt_expr / opt_muxtree analogue): constant folding, boolean
@@ -153,11 +169,19 @@ class Netlist:
                 from spire.cse import apply_structural_cse
                 if apply_structural_cse(self):
                     self.collect_signals()
+            # Width isolation (always on, last — the passes above want the original nesting): wire every remaining
+            # inline compound operand so IEEE context re-sizing cannot diverge from node-width semantics.
+            from spire.width_isolation import apply_width_isolation
+            if apply_width_isolation(self):
+                self.collect_signals()
 
         # Basic checks. Signals tagged `_no_emit_drive` (custom-Verilog replacement) are exempt — the custom block
         # provides their value. Memory stores (`_MemoryArray`) are sim-only and always no-emit, so they and their
         # rdata registers fall through these checks without special-casing.
         for s in self._signals:
+            if not is_legal_verilog_identifier(s.name):
+                raise ValueError(f"Signal name {s.name!r} ({s.kind}) is not a legal Verilog identifier — rename it "
+                                 f"(reserved words and non-ASCII characters are not allowed)")
             if s._driver is not None or s._no_emit_drive:
                 continue
             if self.is_global_io(s, "output"):
@@ -201,6 +225,13 @@ class Netlist:
         regs_all = self._internals_of(("reg",))
         regs = regs_all
 
+        # Anything sequential needs a clock — also `_no_emit_drive` registers (their always block
+        # lives in a primitive's custom Verilog). Async ROMs are clockless (needs_clock is False).
+        clocked = [*regs_all, *[m for m in self._internals_of(("mem",)) if m.needs_clock()]]
+        if clocked and not self.with_clock:
+            raise ValueError(f"Registers/memories present (e.g. '{clocked[0].name}') but the module has "
+                             f"no clock input; emit with with_clock=True")
+
         lines.append('// Wires')
         for w in wires:
             if w._no_emit_decl:
@@ -230,8 +261,9 @@ class Netlist:
         lines.append("// Sequential logic")
         emit_regs = [r for r in regs if not r._no_emit_drive]
         if emit_regs:
-            if not self.with_clock:
-                raise ValueError("Registers present but module has no clock input.")
+            if self.clk is None:
+                raise ValueError(f"module '{self.name}' contains registers but was built with "
+                                 f"with_clock=False; registers need the global clock")
             sens = f"posedge {self.clk.name}"
             if self.with_reset:
                 sens += f" or posedge {self.rst.name}"
@@ -349,6 +381,7 @@ class _SignalCollector(ExprVisitor[None]):
         self.port_ids = {id(p) for p in module._ports}
         self.in_list = set(self.port_ids)
         self.name_to_sig: Dict[str, "Signal"] = {p.name: p for p in module._ports}
+        self._auto_ix = 0  # per-netlist counter for the auto-wire naming scheme
 
     def run(self, seeds: List["Signal"]) -> None:
         for s in seeds:
@@ -357,6 +390,12 @@ class _SignalCollector(ExprVisitor[None]):
     def visit_signal(self, s: Signal) -> None:
         sid = id(s)
         if sid not in self.port_ids:
+            if getattr(s, "_auto_generated", False) and getattr(s, "_anonymous_name", False):
+                # Canonical per-netlist numbering in traversal order: emission output is a pure function of
+                # the graph, independent of how many builds preceded it in this process. Suggested names keep
+                # their base; _uniquify suffixes any collision per netlist as usual.
+                s.name = f"sig_{self._auto_ix}"
+                self._auto_ix += 1
             self._uniquify(s)
             if sid not in self.in_list:
                 self.m._signals.append(s)
@@ -371,7 +410,8 @@ class _SignalCollector(ExprVisitor[None]):
             parent = getattr(s, "_memory_parent", None)
             if parent is not None:
                 self.visit(parent)
-            if s._driver is not None:
+            if s._driver is not None and not (sid in self.port_ids and s.kind == "input"):
+                # Never cross this module's own input ports: their drivers belong to an enclosing design.
                 self.visit(s._driver)
         # Blackbox support: visiting any IO wire of a blackbox triggers seeding from the peer IO wires too.
         # Without this, the parent's input-side wiring wouldn't be reached (blackbox outputs have no driver chain

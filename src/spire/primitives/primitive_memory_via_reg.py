@@ -2,12 +2,16 @@
 
 This is the original ``MemoryPrimitive`` implementation: the Python sim model
 (``elaborate()``) is a per-cell ``Register`` bank plus a linear mux tree, which
-is **O(depth)** per access. The canonical ``MemoryPrimitive`` (in
+is **O(depth)** per access. The primary ``MemoryPrimitive`` (in
 ``primitive_memory.py``) now backs simulation with the core's O(1) ``_MemoryArray``
 instead; this variant is kept for comparison / fallback.
 
-The synthesisable Verilog (``custom_verilog()``) is identical between the two —
-both emit the same Yosys-inferable ``reg [W-1:0] mem[0:D-1]`` idiom.
+The synthesisable Verilog (``custom_verilog()``) emits the same Yosys-inferable
+``reg [W-1:0] mem[0:D-1]`` idiom as the primary variant. Constructor parity: the
+``mask_chunks`` / ``read_under_write`` features raise ``NotImplementedError`` here.
+Caveat: the array name in the custom text is the construction-time instance name — two
+via_reg instances with the same explicit ``name=`` collide in the emitted Verilog (the
+primary primitives emit the collector-uniquified name instead).
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from spire.expr import (
 from spire.component import CustomVerilogComponent
 from spire.io_record import IORecord, Input, Output
 from spire.primitives.primitive_memory import _elem_bit_width, _next_uid, MemoryIO
+from spire.primitives._ram_template import norm_elem_values
 
 
 class MemoryPrimitive_via_reg(CustomVerilogComponent):
@@ -45,8 +50,18 @@ class MemoryPrimitive_via_reg(CustomVerilogComponent):
         registered_read: bool = False,
         with_reset_arm: bool = False,
         reset_value: int = 0,
+        mask_chunks: int = 0,
+        read_under_write: str = "readFirst",
         name: Optional[str] = None,
     ):
+        # Constructor parity with MemoryPrimitive (drop-in swap); the extra features are not
+        # implemented in this legacy variant.
+        if mask_chunks and mask_chunks > 1:
+            raise NotImplementedError("MemoryPrimitive_via_reg does not implement write masks; "
+                                      "use MemoryPrimitive")
+        if read_under_write != "readFirst":
+            raise NotImplementedError("MemoryPrimitive_via_reg implements readFirst only; "
+                                      "use MemoryPrimitive")
         if depth <= 0:
             raise ValueError(f"MemoryPrimitive depth must be > 0; got {depth}")
         if init is not None and len(init) != depth:
@@ -61,6 +76,11 @@ class MemoryPrimitive_via_reg(CustomVerilogComponent):
         self._with_reset_arm = with_reset_arm
         self._reset_value = reset_value
         self._elem_w = _elem_bit_width(elem_type)
+        signed = getattr(elem_type, "signed", False)
+        if self._init is not None:
+            self._init = norm_elem_values(self._init, width=self._elem_w, signed=signed, what="init")
+        self._reset_value = norm_elem_values([self._reset_value], width=self._elem_w, signed=signed,
+                                             what="reset_value")[0]
         self._addr_w = max(1, (depth - 1).bit_length())
         self._uid = _next_uid()
         self._instance_name = name or f"mem_{self._uid}"
@@ -104,9 +124,10 @@ class MemoryPrimitive_via_reg(CustomVerilogComponent):
                              next_v)
             c <<= next_v
 
-        # read: linear mux tree over all cells, indexed by read_addr
-        read_expr = cells[0]
-        for i in range(1, self._depth):
+        # read: linear mux tree over all cells, indexed by read_addr. The chain's default is 0,
+        # so out-of-range addresses read the agreed 0 (charter: every sim variant, same value).
+        read_expr = Const(0, UInt(self._elem_w))
+        for i in range(self._depth):
             read_expr = mux(self.io.read_addr == i, cells[i], read_expr)
 
         if self._registered_read:

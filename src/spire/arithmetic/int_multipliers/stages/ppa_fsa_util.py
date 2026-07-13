@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import DefaultDict, List, Optional, Tuple, Type
 
 from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import OptimType, FinalStageAdderBase, SelectionMode, SplitMode, StageMultiplierConfig, PartialProductAccumulatorBase
-from spire.expr import Concat, Const, Expr
+from spire.expr import Bool, Concat, Const, Expr
 
 
 @dataclass
@@ -81,6 +81,49 @@ def compressor_sum(
                 continue
             cols[i + offset].append(bit)
 
+    return compressor_sum_columns(config, cols, ppa_cls, fsa_cls)
+
+
+def sign_extension_columns(operands: List[Expr], out_w: int) -> DefaultDict[int, List[Expr]]:
+    """Weight->bits columns for `sum(operands)` with signed operands in sign-extension-compression
+    form: a signed operand of width w contributes its low bits, its INVERTED sign bit at column
+    w-1, and the constant -2^(w-1); the constants of all operands fold into one constant row
+    (mod 2^out_w). Unsigned operands contribute their bits as-is (zero-extension is implicit).
+
+    Shared by `build_multi_input_add` (the builder) and `eval_mia` (the sweep), so the DB rows
+    measure exactly the circuit the builder produces."""
+    from collections import defaultdict
+
+    cols: DefaultDict[int, List[Expr]] = defaultdict(list)
+    const_total = 0
+    for op in operands:
+        w = op.typ.width
+        if op.typ.signed:
+            for k in range(w - 1):
+                cols[k].append(op[k])
+            cols[w - 1].append(~op[w - 1])
+            const_total -= 1 << (w - 1)
+        else:
+            for k in range(w):
+                cols[k].append(op[k])
+    correction = const_total & ((1 << out_w) - 1)
+    for k in range(out_w):
+        if (correction >> k) & 1:
+            cols[k].append(Const(True, Bool()))
+    return cols
+
+
+def compressor_sum_columns(
+    config: StageMultiplierConfig | OutputConfig,
+    cols: DefaultDict[int, List[Expr]],
+    ppa_cls: Type[PartialProductAccumulatorBase],
+    fsa_cls: Type[FinalStageAdderBase],
+) -> Expr:
+    """Reduce prebuilt weight->bits columns via a compressor tree and a final-stage adder.
+
+    The column-level core of `compressor_sum`, for callers that assemble the columns
+    themselves (e.g. the sign-extension handling in the signed multi-input adder).
+    """
     # Partial product accumulator / compressor tree
     ppa = ppa_cls(config=config)
     ppa_cols = ppa.accumulate(cols)

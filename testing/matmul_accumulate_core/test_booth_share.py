@@ -103,3 +103,11 @@ if __name__ == "__main__":
 #   Yosys performs its own global CSE during synthesis and already merges the
 #   structurally identical b-decode subgraphs regardless of whether they are shared
 #   at the IR level. The sharing therefore does not translate to a smaller netlist.
+
+
+def test_booth_share_small():
+    """this file collected zero tests (only run_test) and crashed on a
+    commented-out enum member. The member is re-enabled; this entry pins correctness of the
+    share vs no-share configurations at a small dimension."""
+    assert run_test(2, share=False), "no-share configuration must simulate correctly"
+    assert run_test(2, share=True), "share configuration must simulate correctly"

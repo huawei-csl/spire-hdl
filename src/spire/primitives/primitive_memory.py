@@ -54,7 +54,7 @@ from spire.expr import (
 from spire.component import CustomVerilogComponent
 from spire.io_record import IORecord, Input, Output
 from spire.composite.base import HDLComposite
-from spire.primitives._ram_template import ram_block
+from spire.primitives._ram_template import check_ruw_mask, norm_elem_values, ram_block
 
 
 # Per-process counter that suffixes internal Verilog names so multiple primitive
@@ -150,16 +150,23 @@ class MemoryPrimitive(CustomVerilogComponent):
             raise ValueError(f"read_under_write must be readFirst/writeFirst/dontCare; got {read_under_write!r}")
         if read_under_write == "writeFirst" and registered_read:
             raise ValueError("MemoryPrimitive: writeFirst is supported for async read only "
-                             "(registered_read=False); use RamPrimitive for registered RUW.")
+                             "(registered_read=False); registered write-first RUW is not exposed "
+                             "by any primitive.")
+        check_ruw_mask(read_under_write, mask_chunks)
 
         self._elem_type = elem_type
         self._depth = depth
-        self._init = list(init) if init is not None else None
+        self._init = list(init) if init is not None else None  # normalized to bit patterns below
         self._registered_read = registered_read
         self._with_reset_arm = with_reset_arm
         self._reset_value = reset_value
         self._read_under_write = read_under_write
         self._elem_w = _elem_bit_width(elem_type)
+        signed = getattr(elem_type, "signed", False)
+        if self._init is not None:
+            self._init = norm_elem_values(self._init, width=self._elem_w, signed=signed, what="init")
+        self._reset_value = norm_elem_values([self._reset_value], width=self._elem_w, signed=signed,
+                                             what="reset_value")[0]
         if mask_chunks and mask_chunks > 1 and self._elem_w % mask_chunks != 0:
             raise ValueError(f"mask_chunks={mask_chunks} must divide elem width {self._elem_w}")
         self._mask_chunks = mask_chunks if (mask_chunks and mask_chunks > 1) else 0
@@ -249,7 +256,7 @@ class MemoryPrimitive(CustomVerilogComponent):
         if self._with_reset_arm:
             reset = dict(en=self.io.reset_enable.name, val=f"{W}'d{self._reset_value}")
         return ram_block(
-            name=self._instance_name, depth=self._depth, elem_w=W,
+            name=self._store.name, depth=self._depth, elem_w=W,  # live name survives uniquification
             writes=[write], reads=[read], reset=reset, init=self._init,
             comment=f"--- MemoryPrimitive (uid={self._uid}, depth={self._depth}, width={W}) ---",
         )

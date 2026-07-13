@@ -73,7 +73,7 @@ class _AIG:
         if a == lit_not(b):
             return lit_const0()
 
-        # canonical order on RHS for caching
+        # fixed operand order on RHS for caching
         if a > b:
             a, b = b, a
         key = (a, b)
@@ -443,65 +443,79 @@ class _AigerExprEval(ExprVisitor[List[int]]):
         a = self.visit(e.a)
         b = self.visit(e.b)
         w_out = e.typ.width
-        signed = getattr(e.a.typ, "signed", False) or getattr(e.b.typ, "signed", False)
+        sa = getattr(e.a.typ, "signed", False)
+        sb = getattr(e.b.typ, "signed", False)
+        signed = sa or sb
+        fit = self._exp._fit_bits
 
-        if op == "&":
-            bits = aig.bv_and(a, b)
-        elif op == "|":
-            bits = aig.bv_or(a, b)
-        elif op == "^":
-            bits = aig.bv_xor(a, b)
-        elif op == "nand":
-            bits = aig.bv_not(aig.bv_and(a, b))
-        elif op == "+":
-            # bv_add zero-extends shorter operands. For signed operands with
-            # w_out wider than the inputs, we must sign-extend first so the
-            # carry propagation matches two's-complement addition.
-            if signed:
-                a = aig._sext(a, w_out)
-                b = aig._sext(b, w_out)
-            bits, _ = aig.bv_add(a, b, w_out=w_out)
-        elif op == "-":
-            if signed:
-                a = aig._sext(a, w_out)
-                b = aig._sext(b, w_out)
-            bits, _ = aig.bv_sub(a, b, w_out=w_out)
+        if op in ("&", "|", "^", "nand"):
+            # Each operand extends per its OWN signedness (never "signed if either").
+            a = fit(a, w_out, signed=sa)
+            b = fit(b, w_out, signed=sb)
+            if op == "&":
+                bits = aig.bv_and(a, b)
+            elif op == "|":
+                bits = aig.bv_or(a, b)
+            elif op == "^":
+                bits = aig.bv_xor(a, b)
+            else:
+                bits = aig.bv_not(aig.bv_and(a, b))
+        elif op in ("+", "-"):
+            a = fit(a, w_out, signed=sa)
+            b = fit(b, w_out, signed=sb)
+            bits, _ = (aig.bv_add if op == "+" else aig.bv_sub)(a, b, w_out=w_out)
         elif op == "*":
-            signed_a = getattr(e.a.typ, "signed", False)
-            signed_b = getattr(e.b.typ, "signed", False)
-            if signed_a or signed_b:
-                bits = aig.bv_mul_baugh_wooley(a, b, w_out=w_out)
-            elif not signed_a and not signed_b:
+            if sa and sb:
+                bits = aig.bv_mul_baugh_wooley(a, b, w_out=w_out)  # assumes BOTH two's-complement
+            elif not sa and not sb:
                 bits = aig.bv_mul_unsigned_pp(a, b, w_out=w_out)
             else:
-                bits = aig.bv_mul_signed(a, b, w_out=w_out, signed_a=signed_a, signed_b=signed_b)
+                # Mixed: extend each per its own signedness to the result width; the pattern
+                # product equals the value product mod 2^w_out.
+                a = fit(a, w_out, signed=sa)
+                b = fit(b, w_out, signed=sb)
+                bits = aig.bv_mul_unsigned_pp(a, b, w_out=w_out)
         elif op == "<<":
             bits = aig.bv_shift_left(a, b, w_out=w_out)
         elif op == ">>":
             bits = aig.bv_shift_right(a, b, w_out=w_out)
         elif op in ("==", "!=", "<", "<=", ">", ">="):
+            # Exact integer compare: extend each operand per its OWN signedness to a common
+            # max+1 width, then compare signed. Uniformly correct for u/u, s/s and mixed.
+            w_cmp = max(len(a), len(b)) + 1
+            a = fit(a, w_cmp, signed=sa)
+            b = fit(b, w_cmp, signed=sb)
             if op in ("==", "!="):
                 eq = aig.bv_eq(a, b)
                 lit = eq if op == "==" else lit_not(eq)
             else:
-                lt = aig.bv_slt(a, b) if signed else aig.bv_ult(a, b)
                 if op == "<":
-                    lit = lt
+                    lit = aig.bv_slt(a, b)
                 elif op == "<=":
-                    lit = lit_not(aig.bv_ult(b, a) if not signed else aig.bv_slt(b, a))
+                    lit = lit_not(aig.bv_slt(b, a))
                 elif op == ">":
-                    lit = aig.bv_ult(b, a) if not signed else aig.bv_slt(b, a)
+                    lit = aig.bv_slt(b, a)
                 else:
-                    lit = lit_not(lt)
+                    lit = lit_not(aig.bv_slt(a, b))
             bits = [lit]
         else:
             raise NotImplementedError(f"Unsupported binary op '{op}'")
 
         # fit result vector
-        return self._exp._fit_bits(bits, w_out, signed=signed if op not in ("==", "!=", "<", "<=", ">", ">=") else False)
+        return fit(bits, w_out, signed=signed if op not in ("==", "!=", "<", "<=", ">", ">=") else False)
+
+    def visit_array_index(self, e) -> List[int]:
+        raise NotImplementedError(
+            f"AIGER export does not support memories: the cone reads memory '{getattr(e.mem, 'name', '?')}'."
+            )
 
     def visit_ternary(self, e: Ternary) -> List[int]:
-        sel = self.visit(e.sel)[0]
+        # Any nonzero selector is true (Verilog ?: / simulator semantics): OR-reduce all bits.
+        sel_bits = self.visit(e.sel)
+        aig = self._exp.aig
+        sel = sel_bits[0]
+        for sbit in sel_bits[1:]:
+            sel = aig.mk_or(sel, sbit)
         a = self.visit(e.a)
         b = self.visit(e.b)
         w_out = e.typ.width
@@ -562,6 +576,14 @@ class AigerExporter:
     # ---- network construction
 
     def _build_network(self):
+        if getattr(self, "_built", False):
+            return
+        # Fresh state on every attempt: a failed build must not leave half-allocated inputs/latches
+        # behind (a retry would re-append everything and emit a corrupted AAG).
+        self.aig = _AIG()
+        self._sig_bits = {}
+        self._reg_list = []
+        self._expr_eval = _AigerExprEval(self)
         # 1) allocate all input bits first (AIGER requires inputs before gates)
         for p in self.m._ports:
             if p.kind == "input":
@@ -615,6 +637,8 @@ class AigerExporter:
         for p in self.m._ports:
             if p.kind != "output":
                 continue
+            if p._driver is None and not p._no_emit_drive:
+                raise ValueError(f"Signal '{p.name}' (output) has no driver.")  # same error as the simulator
             drv_bits = self._eval_expr_bits(p._driver) if p._driver is not None else [lit_const0()] * p.typ.width
             drv_bits = self._fit_bits(drv_bits, p.typ.width, signed=getattr(p.typ, "signed", False))
 
@@ -622,6 +646,8 @@ class AigerExporter:
             for i, b in enumerate(drv_bits):
                 self.aig.outputs.append(b)
                 self.aig.sym_outputs.append(self._bit_name(p, i))
+
+        self._built = True
 
     # ---- expression bit-blasting
 
@@ -635,14 +661,18 @@ class AigerExporter:
         # like a wire (membership, not raw kind, decides what's a primary input).
         if s.kind in WIRE_LIKE_KINDS:
             # protect against comb loops
+            if s._driver is None and not s._no_emit_drive:
+                raise ValueError(f"Signal '{s.name}' ({s.kind}) has no driver.")  # same error as the simulator
             visiting = self._expr_eval._visiting
             vk = ("sig", key)
             if vk in visiting:
                 raise RuntimeError(f"Combinational loop involving '{s.name}'.")
             visiting.add(vk)
-            bits = self._expr_eval.visit(s._driver) if s._driver is not None else [lit_const0()]
-            bits = self._fit_bits(bits, s.typ.width, signed=getattr(s.typ, "signed", False))
-            visiting.remove(vk)
+            try:
+                bits = self._expr_eval.visit(s._driver) if s._driver is not None else [lit_const0()]
+                bits = self._fit_bits(bits, s.typ.width, signed=getattr(s.typ, "signed", False))
+            finally:
+                visiting.remove(vk)
             self._sig_bits[key] = bits
             return bits
         raise TypeError(f"Unknown signal kind: {s.kind}")
@@ -727,6 +757,8 @@ class SpireAdapter(AbstractAdapter):
         self.m: Netlist = module
         self._pi_count = 0
         self._po_count = 0
+        self._latch_count = 0
+        self._latch_names: set = set()
 
     def _bit_type(self):
         return Bool()
@@ -759,6 +791,32 @@ class SpireAdapter(AbstractAdapter):
 
     def AND(self, a, b):
         return a & b
+
+    def latch(self, name=None):
+        """AIGER latch → 1-bit init-less netlist register: the simulator starts it at 0 and a
+        with_reset re-emission resets it to 0."""
+        reg_name = self._latch_reg_name(name)
+        return self.m.reg(self._bit_type(), reg_name)
+
+    def latch_next(self, latch_node, next_node):
+        latch_node <<= next_node
+
+    def _latch_reg_name(self, symbol: Optional[str]) -> str:
+        # A yosys latch symbol can hold two space-separated names, e.g. "q[0] r[0]": first the net the
+        # latch drives, then the register itself. We keep only the final name, the register's own.
+        # That name is later emitted as a Verilog identifier (`reg <name>;`), so characters not allowed
+        # there ([, ], $, ...) are replaced by an underscore (r[0] -> r_0_).
+        base = (symbol or "").split()[-1] if symbol and symbol.split() else ""
+        base = "".join(c if (c.isalnum() or c == "_") else "_" for c in base)
+        if not base or base[0].isdigit():
+            base = f"lat{self._latch_count}"
+        self._latch_count += 1
+        name, k = base, 1
+        while name in self._latch_names:
+            name = f"{base}_{k}"
+            k += 1
+        self._latch_names.add(name)
+        return name
 
 class AigerImporter:
 

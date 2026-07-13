@@ -2,7 +2,7 @@
 synthesisable Verilog via ``custom_verilog`` while providing a Python sim model
 via ``elaborate``.
 
-Compared to the special-cased built-in ``Memory`` (in ``spire.expr``), the
+Compared to the core's sim-only storage (``spire.memory._MemoryArray``), the
 primitives here live entirely in user-space: no simulator / emitter changes are
 needed to support them. They also support composite element types — the port
 boundary is always a flat ``UInt(width)``, and the user packs / unpacks with

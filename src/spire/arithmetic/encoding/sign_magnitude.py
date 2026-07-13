@@ -5,7 +5,16 @@ from spire.io_record import IORecord, Input, Output
 
 
 class EncodingIO(IORecord):
-    """IO for encoder/decoder components: input ``i`` and output ``o``."""
+    """IO for encoder/decoder components: input ``i`` and output ``o``.
+
+The −2^(w−1) / SM −0 corner per mode (the default pair is exact inverses, so the round-trip
+is lossless):
+
+    clip_most_negative | encode −2^(w−1) to | decode SM −0 to
+    -------------------|--------------------|----------------
+    False (default)    | SM −0              | −2^(w−1)
+    True               | SM −(2^(w−1)−1)    | −(2^(w−1)−1)
+"""
 
 class EncoderDecoderBase(Component):
     io: EncodingIO

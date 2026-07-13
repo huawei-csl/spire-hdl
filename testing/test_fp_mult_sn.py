@@ -267,3 +267,17 @@ if __name__ == "__main__":
     test_bf16_mul_sn_random()
     test_f16_mul_sn_random_ftz()
     test_bf16_mul_sn_random_ftz()
+
+
+def test_ftz_boundary_round_up_to_min_normal_corner():
+    """The documented residual FTZ corner (distinct from DAZ): a product strictly below
+    min_normal that ROUNDS UP to min_normal is flushed to 0 without
+    always_subnormal_rounding, and yields min_normal with it. 0.99951171875 * 2^-14."""
+    from spire.expr import reset_shared_cache
+    for asr, want in ((False, 0x0000), (True, 0x0400)):
+        reset_shared_cache()
+        mul = FpMulSN(5, 10, subnormals=False, always_subnormal_rounding=asr)
+        sim = Simulator(mul.to_module(f"FtzBoundary{int(asr)}", with_clock=False, with_reset=False))
+        sim.set("a", 0x3BFF).set("b", 0x0400)
+        sim.eval()
+        assert sim.get("y") == want, f"asr={asr}: 0x{sim.get('y'):04x} != 0x{want:04x}"

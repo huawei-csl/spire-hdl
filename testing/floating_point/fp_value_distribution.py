@@ -201,6 +201,7 @@ def make_plots(EW: int, FW: int, fp_decode: callable, hifloat: bool = False, sub
     plt.tight_layout()
     out1 = f"{out_folder}/fp8_EW{EW}_FW{FW}_{sn_str}log2abs.png"
     plt.savefig(out1, dpi=150)
+    plt.close()
 
     # 2) Counts per exponent field e (finite only)
     maxe = (1 << EW) - 1
@@ -218,6 +219,7 @@ def make_plots(EW: int, FW: int, fp_decode: callable, hifloat: bool = False, sub
     plt.tight_layout()
     out2 = f"{out_folder}/fp8_EW{EW}_FW{FW}_{sn_str}counts_per_e.png"
     plt.savefig(out2, dpi=150)
+    plt.close()
 
     # 3) |value| vs ULP spacing (sorted uniques, forward diff), log–log
     uniq = np.unique(vals)  # includes zeros
@@ -235,6 +237,7 @@ def make_plots(EW: int, FW: int, fp_decode: callable, hifloat: bool = False, sub
     plt.tight_layout()
     out3 = f"{out_folder}/fp8_EW{EW}_FW{FW}_{sn_str}spacing.png"
     plt.savefig(out3, dpi=150)
+    plt.close()
 
     # 4) Empirical CDF of finite values (including zeros and sign)
     x_sorted = np.sort(vals)
@@ -252,6 +255,7 @@ def make_plots(EW: int, FW: int, fp_decode: callable, hifloat: bool = False, sub
         plt.tight_layout()
         out4 = f"{out_folder}/fp8_EW{EW}_FW{FW}_{sn_str}cdf_values.png"
         plt.savefig(out4, dpi=150)
+        plt.close()
     else:
         out4 = None
 
@@ -271,6 +275,7 @@ def make_plots(EW: int, FW: int, fp_decode: callable, hifloat: bool = False, sub
         plt.tight_layout()
         out5 = f"{out_folder}/fp8_EW{EW}_FW{FW}_{sn_str}cdf_log2abs.png"
         plt.savefig(out5, dpi=150)
+        plt.close()
     else:
         out5 = None
 
@@ -322,6 +327,7 @@ def make_plots(EW: int, FW: int, fp_decode: callable, hifloat: bool = False, sub
             plt.tight_layout()
             out6 = f"{out_folder}/fp8_EW{EW}_FW{FW}_{sn_str}cdf_log2abs_by_D_scaled.png"
             plt.savefig(out6, dpi=150)
+            plt.close()
 
             # 7) Group by mantissa (variable width) and plot scaled CDFs
             by_m = defaultdict(list)
@@ -348,16 +354,20 @@ def make_plots(EW: int, FW: int, fp_decode: callable, hifloat: bool = False, sub
             plt.tight_layout()
             out7 = f"{out_folder}/fp8_EW{EW}_FW{FW}_{sn_str}cdf_log2abs_by_m_scaled.png"
             plt.savefig(out7, dpi=150)
+            plt.close()
 
     return out1, out2, out3, out4, out5, out6, out7, pinf, ninf, nans
 
 
 # Generate for E4M3 and E5M2
-files_e4m3 = make_plots(4, 3, fp_decode_ieee_like, subnormals=True)
-files_e5m2 = make_plots(5, 2, fp_decode_ieee_like, subnormals=True)
-files_e4m3 = make_plots(4, 3, fp_decode_ieee_like, subnormals=False)
-files_e5m2 = make_plots(5, 2, fp_decode_ieee_like, subnormals=False)
-files_hif8 = make_plots(8-1, 0, hif8_to_float, hifloat=True)
+def main():
+    files_e4m3 = make_plots(4, 3, fp_decode_ieee_like, subnormals=True)
+    files_e5m2 = make_plots(5, 2, fp_decode_ieee_like, subnormals=True)
+    files_e4m3 = make_plots(4, 3, fp_decode_ieee_like, subnormals=False)
+    files_e5m2 = make_plots(5, 2, fp_decode_ieee_like, subnormals=False)
+    files_hif8 = make_plots(8-1, 0, hif8_to_float, hifloat=True)
+    return files_e4m3, files_e5m2, files_hif8
 
 
-files_e4m3, files_e5m2, files_hif8
+if __name__ == "__main__":
+    main()

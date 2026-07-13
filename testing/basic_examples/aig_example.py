@@ -1,5 +1,5 @@
 from aigverse import Aig
-from spire.aig.aig_aigerverse import conv_aag_into_aig
+from spire.aig.aig_aigerverse import read_aag_into_aig
 from spire.arithmetic.floating_point.float_mult import build_f16_mul
 from spire.aiger import export_module_to_aiger
 
@@ -12,7 +12,7 @@ export_module_to_aiger(m, "f16mul.aag")  # writes ASCII AIGER
 # Later, in Python (with aigverse installed):
 
 aig = Aig()
-aig = conv_aag_into_aig("f16mul.aag", aig)
+aig = read_aag_into_aig("f16mul.aag", aig)  # conv_aag_into_aig takes AAG lines, not a path
 # aig = read_aiger_into_aig("i10.aig")  # or any AIGER file
 print("nodes:", aig.size(), "PIs:", aig.num_pis(), "POs:", aig.num_pos())
 

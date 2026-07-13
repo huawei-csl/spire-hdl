@@ -25,7 +25,7 @@ from spire.expr import Bool, Register, Signal, UInt, mux
 from spire.component import CustomVerilogComponent
 from spire.io_record import IORecord, Input, Output
 from spire.primitives.primitive_memory import _elem_bit_width, _next_uid
-from spire.primitives._ram_template import ram_block
+from spire.primitives._ram_template import check_ruw_mask, norm_elem_values, ram_block
 
 
 class RamPrimitive(CustomVerilogComponent):
@@ -63,6 +63,10 @@ class RamPrimitive(CustomVerilogComponent):
         self._ruw = read_under_write
         self._registered_read = registered_read
         self._elem_w = _elem_bit_width(elem_type)
+        if self._init is not None:
+            self._init = norm_elem_values(self._init, width=self._elem_w,
+                                          signed=getattr(elem_type, "signed", False), what="init")
+        check_ruw_mask(read_under_write, mask_chunks)
         if mask_chunks and mask_chunks > 1 and self._elem_w % mask_chunks != 0:
             raise ValueError(f"mask_chunks={mask_chunks} must divide elem width {self._elem_w}")
         self._mask_chunks = mask_chunks if (mask_chunks and mask_chunks > 1) else 0
@@ -177,7 +181,7 @@ class RamPrimitive(CustomVerilogComponent):
             reads.append(rspec)
 
         return ram_block(
-            name=self._instance_name, depth=self._depth, elem_w=W,
+            name=self._store.name, depth=self._depth, elem_w=W,  # live name survives uniquification
             writes=writes, reads=reads, reset=None, init=self._init,
             comment=f"--- RamPrimitive (uid={self._uid}, depth={self._depth}, width={W}, "
                     f"w={self._nw} r={self._nr} rw={self._nrw}) ---",

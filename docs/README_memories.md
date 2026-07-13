@@ -256,8 +256,11 @@ sim.get_mem("ram")     # → [0, 0, 0, 0xAB, …]   (length == depth, unsigned b
 - **Reset wins over write.** If a `MemoryPrimitive` reset arm and a write fire in the same
   cycle, the broadcast clear takes priority (`if (reset) … else if (we) …`).
 - **Register-bank fallback.** `MemoryPrimitive_via_reg` / `FIFOPrimitive_via_reg` are
-  drop-in variants whose sim model is an explicit register file (O(depth), no array
-  inference) — kept for comparison/debug. The synthesised Verilog is the same array idiom.
+  comparison variants whose sim model is an explicit register file (O(depth)) — kept for
+  debug. Constructor-compatible with the primary primitives (unsupported features raise
+  NotImplementedError). The memory variant emits the same array idiom; the FIFO variant's
+  Verilog is behaviourally equivalent but NOT identical (its write sits in the reset block,
+  which flattens the array to flip-flops — no BRAM inference).
 - **Internal store is not user-facing.** `_MemoryArray` (in
   `src/spire/memory.py`) is the sim backend the primitives wire up via a port
   factory; designs always go through the primitives' `.io`.

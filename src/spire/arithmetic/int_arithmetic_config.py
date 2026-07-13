@@ -14,7 +14,7 @@ from spire.arithmetic.int_multipliers.eval.multiplier_stage_options_demo_lib imp
 from spire.arithmetic.int_multipliers.eval.testvector_generation import Encoding, is_signed
 from spire.arithmetic.eval.auto_config import DEFAULT_LOOKUP_METRIC, lookup_best_config
 from spire.arithmetic.prefix_adders.adders import StageBasedPrefixAdder, StageBasedSubtractor
-from spire.expr import Const, Expr, Op2, SInt, Signal, UInt, fit_type
+from spire.expr import Const, Expr, Op2, SInt, Signal, UInt, fit_type, reinterpret
 
 
 @dataclass
@@ -43,6 +43,13 @@ class AdderConfig:
 
 def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig | ArithmeticAutoConfig) -> Expr:
     if isinstance(mult_cfg, ArithmeticAutoConfig):
+        if getattr(a.typ, "signed", False) != getattr(b.typ, "signed", False):
+            # Mixed signedness falls back to the plain IR operator (emission/AIGER-correct),
+            # matching replace_arithmetic_ops' gate.
+            result = a * b
+            if result.typ.signed:
+                result = fit_type(result, UInt(result.typ.width))  # structural-mult interface
+            return result
 
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, swap = lookup_best_arithmetic_config(
@@ -68,9 +75,11 @@ def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig | ArithmeticAu
         if signed_b:
             b = fit_type(b, SInt(b.typ.width))
         result = a * b
-        # Structural multipliers always return UInt; match that interface.
-        if result.typ.signed and mult_cfg.encodings is not None:
-            result = fit_type(result, UInt(result.typ.width))
+        # Match the structural interface exactly: StageBasedMultiplier types y SInt when ANY
+        # operand is signed (a UInt refit here zero-extended where the structural path sign-extends).
+        want = SInt(result.typ.width) if (signed_a or signed_b) else UInt(result.typ.width)
+        if result.typ.signed != want.signed:
+            result = fit_type(result, want)
         return result
 
     assert mult_cfg.multiplier_opt is not None, "multiplier_opt must be provided for explicit multipliers"
@@ -94,6 +103,12 @@ def build_multiplier(a: Expr, b: Expr, mult_cfg: MultiplierConfig | ArithmeticAu
 
 def build_adder(a: Expr, b: Expr, adder_cfg: AdderConfig | ArithmeticAutoConfig) -> Expr:
     if isinstance(adder_cfg, ArithmeticAutoConfig):
+        if getattr(a.typ, "signed", False) != getattr(b.typ, "signed", False):
+            # mixed signedness — plain IR operator, see build_multiplier.
+            result = a + b
+            if result.typ.signed:
+                result = fit_type(result, UInt(result.typ.width))
+            return result
 
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, swap = lookup_best_arithmetic_config(
@@ -154,9 +169,15 @@ def build_multi_input_add(operands: Sequence[Expr],
     Mirrors the spire inner product: instead of chaining N-1 two-input adders, we reduce via a common compressor tree.
     PPA, FSA, and `optim_type` are looked up from the dedicated MIA DB (`lookup_best_mia_config`).
     Requires at least 3 operands; smaller chains fall back to the regular `+` operator.
+
+    Signed (and mixed) operands are supported: each signed operand enters the tree in the
+    sign-extension-compression form (its inverted MSB replaces the replicated sign bits and the
+    per-operand constants fold into one constant row), the same identity the fused inner product
+    uses for its C term. The result is SInt when any operand is signed, so downstream refits
+    sign-extend.
     """
     from spire.arithmetic.int_multipliers.stages.ppa_fsa_util import (
-        OutputConfig, compressor_sum,
+        OutputConfig, compressor_sum, compressor_sum_columns, sign_extension_columns,
     )
 
     if len(operands) < 3:
@@ -165,51 +186,56 @@ def build_multi_input_add(operands: Sequence[Expr],
         return reduce(lambda x, y: x + y, operands)
 
     any_signed = any(getattr(op.typ, "signed", False) for op in operands)
-    if any_signed:
-        # Signed multi-input add isn't supported yet — fall back to chained `+`.
-        from functools import reduce
-        return reduce(lambda x, y: x + y, operands)
 
     max_w = max(op.typ.width for op in operands)
-    # Output width: ceil(log2(N)) extra bits to accommodate the sum.
+    # Output width: ceil(log2(N)) extra bits to accommodate the sum. In the signed case the
+    # effective width of an UNSIGNED operand is one more bit (its value range as a signed number).
     n = len(operands)
     extra = max(1, (n - 1).bit_length())
-    out_w = max_w + extra
+    if any_signed:
+        eff_w = max(op.typ.width + (0 if op.typ.signed else 1) for op in operands)
+        out_w = eff_w + extra
+    else:
+        out_w = max_w + extra
 
     # Look up the best (ppa_opt × fsa_opt × optim_type) for this N-input chain in the dedicated MIA DB.
     # The MIA sweep evaluates the whole tuple per (N, width) shape, so the lookup picks a meaningful combo — not a 2-input-adder proxy whose `optim_type` field would be unreliable on prefix-FSA winners.
+    # Signed and unsigned MIA have their own DB rows (the signed tree carries the folded
+    # correction row, so its metrics differ); mixed operand sets pick the signed rows, since any
+    # signed operand triggers the correction machinery. The mia sweep produces both sign variants
+    # in one run, so a DB either serves both or is unusable.
     from spire.arithmetic.eval.auto_config import lookup_best_mia_config
     mia_metric = getattr(adder_cfg, "metric", DEFAULT_LOOKUP_METRIC)
     mia_entry = lookup_best_mia_config(
-        n_inputs=n, n_bits=max_w, signed=False,
+        n_inputs=n, n_bits=max_w, signed=any_signed,
         objective=adder_cfg.objective, metric=mia_metric,
     )
-    if mia_entry is None:
-        raise RuntimeError(
-            f"No MIA DB entry for n_inputs={n}, width={max_w}, "
-            f"objective={adder_cfg.objective}, metric={mia_metric}. "
-            f"Rebuild the DB with "
-            f"`python -m spire.arithmetic.eval.run_arithmetic_eval` "
-            f"(don't pass `--skip mia`)."
-        )
     ppa_cls = PPAOption[mia_entry["ppa_opt"]].value
     fsa_cls = FSAOption[mia_entry["fsa_opt"]].value
     optim_type = mia_entry.get("optim_type") or "speed"
 
     config = OutputConfig(out_width=out_w, optim_type=optim_type)
-    sum_expr = compressor_sum(config, list(operands), ppa_cls, fsa_cls)
+    if not any_signed:
+        sum_expr = compressor_sum(config, list(operands), ppa_cls, fsa_cls)
+    else:
+        # Signed / mixed: sign-extension compression (see sign_extension_columns).
+        cols = sign_extension_columns(list(operands), out_w)
+        sum_expr = compressor_sum_columns(config, cols, ppa_cls, fsa_cls)
 
-    # `compressor_sum` returns a Concat sized to whatever the columns produced.
-    # Trim / pad to the expected output width.
+    # The trees return a Concat sized to whatever the columns produced; trim / pad to out_w.
     if sum_expr.typ.width > out_w:
         sum_expr = sum_expr[0:out_w]
     elif sum_expr.typ.width < out_w:
         sum_expr = fit_type(sum_expr, UInt(out_w))
-    return sum_expr
+    # Signed: the bit pattern is the two's-complement sum; type it so downstream refits sign-extend.
+    return reinterpret(sum_expr, SInt(out_w)) if any_signed else sum_expr
 
 
 def build_subtractor(a: Expr, b: Expr, sub_cfg: SubtractorConfig | ArithmeticAutoConfig) -> Expr:
     if isinstance(sub_cfg, ArithmeticAutoConfig):
+        if getattr(a.typ, "signed", False) != getattr(b.typ, "signed", False):
+            # mixed signedness — plain IR operator, see build_multiplier (7.8 gate).
+            return a - b
 
         signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
         arith_cfg, _ = lookup_best_arithmetic_config(
@@ -449,7 +475,9 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
     chain_member_candidates: set[int] = set()  # tentative members (used to prevent nested detection)
 
     if isinstance(config, ArithmeticAutoConfig):
-        for node in order:
+        # reversed(order): order is post-order (children first), so inner + nodes registered as
+        # chain roots before their parents subsumed them/ Outermost roots now claim their members first.
+        for node in reversed(order):
             if not isinstance(node, Op2) or node.op != "+":
                 continue
             if id(node) in chain_member_candidates:
@@ -551,7 +579,7 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
     add_chain_candidates: set[int] = set()
 
     if isinstance(config, ArithmeticAutoConfig):
-        for node in order:
+        for node in reversed(order):  # outermost-first
             if not isinstance(node, Op2) or node.op != "+":
                 continue
             if id(node) in chain_member_candidates:
@@ -628,10 +656,13 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
 
             n_terms = len(mul_pairs)
             max_mul_w = max(max(ma.typ.width, mb.typ.width) for ma, mb in mul_pairs)
-            any_signed = any(
-                getattr(ma.typ, "signed", False) or getattr(mb.typ, "signed", False)
-                for ma, mb in mul_pairs
-            )
+            operand_signs = {getattr(x.typ, "signed", False) for pair in mul_pairs for x in pair}
+            any_signed = True in operand_signs
+            if len(operand_signs) > 1:
+                # Genuinely mixed operand signs: the fused core needs one uniform encoding, and
+                # reinterpreting an unsigned operand as signed misreads set MSBs (the 7.8 class).
+                # Fall back to per-node replacement.
+                continue
 
             if n_terms >= 2:
                 strategy, dot_cfg = pick_best_dot_strategy(

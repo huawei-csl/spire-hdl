@@ -67,15 +67,17 @@ def test_cost_fn_restores_encoding_on_exception():
     assert Op.OR.value == 3
 
 
-def test_two_different_assignments_can_yield_different_costs():
-    """Sanity: encoding actually affects synthesis (not necessarily true for
-    every design, but for an opcode dispatch it usually is)."""
+def test_cost_fn_is_finite_and_deterministic():
+    """The oracle returns real, repeatable costs. (These two particular encodings happen to
+    synthesize to the SAME cell count for this ALU — measured — so cost inequality is not a
+    property this design can pin.)"""
     m = _build_alu_module()
     cost_fn = make_cost_fn(m, Op, objective="cells")
     cost_a = cost_fn({"ADD": 0, "SUB": 1, "AND": 2, "OR": 3})
     cost_b = cost_fn({"ADD": 3, "SUB": 2, "AND": 1, "OR": 0})
     assert cost_a != float("inf")
     assert cost_b != float("inf")
+    assert cost_a == cost_fn({"ADD": 0, "SUB": 1, "AND": 2, "OR": 3}), "oracle must be deterministic"
 
 
 def test_cost_fn_objective_selection_yosys_metrics():

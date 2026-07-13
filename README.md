@@ -16,7 +16,7 @@
 - **Reduces area and delay vs. a traditional Verilog flow:** optimization is part of the compile
 - **Integrated with ABC and mockturtle:** modern synthesis optimization wired directly into the compilation pipeline
 - **Arithmetic library with automated replacement:** swap adders, multipliers, and FP cores driven by an objective
-- **Cycle-accurate Python simulator"** drive inputs, tick clocks, inspect expressions/outputs without leaving Python
+- **Cycle-accurate Python simulator:** drive inputs, tick clocks, inspect expressions/outputs without leaving Python
 - **Content-addressed optimization cache:** instant re-runs via `@abc_optimized` /`@flowy_optimized` decorators
 
 ## Optimizations built in 💡
@@ -96,7 +96,8 @@ Deeper guides for specific features:
 - **[Tiled matmul accelerator](docs/README_output_stationary_matmul.md)** — parametrizable signed output-stationary matmul over a `T×T×T` core, with input/output RAMs and a `mode` + RAM-access interface
 - **[Custom Verilog](docs/README_custom_verilog.md)** — emit a raw Verilog block from a `CustomVerilogComponent`, with or without a Python sim model (blackbox)
 - **[AIG / AAG export & import](docs/README_aig_export.md)** — lower a `Component` to an AIGER netlist and read AIG/AAG back in as a `Component`
-- **[Verilog testbench](docs/README_verilog_testbench.md)** — turn a `Simulator` run into a self-checking, synthesizable Verilog testbench
+- **[Simulation & debugging](docs/README_simulation_debugging.md)** — driving the Python `Simulator`, live inspection (peek/watch, register and memory state), VCD waveforms from a Python run, side-by-side cross-checks against the emitted Verilog
+- **[Verilog testbench](docs/README_verilog_testbench.md)** — turn a `Simulator` run into a self-checking, synthesizable Verilog testbench, and run it under Verilator/Icarus
 - **[Examples](testing/examples/README.md)** — example designs exercising Spire features
 
 ## Installation
@@ -136,7 +137,7 @@ class LogicDemo(Component):
             b=Input(UInt(8)),
             sel=Input(Bool()),
             sum=Output(UInt(9)),
-            mask=Output(UInt(4)),
+            mask=Output(UInt(2)),
             out=Output(UInt(8)),
         )
         self.elaborate()
@@ -200,12 +201,22 @@ verilog = demo.to_verilog(name="LogicDemo")   # synthesizable Verilog (str)
 aag     = demo.to_aag(name="LogicDemo")        # AIGER ASCII lines (list[str])
 net     = demo.to_netlist(name="LogicDemo")    # flat netlist IR (Netlist)
 
-demo2 = Component.from_netlist(net)            # re-import the IR (also: .from_verilog / .from_aag_lines)
+demo2 = Component.from_netlist(net)            # re-import the IR
 
-# equivalence-check the original against the re-imported design (aigverse, on their AIGs)
+# Import Verilog source (yosys-backed; ports map onto the declared IO) — here a round-trip
+# of the text we just emitted; from_verilog_file(path) reads external .v files the same way.
+# Sequential designs import too: their registers land on the surrounding design's global clock.
+from spire.component import ImportedComponent
+shell = ImportedComponent(IORecord(a=Input(UInt(8)), b=Input(UInt(8)), sel=Input(Bool()),
+                                   sum=Output(UInt(9)), mask=Output(UInt(2)), out=Output(UInt(8))))
+demo3 = shell.from_verilog(verilog)            # also: .from_verilog_file / .from_aag_lines / .from_aig_file
+
+# equivalence-check the original against both re-imported designs (aigverse, on their AIGs)
 a1 = conv_aag_into_aig(demo.to_aag(name="LogicDemo"), Aig())
 a2 = conv_aag_into_aig(demo2.to_aag(name="LogicDemo"), Aig())
+a3 = conv_aag_into_aig(demo3.to_aag(name="LogicDemo"), Aig())
 assert equivalence_checking(a1, a2)
+assert equivalence_checking(a1, a3)   # the Verilog round-trip is logic-equivalent too
 ```
 
 ## Components and the netlist IR
@@ -267,7 +278,7 @@ Spire includes structured, bit-packable composites for cleaner interfaces and bu
 - `CompositeRecord` is the bundle of named fields that stays packable to a flat bitvector — build it inline (`CompositeRecord(a=Input(...), ...)`), via a subclass `__init__` calling `super().__init__(...)`, or as a `@dataclass`; declare fields as annotations for IDE autocomplete ([`record.py`](src/spire/composite/record.py)).
 - `FixedPoint` wraps a `Wire` or view with explicit total/frac widths and quantization helpers, keeping arithmetic readable while staying hardware-friendly ([`fixed_point.py`](src/spire/composite/fixed_point.py)).
 - `FloatingPoint` provides an IEEE-style view with `add`/`mul` helpers parameterized by exponent / fraction widths ([`floating_point.py`](src/spire/composite/floating_point.py)).
-- `CompositeRegister` stores any composite in a single register while preserving a structured view via `.value`/`.Q` ([`register.py`](src/spire/composite/register.py)).
+- `CompositeRegister` stores any composite in a single register while preserving a structured view via `.value` ([`register.py`](src/spire/composite/register.py)).
 
 Example:
 
@@ -279,8 +290,8 @@ from spire.composite.register import CompositeRegister
 from spire.expr import UInt, Wire
 
 class Bus(CompositeRecord):
-    data = Wire(UInt(8))
-    valid = Wire(UInt(1))
+    def __init__(self):
+        super().__init__(data=Wire(UInt(8)), valid=Wire(UInt(1)))
 
 payload = Array([Bus(), Bus()])
 acc = FixedPoint(FixedPointType(width_total=16, width_frac=8))
@@ -308,7 +319,7 @@ sim.trace_enabled = True
 sim.eval()
 for _ in range(5):
     sim.step()
-write_vcd(trace_by_names=sim.get_trace_by_names(), filename="run.vcd", top_module=m.name, timescale="1ns")
+write_vcd(trace_by_names=sim.get_trace_by_names(), filename="run.vcd", top_module="LogicDemo", timescale="1ns")
 ```
 
 ## Slices
@@ -321,7 +332,7 @@ Check out the `testing/examples/` directory for practical examples:
 - **[`simple_component.py`](testing/examples/simple_component.py)** – A minimal example showing how to define a Component with IO ports and generate Verilog
 - **[`component_example.py`](testing/examples/component_example.py)** – Comprehensive examples including hierarchical design and simulation
 - **[`composing_components.py`](testing/examples/composing_components.py)** – Shows how to compose a larger `Component` from smaller automatically embedded components
-- **[`direct_expression_basics.py`](testing/examples/direct_expression_basics.py)** – Minimal direct expression examples (`y = a + b`) plus `+`, `-`, unary `-`, `Const(..., Int(...))`, typed/plain `False`, and a recursive Horner polynomial builder
+- **[`direct_expression_basics.py`](testing/examples/direct_expression_basics.py)** – Minimal direct expression examples (`y = a + b`) plus `+`, `-`, unary `-`, `Const(..., SInt(...))`, typed/plain `False`, and a recursive Horner polynomial builder
 - **[`testing/riscv/rv32i.py`](testing/riscv/rv32i.py)** – Minimal RV32I core example; see [`testing/riscv/test_rv32i.py`](testing/riscv/test_rv32i.py) for simulation-based checks.
 
 See the [examples README](testing/examples/README.md) for detailed documentation and key concepts.

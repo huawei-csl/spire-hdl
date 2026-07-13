@@ -68,7 +68,7 @@ if __name__ == "__main__":
     print(f"type   : width={y_neg_const.typ.width}, signed={y_neg_const.typ.signed}")
     # Captured output:
     # === Example 4: y_neg_const = -Const(2, SInt(8)) ===
-    # verilog: (1'd0 - 8'sd2)
+    # verilog: (9'd0 - 9'sd2)
     # type   : width=9, signed=True
     print()
 
