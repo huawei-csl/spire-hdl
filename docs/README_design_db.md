@@ -25,21 +25,31 @@ a name is as trustworthy as the key it points to — while `spec_key`s are unive
 ## Quick start — the decorator
 
 ```python
-from spire import Component, IORecord, Input, Output, UInt
+from spire import Bool, Component, IORecord, Input, Output, UInt
 from spire.design_db import from_design_db
+from spire.expr import mux
 
 @from_design_db(objective="area")
-def mac(a, b, c):
-    return a * b + c
+def mac_step(a, b, acc, en, thresh):
+    p = mux(en, a * b, 0)          # enable gates the 4x4 product     (control)
+    t = acc + p                       # 8-bit accumulate, 9 bits wide    (arithmetic)
+    s = mux(t[8], 255, t[0:8])     # saturate at 255                  (bit test + mux)
+    return mux(s > thresh, s, 0)   # dead-zone: suppress small values (comparator)
 
 class Top(Component):
     def __init__(self):
-        self.io = IORecord(a=Input(UInt(8)), b=Input(UInt(8)), c=Input(UInt(16)),
-                           y=Output(UInt(17)))
+        self.io = IORecord(a=Input(UInt(4)), b=Input(UInt(4)), c=Input(UInt(8)),
+                           en=Input(Bool()), thresh=Input(UInt(8)), y=Output(UInt(8)))
         self.elaborate()
     def elaborate(self):
-        self.io.y <<= mac(self.io.a, self.io.b, self.io.c)   # selected implementation spliced here
+        self.io.y <<= mac_step(self.io.a, self.io.b, self.io.c,
+                               self.io.en, self.io.thresh)   # selected implementation spliced here
 ```
+
+A slot is **any traceable function** — here two arithmetic ops wrapped in enable gating, a
+saturating clamp, and a dead-zone comparator, optimized *as one unit* (candidates may restructure
+across the arithmetic/control boundary). The DB doesn't care what's inside; it only requires
+that admitted candidates prove equivalent to the slot's golden.
 
 `@from_design_db` is a **pure reader** — it never generates and never spends budget:
 
