@@ -9,6 +9,14 @@ each item's commit message cites the same ids. An item is not `applied` without 
 
 ## Parked state (2026-07-08) — where everything is and how to resume
 
+**PR CUT (2026-07-09)**: this branch merges to main at this state. Carried over to a follow-up PR:
+the decorators pick (`a51eea5`), the FSM picks (`0de68b9`, `3b6dbd1`), the reset-attr stash review
+(`refix-reset-attr-wip` + its gate `c1e96b1`, the highest-value remaining item), the composite and
+VerilogFileComponent stashes, Phase 7 simplify (autocheck worktree), and the minor/feature backlog
+(§11.7, §14.3/§14.5 benchmark numbers, PyPI links, mixed-format promotion, pure emission, ClockDomain,
+the discussed nonzero-init-without-reset emission warning). Stashes live in the repo's shared stash
+stack and survive the merge; the autocheck worktree stays as the donor for the remaining picks.
+
 **Review flow**: Felix reviews/commits on this branch (`fix/issue-review-v2`); the autonomous run's results
 live on the reference branch `fix/issue-review-v2-auto` (tip `f17f6b8`, 11 commits, checked out in the
 `../spire-hdl-autocheck` worktree) and get replayed here one commit at a time via `git cherry-pick -n`.
