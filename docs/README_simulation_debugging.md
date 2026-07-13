@@ -168,33 +168,12 @@ data-driven testbench style (external `.dat` stimulus files), see
 
 ## Running the testbench under a real Verilog simulator
 
-Icarus Verilog:
-
-```sh
-iverilog -g2012 -o mac_tb_sim mac_tb.v mac.v
-vvp mac_tb_sim
-```
-
-Verilator (5.x, using its built-in main):
-
-```sh
-verilator --binary -j 0 --top-module mac_tb mac_tb.v mac.v
-./obj_dir/Vmac_tb
-```
-
-Both print the testbench's pass/fail checks and write `dump.vcd`, which opens in the same
-viewers as above:
-
-```sh
-surfer dump.vcd
-```
-
-The nice property of this flow: with `tb.trace_enabled = True`, the SAME recorded run
-produces both waveform files, the Spire-model VCD (via `write_vcd`) and the Verilog VCD
-(`dump.vcd` from the testbench). Since both replay the identical stimulus sequence, the
-two files can be opened side by side (e.g. two surfer windows) and compared signal by
-signal: any divergence between the Spire model and the emitted Verilog shows up directly in
-the waves.
+To compile and run the emitted testbench (Icarus/Verilator commands, `dump.vcd`), see
+[README_verilog_testbench.md](README_verilog_testbench.md). The payoff of the recorded
+flow: with `tb.trace_enabled = True` the SAME run yields the Spire-model VCD (via
+`write_vcd`) and the Verilog VCD (`dump.vcd`), replaying identical stimuli. Opened side
+by side (e.g. two surfer windows), any divergence between the Spire model and the emitted
+Verilog shows up directly in the waves.
 
 ## See also
 

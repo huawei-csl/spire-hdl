@@ -6,7 +6,9 @@
 stimuli (and the outputs the Python simulator observed) and can then emit a
 **synthesizable Verilog testbench** that replays the exact same interactions
 against the generated RTL — handy for cross-checking the emitted Verilog under
-Verilator or Icarus.
+Verilator or Icarus. For the surrounding workflow (driving and
+inspecting the simulator, waveforms from a Spire run, side-by-side cross-checks), see
+[README_simulation_debugging.md](README_simulation_debugging.md).
 
 ## Quick start
 
@@ -80,6 +82,9 @@ the expected outputs, finishing with `$finish`.
 For clocked designs, use `step()` (and `reset()`) just like the simulator; each
 `step()` is lowered to a clock cycle in the testbench.
 
+`reset()` lowers to: assert `rst`, settle, check outputs (no clock edge), deassert. Valid
+only because emitted resets are asynchronous (`always @(posedge clk or posedge rst)`).
+
 `to_testbench_str(...)` returns the same text as a string instead of writing a
 file. Both take an optional `timescale` and a `dump_vcd` / `dumpfile` pair
 (on by default) so the simulator run also produces a waveform.
@@ -119,3 +124,26 @@ tb.to_data_driver_testbench_file_incl_dat("add8_tb.v", vectors, "add8_vectors.da
 
 See [`testing/low_level_arithmetic/int_adders/int_adder_tb_sim.py`](../testing/low_level_arithmetic/int_adders/int_adder_tb_sim.py)
 for an end-to-end example (DUT + inline testbench + data-driven testbench + VCD).
+
+## Running the emitted testbench
+
+Icarus Verilog:
+
+```sh
+iverilog -g2012 -o add8_tb_sim add8_tb.v add8.v
+vvp add8_tb_sim
+```
+
+Verilator (5.x, using its built-in main):
+
+```sh
+verilator --binary -j 0 --top-module Add8_tb add8_tb.v add8.v
+./obj_dir/VAdd8_tb
+```
+
+Both print the testbench's pass/fail checks and write `dump.vcd` for any wave viewer,
+for example [surfer](https://surfer-project.org) or GTKWave:
+
+```sh
+surfer dump.vcd
+```
