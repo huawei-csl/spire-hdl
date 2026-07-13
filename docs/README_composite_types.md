@@ -214,5 +214,5 @@ class AccDemo(Component):
 Working tests demonstrate the full simulation flow:
 [`testing/test_fixed_point.py`](../testing/test_fixed_point.py),
 [`testing/test_floating_point.py`](../testing/test_floating_point.py),
-[`testing/test_record.py`](../testing/test_record.py),
+[`testing/test_record.py`](../testing/test_composite_record.py),
 [`testing/test_array2.py`](../testing/test_array2.py).

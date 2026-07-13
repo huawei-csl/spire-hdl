@@ -135,8 +135,9 @@ def multi_scan_n(n: int) -> PrefixNodes:
     lower = [s for s in _MULTI_SCAN_SIZES if s < n]
     if not lower:
         raise ValueError(
-            f"ParallelScan_n not defined for n={n} and no lower supported size "
-            f"(supported: {_MULTI_SCAN_SIZES})"
+            f"FSA option PREFIX_MULTI_SCAN is not available for {n}-bit adders: its hand-crafted "
+            f"templates start at {min(_MULTI_SCAN_SIZES)} bits (supported: {_MULTI_SCAN_SIZES}); "
+            f"pick another --fsa-opt / fsa_opt for narrow widths"
         )
     return multi_scan_n(max(lower))
 
@@ -156,8 +157,9 @@ def ZCG_n(n: int) -> PrefixNodes:
     lower = [s for s in _ZCG_SIZES if s < n]
     if not lower:
         raise ValueError(
-            f"ZCG not defined for n={n} and no lower supported size "
-            f"(supported: {_ZCG_SIZES})"
+            f"FSA option PREFIX_ZCG is not available for {n}-bit adders: its hand-crafted "
+            f"templates start at {min(_ZCG_SIZES)} bits (supported: {_ZCG_SIZES}); "
+            f"pick another --fsa-opt / fsa_opt for narrow widths"
         )
     return ZCG_n(max(lower))
 

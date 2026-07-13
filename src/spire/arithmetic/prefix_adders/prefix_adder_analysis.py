@@ -113,7 +113,6 @@ def build_prefix_adder_from_matrix(
         Gij = Gl | (Pl & Gr)
         Pij = Pl & Pr
         GP[key] = (Gij, Pij)
-        print(f"produced node {(i,j)} out of ({i,k+1}) and ({k,j})")
         return GP[key]
 
     # sanity: for every i, we must be able to get the prefix up to bit 0 (directly or via its tree).
@@ -224,75 +223,6 @@ def build_prefix_adder_vectors_cin0():
 # (name, a, b, cin, y_exp, cout_exp)
 Vec: TypeAlias = Tuple[str, int, int, int, int, int]
 
-def build_adder_vectors16(num_random: int = 512, seed: int = 0xADDEF) -> List[Vec]:
-    n = 8
-    M = (1 << n) - 1
-    V: List[Vec] = []
-
-    def add(name: str, a: int, b: int, cin: int):
-        total = (a & M) + (b & M) + (cin & 1)
-        y = total & M
-        co = (total >> n) & 1
-        V.append((name, a & M, b & M, cin & 1, y, co))
-
-    # --- Directed: extremes & big numbers ---
-    add("zero+zero",        0x0000, 0x0000, 0)
-    add("max+zero",         0xFFFF, 0x0000, 0)
-    add("max+one",          0xFFFF, 0x0001, 0)
-    add("max+max",          0xFFFF, 0xFFFF, 0)
-    add("half+half",        0x8000, 0x8000, 0)
-    add("near-msb-carry",   0x7FFF, 0x0001, 0)
-    add("cin-only",         0x0000, 0x0000, 1)
-    add("max+zero+cin",     0xFFFF, 0x0000, 1)
-    add("max+max+cin",      0xFFFF, 0xFFFF, 1)
-
-    # Famous hexes / “large numbers”
-    add("DEAD+BEEF",        0xDEAD, 0xBEEF, 0)
-    add("C0DE+F00D",        0xC0DE, 0xF00D, 0)
-    add("FACE+FEED",        0xFACE, 0xFEED, 0)
-    add("ACDC+1337+cin",    0xACDC, 0x1337, 1)
-    add("8001+7FFE",        0x8001, 0x7FFE, 0)
-    add("FF00+00FF",        0xFF00, 0x00FF, 0)
-
-    # --- Patterns: alternating/blocks ---
-    for a,b in [(0x5555,0xAAAA), (0x3333,0xCCCC), (0x0F0F,0xF0F0),
-                (0xF00F,0x0FF0), (0xAA55,0x55AA), (0xFFFF,0x5555)]:
-        add(f"pat {a:04X}+{b:04X}", a, b, 0)
-        add(f"pat {a:04X}+{b:04X}+cin", a, b, 1)
-
-    # --- Carry-ripple lengths: (2^k−1)+1 ---
-    for k in range(1, 16):
-        add(f"ripple_len_{k}", (1 << k) - 1, 0x0001, 0)
-
-    # --- One-hot sweeps vs full/one-hot ---
-    for k in range(16):
-        add(f"onehot{k}+full",      1 << k, M, 0)
-        add(f"onehot{k}+onehot{k}", 1 << k, 1 << k, 1)  # tests carry-in handling
-
-    # --- Near-boundary big cases ---
-    edges = [
-        (0xFFFE, 0x0001, 0), (0xFFFE, 0x0001, 1),
-        (0x7FFF, 0x8000, 0), (0x7FFF, 0x8000, 1),
-        (0x8000, 0x7FFF, 1), (0x4000, 0x4000, 1),
-        (0xFFF0, 0x0010, 0), (0xFFF0, 0x0010, 1),
-        (0x8000, 0x0000, 1), (0x0001, 0x0001, 1),
-    ]
-    for a,b,c in edges:
-        add(f"edge {a:04X}+{b:04X}+c{c}", a, b, c)
-
-    # --- Reproducible randoms ---
-    rng = random.Random(seed)
-    for i in range(num_random):
-        a = rng.randrange(1 << 16)
-        b = rng.randrange(1 << 16)
-        c = rng.randrange(2)
-        add(f"rnd{i:04d}", a, b, c)
-
-    # filter out vectors with cin not equal 0
-    V = [v for v in V if v[3] == 0]
-
-    return V
-
 def build_adder_verctorsn_rand(n: int, num_random: int = 512, seed: int = 0xADDEF) -> List[Vec]:
     M = (1 << n) - 1
     V: List[Vec] = []
@@ -348,7 +278,7 @@ class AigReport:
     optimized_size: int = 0
     optimized_depth: int = 0
 
-def get_stats(nodes, n, name) -> Tuple[GraphReport, AigReport]:
+def get_stats(nodes, n, name) -> Tuple[GraphReport, AigReport, int, int]:
 
     m = build_prefix_adder_from_matrix(name, n, nodes, with_cin=False, with_cout=True, depth_optimize=True)
     # print(m.to_verilog())

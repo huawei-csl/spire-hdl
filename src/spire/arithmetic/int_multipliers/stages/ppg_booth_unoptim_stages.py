@@ -127,8 +127,6 @@ class BoothUnoptimizedPartialProductGenerator(PartialProductGeneratorBase):
             if base_w < out_bits:
                 cols[base_w].append(neg)
 
-        total_bits = sum(len(v) for v in cols.values())
-
         return cols
 
 

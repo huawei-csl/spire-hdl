@@ -164,37 +164,25 @@ def test_modes_produce_different_trees(ppa_cls, default_mode, alt_mode):
     PPA_DEFAULTS,
     ids=[c.__name__ for c, _, _ in PPA_DEFAULTS],
 )
-def test_tree_matches_reference(ppa_cls, default_mode, alt_mode):
-    """Verify exact tree identity against pre-refactor reference fingerprints."""
-    ref_path = Path(__file__).parent / "ppa_reference_fingerprints.json"
-    if not ref_path.exists():
-        pytest.skip("Reference fingerprints not found — run capture_ppa_reference.py first")
+def test_selection_modes_multiply_correctly(ppa_cls, default_mode, alt_mode):
+    """Every selection mode of every PPA produces a functionally correct 4x4 multiplier
+    (exhaustive). Replaces the never-runnable pre-refactor fingerprint reference test —
+    ppa_reference_fingerprints.json / capture_ppa_reference.py never existed in any history."""
+    from spire.simulator import Simulator
 
-    with open(ref_path) as f:
-        reference = json.load(f)
-
-    config = StageMultiplierConfig(8, 8, False, False, "area")
-    name = ppa_cls.__name__
-
-    # Test default mode matches reference
-    reset_shared_cache()
-    cols = make_ppg_columns(config)
-    ppa = ppa_cls(config)
-    fp_default = fingerprint_columns(ppa.accumulate(cols))
-    ref_default = {w: bits for w, bits in reference[f"{name}__default"].items() if bits}
-    assert fp_default == ref_default, (
-        f"{name}: default mode tree differs from pre-refactor reference"
-    )
-
-    # Test alt mode matches reference (if available)
-    if alt_mode is not None:
-        ref_alt_key = f"{name}__alt"
-        if ref_alt_key in reference:
-            reset_shared_cache()
-            cols = make_ppg_columns(config)
-            ppa = ppa_cls(config, selection_mode=alt_mode)
-            fp_alt = fingerprint_columns(ppa.accumulate(cols))
-            ref_alt = {w: bits for w, bits in reference[ref_alt_key].items() if bits}
-            assert fp_alt == ref_alt, (
-                f"{name}: alt mode '{alt_mode}' tree differs from pre-refactor reference"
-            )
+    modes = [default_mode] + ([alt_mode] if alt_mode is not None else [])
+    for mode in modes:
+        reset_shared_cache()
+        mul = StageBasedMultiplierBasic(
+            a_w=4, b_w=4,
+            ppg_cls=AndPartialProductGenerator,
+            ppa_cls=lambda cfg, _m=mode, _c=ppa_cls: _c(cfg, selection_mode=_m),
+            selection_mode=mode,
+        )
+        sim = Simulator(mul.to_module(f"ppa_{ppa_cls.__name__}_{mode}", with_clock=False,
+                                      with_reset=False))
+        for a in range(16):
+            for b in range(16):
+                sim.set("a", a).set("b", b)
+                sim.eval()
+                assert sim.get("y") == a * b, f"{ppa_cls.__name__}/{mode}: {a}*{b} -> {sim.get('y')}"

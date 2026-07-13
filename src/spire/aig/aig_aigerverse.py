@@ -1,5 +1,7 @@
 # aag_loader.py
-# Minimal AIGER-ASCII (.aag) reader → builds graph via create_pi/create_po/create_and/create_buf
+# Minimal AIGER-ASCII (.aag) reader → builds graph via create_pi/create_po/create_and/create_buf.
+# Latches are built when the adapter provides latch()/latch_next() (e.g. the Spire netlist adapter);
+# adapters without them (the aigverse Aig adapter) keep rejecting sequential AAGs.
 
 from __future__ import annotations
 import abc
@@ -13,6 +15,8 @@ def _parse_header(h: str) -> Tuple[int, int, int, int, int]:
     parts = h.strip().split()
     if len(parts) < 6 or parts[0] != "aag":
         raise AagParseError("Header must start with: aag M I L O A")
+    if len(parts) > 6:
+        raise AagParseError(f"Extended AIGER-1.9 header (B/C/J/F counts) is not supported: {h.strip()!r}")
     try:
         M = int(parts[1])
         I = int(parts[2])
@@ -103,6 +107,7 @@ def _read_aag(lines: List[str]) -> Dict[str, Any]:
         except ValueError:
             # allow empty name
             n_str, name = rest, ""
+        name = name.strip()  # CRLF files must not leak '\r' into port names
         try:
             n = int(n_str)
         except ValueError:
@@ -178,6 +183,16 @@ class AbstractAdapter(abc.ABC):
         """Create an AND gate for the two given nodes."""
         raise NotImplementedError
 
+    # Latch support is opt-in per adapter; the defaults keep combinational-only adapters rejecting
+    # sequential AAGs with a clear error.
+    def latch(self, name: Optional[str] = None) -> Any:
+        """Create a latch state node (its current-value output). Latches power on at 0."""
+        raise AagParseError(f"{type(self).__name__} supports combinational AAGs only (L must be 0)")
+
+    def latch_next(self, latch_node: Any, next_node: Any) -> None:
+        """Connect a latch's next-state function (called after all AND nodes exist)."""
+        raise AagParseError(f"{type(self).__name__} supports combinational AAGs only (L must be 0)")
+
 class _Adapter(AbstractAdapter):
     """Adapters around the target 'graph' (e.g. AIG) object to be forgiving about signatures."""
 
@@ -243,11 +258,10 @@ def conv_aag_into_graph(lines: List[str], aig: Any, adapter: Type[AbstractAdapte
       - aig.create_buf(node, inverted=False)   # used to build NOT
     Returns the same `aig` object for chaining.
 
-    Limitations: Latches not supported unless you extend this to call a 'create_latch'.
+    Latches (L > 0) are built through the adapter's latch()/latch_next() hooks; adapters without
+    them reject sequential AAGs.
     """
     data = _read_aag(lines)
-    if data["L"] != 0:
-        raise AagParseError("This minimal reader only supports combinational AAGs (L must be 0).")
 
     ad: AbstractAdapter = adapter(aig)
 
@@ -267,15 +281,40 @@ def conv_aag_into_graph(lines: List[str], aig: Any, adapter: Type[AbstractAdapte
             raise AagParseError(f"Reference to undefined variable {v} (literal {lit})")
         return ad.NOT(base) if inv else base
 
+    # In sequential AAGs, clocks are absorbed into the latches but yosys still lists them as
+    # inputs; drop any input no literal ever references, so it doesn't become a data port.
+    referenced_vars: set = set()
+    if data["L"] != 0:
+        for lit in data["outputs"]:
+            referenced_vars.add(lit >> 1)
+        for lhs, r0, r1 in data["ands"]:
+            referenced_vars.update((r0 >> 1, r1 >> 1))
+        for _curr, nxt, _init in data["latches"]:
+            referenced_vars.add(nxt >> 1)
+
     # 1) Create PIs in file order, remember names
     for i, lit in enumerate(data["inputs"]):
         if lit % 2 != 0:
             raise AagParseError(f"Input literal must be even (got {lit})")
         v = lit >> 1
+        if data["L"] != 0 and v not in referenced_vars:
+            continue  # absorbed clock (or otherwise unused input) of a sequential design
         name = data["sym_i"].get(i, f"pi{i}")
         node = ad.pi(name)
         var_to_node[v] = node
         nodes_in_order.append(node)
+
+    # 1b) Create latch state nodes (they feed the AND network like inputs). Latches power on at 0.
+    latch_nodes: List[Any] = []
+    for i, (curr, nxt, init) in enumerate(data["latches"]):
+        if curr % 2 != 0:
+            raise AagParseError(f"Latch literal must be even (got {curr})")
+        if init not in (None, 0, curr):
+            raise AagParseError(f"Latch init {init} is not supported, could be added in a few lines")
+        name = data["sym_l"].get(i)
+        node = ad.latch(name)
+        var_to_node[curr >> 1] = node
+        latch_nodes.append(node)
 
     # 2) Build AND nodes in topological order
     # Each AND defines a new even literal 'lhs' (var index = lhs >> 1)
@@ -289,6 +328,10 @@ def conv_aag_into_graph(lines: List[str], aig: Any, adapter: Type[AbstractAdapte
         node = ad.AND(a, b)
 
         var_to_node[v] = node
+
+    # 2b) Close the latch loops now that all AND nodes exist (next-state may reference any of them).
+    for node, (_curr, nxt, _init) in zip(latch_nodes, data["latches"]):
+        ad.latch_next(node, lit_to_node(nxt))
 
     # 3) Create POs (one per output)
     for i, lit in enumerate(data["outputs"]):

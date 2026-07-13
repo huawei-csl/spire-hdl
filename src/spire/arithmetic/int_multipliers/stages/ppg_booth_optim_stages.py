@@ -101,8 +101,6 @@ class BoothOptimizedPartialProductGenerator(PartialProductGeneratorBase):
                 if correction_col < out_bits:
                     cols[correction_col].append(Const(True, Bool()))
 
-        total_bits = sum(len(v) for v in cols.values())
-
         return cols
 
 

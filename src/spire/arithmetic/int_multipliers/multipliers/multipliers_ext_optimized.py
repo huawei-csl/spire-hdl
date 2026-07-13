@@ -135,8 +135,8 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
     def __init__(self, *args, f_aag_lines: Optional[Callable[[int, int, Encoding, Encoding], list[str]]] = None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        assert self.a_encoding == Encoding.unsigned or self.b_encoding == Encoding.twos_complement, "Only unsigned or two's complement encoding is supported"
-        assert self.b_encoding == Encoding.unsigned or self.b_encoding == Encoding.twos_complement, "Only unsigned or two's complement encoding is supported"
+        assert self.a_encoding in (Encoding.unsigned, Encoding.twos_complement), "Only unsigned or two's complement encoding is supported"
+        assert self.b_encoding in (Encoding.unsigned, Encoding.twos_complement), "Only unsigned or two's complement encoding is supported"
         y_encoding = Encoding.twos_complement if (self.a_encoding == Encoding.twos_complement or self.b_encoding == Encoding.twos_complement) else Encoding.unsigned
 
         def get_type(enc: Encoding,) -> Type:
@@ -183,7 +183,7 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
 
 class OptimizedSignMagnitudeMultiplier(StageBasedMultiplierBase):
 
-    def __init__(self, *args, f_aag_lines: Optional[List[str]] = None, **kwargs) -> None:
+    def __init__(self, *args, f_aag_lines: "Optional[Callable[..., List[str]]]" = None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         assert self.a_encoding == Encoding.sign_magnitude and self.b_encoding == Encoding.sign_magnitude, "Only sign-magnitude encoding is supported"
@@ -217,7 +217,10 @@ class OptimizedSignMagnitudeMultiplier(StageBasedMultiplierBase):
 
         self.mult = mult
 
-        W = self.aw  # assume square for now
+        if self.aw != self.bw:
+            raise ValueError(f"{type(self).__name__} expects square operands (aw == bw); "
+                             f"got {self.aw}x{self.bw} — b's sign/magnitude split is width-hardcoded")
+        W = self.aw
 
         sa = self.io.a[W - 1]
         sb = self.io.b[W - 1]
@@ -242,7 +245,7 @@ class OptimizedSignMagnitudeMultiplier(StageBasedMultiplierBase):
 
 class OptimizedMultiplierFrom4BitBlocks(StageBasedMultiplierBase):
 
-    def __init__(self, *args, f_aag_lines: Optional[List[str]] = None, use_compressor_tree=True, **kwargs) -> None:
+    def __init__(self, *args, f_aag_lines: "Optional[Callable[..., List[str]]]" = None, use_compressor_tree=True, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         # assign default PPA/FSA if not provided
@@ -254,8 +257,11 @@ class OptimizedMultiplierFrom4BitBlocks(StageBasedMultiplierBase):
 
         # Compose four 8x8 optimized unsigned multipliers into a 16x16->32 multiplier
         assert self.a_encoding == Encoding.unsigned and self.b_encoding == Encoding.unsigned, "Only unsigned encoding is supported"
-        # assert aw and bw are >=4 and powers of two
-        assert self.aw >= 4 and self.bw >= 4 and ((self.aw & (self.aw - 1)) == 0) and ((self.bw & (self.bw - 1)) == 0), "This composite multiplier expects input widths >=8 and powers of two"
+        # aw and bw must be equal (the p1/p3 column shifts are hardcoded for square operands;
+        # a custom f_aag_lines with aw != bw would silently mis-weight partial products),
+        # >= 4, and powers of two.
+        assert self.aw == self.bw, "This composite multiplier expects square operands (aw == bw)"
+        assert self.aw >= 4 and self.bw >= 4 and ((self.aw & (self.aw - 1)) == 0) and ((self.bw & (self.bw - 1)) == 0), "This composite multiplier expects input widths >=4 and powers of two"
 
         self.io: StageBasedMultiplierIO = StageBasedMultiplierIO(
             a=Input(UInt(self.aw)),
@@ -372,8 +378,8 @@ class OptimizedMultiplierFrom4BitBlocks(StageBasedMultiplierBase):
                 config = StageMultiplierConfig(
                     a_width=self.aw,
                     b_width=self.bw,
-                    signed_a=Encoding.unsigned,
-                    signed_b=Encoding.unsigned,
+                    signed_a=False,
+                    signed_b=False,
                     optim_type=self.optim_type,
                 )
 

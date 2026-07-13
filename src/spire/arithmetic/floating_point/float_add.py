@@ -287,7 +287,7 @@ class FpAdd(Component):
                        mux(overflow_exp, 0,
                        frac_final)))
         else:
-            # Flush-to-zero: subnormal results become +0
+            # Flush-to-zero: subnormal results flush to zero, keeping the result sign (-tiny -> -0)
             exp_out = mux(is_zero_res | is_subnormal_out, 0,
                       mux(overflow_exp, self.MAX_E,
                       exp_final))

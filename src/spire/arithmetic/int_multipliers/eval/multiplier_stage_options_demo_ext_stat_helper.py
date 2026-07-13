@@ -126,7 +126,8 @@ class ParquetCollector:
     def save(self, append: bool = True) -> None:
         df = self._to_df()
         if df.empty:
-            raise Warning("No rows to save in ParquetCollector.save()")
+            import warnings
+            warnings.warn("No rows to save in ParquetCollector.save()")
             return
         if append and os.path.exists(self.out_file):
             existing = pd.read_parquet(self.out_file, engine=self.engine)

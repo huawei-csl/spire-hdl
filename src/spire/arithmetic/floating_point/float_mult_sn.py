@@ -93,8 +93,16 @@ class FpMulSN(Component):
         is_fA_zero = fA == 0
         is_fB_zero = fB == 0
 
-        is_zeroA = is_eA_zero & is_fA_zero
-        is_zeroB = is_eB_zero & is_fB_zero
+        if self.subnormals:
+            is_zeroA = is_eA_zero & is_fA_zero
+            is_zeroB = is_eB_zero & is_fB_zero
+        else:
+            # DAZ: in flush-to-zero mode a subnormal INPUT is treated as zero.
+            # Previously only true zeros were detected; the zeroed-mantissa product escaped the
+            # underflow test whenever the other operand was >= 2.0, and the pack emitted a
+            # spurious power of two (e.g. min_sub x 2^100 -> 1.49e-08 instead of 0).
+            is_zeroA = is_eA_zero
+            is_zeroB = is_eB_zero
 
         is_eA_all1 = eA == exp_all_ones
         is_eB_all1 = eB == exp_all_ones

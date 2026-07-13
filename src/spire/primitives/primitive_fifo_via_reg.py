@@ -1,10 +1,12 @@
 """``FIFOPrimitive_via_reg`` — register-bank synchronous FIFO (legacy reference).
 
 Original ``FIFOPrimitive`` implementation: storage is an inline per-cell
-``Register`` bank + mux tree (O(depth) sim). The canonical ``FIFOPrimitive``
+``Register`` bank + mux tree (O(depth) sim). The primary ``FIFOPrimitive``
 (in ``primitive_fifo.py``) now backs storage with the core's O(1) ``_MemoryArray``;
 this variant is kept for comparison / fallback. The synthesisable Verilog is
-identical between the two.
+behaviourally equivalent but NOT identical: here the memory write sits in the
+``posedge clk or posedge rst`` block, which flattens the array to flip-flops
+(no BRAM inference); the primary variant emits the split clock-only idiom.
 
 Semantics (one-cycle read latency, *not* first-word-fallthrough) — see
 ``primitive_fifo.py`` for the full description.

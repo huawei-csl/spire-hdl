@@ -45,13 +45,11 @@ class CompositeRegister(HDLComposite, Generic[T_Comp]):
         reg_name = name or f"reg_{agg_cls.__name__}_{id(self)}"
         self._reg = Signal(typ=bits_typ, kind="reg", name=reg_name)
 
-        # Optional init value (packed)
+        # Optional init value: a constant packed integer (composite leaves are wires, never constants).
         if init is not None:
             if isinstance(init, HDLComposite):
-                init_bits = init.to_bits()
-            else:
-                init_bits = as_expr(init)
-            self._reg._init = fit_width(init_bits, bits_typ)
+                raise ValueError("CompositeRegister init must be a constant packed value (int), not a composite instance")
+            self._reg.set_init(init)
 
     # ---- HDLComposite API ----
 

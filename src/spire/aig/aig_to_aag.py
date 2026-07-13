@@ -110,14 +110,17 @@ def read_ascii_int_line(f: BinaryIO) -> int:
         raise EOFError("Unexpected EOF while reading ASCII integer line.")
     return int(_decode_ascii(line).strip())
 
-def read_ascii_two_ints_line(f: BinaryIO) -> Tuple[int, int]:
+def read_ascii_latch_line(f: BinaryIO, expect_lit: Optional[int] = None) -> Tuple[Optional[int], int, Optional[int]]:
+    """Latch row: ``[lit] next [init]`` (AIGER-1.9 optional init; lit implicit in binary format)."""
     line = f.readline()
     if not line:
-        raise EOFError("Unexpected EOF while reading two-int line.")
+        raise EOFError("Unexpected EOF while reading latch line.")
     toks = _decode_ascii(line).strip().split()
+    if expect_lit is None:  # binary format: only `next [init]`
+        return None, int(toks[0]), (int(toks[1]) if len(toks) > 1 else None)
     if len(toks) < 2:
-        raise ValueError(f"Expected two integers on latch line, got: {toks!r}")
-    return int(toks[0]), int(toks[1])
+        raise ValueError(f"Expected `lit next [init]` on latch line, got: {toks!r}")
+    return int(toks[0]), int(toks[1]), (int(toks[2]) if len(toks) > 2 else None)
 
 def read_until_symbols_and_comments(aig: Aiger, f: BinaryIO) -> None:
     """
@@ -236,9 +239,11 @@ def read_aiger(path: str) -> Aiger:
             for _ in range(I):
                 lit = read_ascii_int_line(f)
                 aig.inputs.append(lit)
-            # Latches (lit next)
+            # Latches (lit next [init]); latches power on at 0
             for _ in range(L):
-                lit, nxt = read_ascii_two_ints_line(f)
+                lit, nxt, init = read_ascii_latch_line(f, expect_lit=0)
+                if init not in (None, 0, lit):
+                    raise ValueError(f"Latch init {init} is not supported, could be added in a few lines")
                 aig.latches.append((lit, nxt))
             # Outputs
             for _ in range(O):
@@ -256,10 +261,12 @@ def read_aiger(path: str) -> Aiger:
             # fmt == 'aig' (binary ands)
             # Inputs are implicit: 2,4,6,...,2I
             aig.inputs = [2 * (i + 1) for i in range(I)]
-            # Latches: lit is implicit, we read ONLY next (ASCII), one per line
+            # Latches: lit is implicit; the line is `next [init]` (AIGER-1.9 optional init)
             for i in range(L):
-                nxt = read_ascii_int_line(f)
+                _, nxt, init = read_ascii_latch_line(f)
                 lit = 2 * (I + i + 1)
+                if init not in (None, 0, lit):
+                    raise ValueError(f"Latch init {init} is not supported, could be added in a few lines")
                 aig.latches.append((lit, nxt))
             # Outputs (ASCII), one per line
             for _ in range(O):
@@ -272,6 +279,9 @@ def read_aiger(path: str) -> Aiger:
                 d1 = read_varint(f)  # rhs0 - rhs1
                 rhs0 = lhs - d0
                 rhs1 = rhs0 - d1
+                if not (lhs > rhs0 >= rhs1 >= 0):
+                    raise ValueError(f"Invalid AND deltas: need lhs > rhs0 >= rhs1 >= 0, "
+                                     f"got ({lhs}, {rhs0}, {rhs1})")
                 aig.ands.append((lhs, rhs0, rhs1))
                 lhs += 2
             # Symbols + comments (ASCII)
@@ -402,7 +412,7 @@ def get_aag_lines(aig: Aiger, strip: bool = False, extra_comments: Optional[List
     for lit in aig.inputs:
         lines.append(f"{lit}")
 
-    # Latches
+    # Latches (power on at 0; accepted init tokens all mean that and are normalized away)
     for lit, nxt in aig.latches:
         lines.append(f"{lit} {nxt}")
 

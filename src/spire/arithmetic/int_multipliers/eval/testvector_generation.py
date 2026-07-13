@@ -54,13 +54,15 @@ class EncodingModel:
         if fmt == Encoding.twos_complement_symmetric:
             limit = (1 << (width - 1)) - 1
             return (-limit, limit)
+        if fmt == Encoding.twos_complement_overflow:  # signed set membership must match
+            return (-(1 << (width - 1)), (1 << (width - 1)) - 1)
         if fmt == Encoding.twos_complement_upper:  # extend on the upper side
             return (-(1 << (width - 1)) + 1, (1 << (width - 1)))
         if fmt in [Encoding.sign_magnitude]:
             limit = (1 << (width - 1)) - 1
             return (-limit, limit)
         if fmt == Encoding.sign_magnitude_ext_up:  # extend on the upper side
-            return (-(1 << (width - 1) + 1), (1 << (width - 1)))
+            return (-(1 << (width - 1)) + 1, (1 << (width - 1)))  # precedence fix
         if fmt == Encoding.onehot:
             return (0, max(width - 1, 0))
         # unsigned-like encodings (unsigned, gray)
@@ -159,7 +161,12 @@ class TwoInputArithmeticTestVectorsBase(TestVectorGenerator):
         a_encoding: Encoding = Encoding.unsigned,
         b_encoding: Encoding = Encoding.unsigned,
         y_encoding: Encoding = Encoding.unsigned,
+        seed: Optional[int] = 42,
     ):
+        # seed: reseeds the module-global RNGs at generate() time so regressions are
+        # reproducible (the FP generators already default to seed=42; the integer ones
+        # sampled the unseeded globals — ). Pass None for nondeterministic runs.
+        self.seed = seed
         self.a_w = a_w
         self.b_w = b_w
         self.y_w = a_w + b_w if y_w is None else y_w
@@ -169,12 +176,18 @@ class TwoInputArithmeticTestVectorsBase(TestVectorGenerator):
         self.b_encoding_model = EncodingModel(b_encoding)
         self.y_encoding_model = EncodingModel(y_encoding)
         
+    def _reseed(self) -> None:
+        if self.seed is not None:
+            random.seed(self.seed)
+            np.random.seed(self.seed)
+
     def generate(self) -> TestVectors:
         raise NotImplementedError()
 
 class MultiplierTestVectors(TwoInputArithmeticTestVectorsBase):
 
     def generate(self) -> TestVectors:
+        self._reseed()
 
         if self.num_vectors is None:
             self.num_vectors = 64  # default number of vectors
@@ -241,10 +254,14 @@ class MultiplierTestVectorsExhaustive(TwoInputArithmeticTestVectorsBase):
             va_encoded = i % (1 << self.a_w)
             vb_encoded = i // (1 << self.a_w)
 
+            # Non-surjective encodings (sign_magnitude -0, symmetric most-negative, onehot/gray
+            # gaps) have patterns with no value: skip them instead of KeyErroring.
+            if va_encoded not in a_table or vb_encoded not in b_table:
+                continue
             va_value = a_table[va_encoded]
             vb_value = b_table[vb_encoded]
             y_value = va_value * vb_value
-            y_encoded = y_table[y_value]
+            y_encoded = self.y_encoding_model.encode_value(y_value, self.y_w)  # y_table maps encoded->value
 
             # append test vector
             vecs.append(
@@ -280,6 +297,7 @@ class AdderTestVectors(TwoInputArithmeticTestVectorsBase):
         )
 
     def generate(self) -> TestVectors:
+        self._reseed()
         if self.num_vectors is None:
             self.num_vectors = 64
 
@@ -331,6 +349,7 @@ class SubtractorTestVectors(TwoInputArithmeticTestVectorsBase):
         )
 
     def generate(self) -> TestVectors:
+        self._reseed()
         if self.num_vectors is None:
             self.num_vectors = 64
 
@@ -364,12 +383,19 @@ class EncoderDecoderTestVectors:
         tb_sigma: Optional[float] = None,
         input_encoding: Encoding = Encoding.twos_complement,
         output_encoding: Encoding = Encoding.sign_magnitude,
+        seed: Optional[int] = 42,
     ):
+        self.seed = seed
         self.width = width
         self.num_vectors = num_vectors
         self.tb_sigma = tb_sigma
         self.input_encoding_model = EncodingModel(input_encoding)
         self.output_encoding_model = EncodingModel(output_encoding)
+
+    def _reseed(self) -> None:
+        if self.seed is not None:
+            random.seed(self.seed)
+            np.random.seed(self.seed)
 
     def _sample_value(self) -> int:
         if self.tb_sigma is not None:
@@ -377,6 +403,7 @@ class EncoderDecoderTestVectors:
         return self.input_encoding_model.get_uniform_sample(self.width)
 
     def generate(self) -> TestVectors:
+        self._reseed()
         if self.num_vectors is None:
             self.num_vectors = 64
 

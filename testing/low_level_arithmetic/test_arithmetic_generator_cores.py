@@ -172,7 +172,8 @@ def test_generate_fp_matmulacc_sim(tmp_path: Path):
         num_vectors=16,
     )
 
-    result = generate_fp_matmul_accumulate(cfg, actions=actions)
+    with pytest.warns(UserWarning, match="incorrectly flushed"):  # documented FTZ corner
+        result = generate_fp_matmul_accumulate(cfg, actions=actions)
 
     assert result.module.name.startswith("fp_matmul_")
     assert result.verilog_out == tmp_path / "fp_matmulacc.v"
@@ -193,7 +194,8 @@ def test_generate_fp_matmulacc_staged_sim():
     )
     actions = GenerationActions(simulate=True, num_vectors=16)
 
-    result = generate_fp_matmul_accumulate(cfg, actions=actions)
+    with pytest.warns(UserWarning, match="incorrectly flushed"):  # documented FTZ corner
+        result = generate_fp_matmul_accumulate(cfg, actions=actions)
 
     assert result.simulation_failures == 0
 

@@ -63,8 +63,6 @@ class BaughWooleyPartialProductGenerator(PartialProductGeneratorBase):
                 cols[wa - 1].append(Const(True, Bool()))
                 cols[wb - 1].append(Const(True, Bool()))
 
-        total_bits = sum(len(v) for v in cols.values())
-
         return cols
 
 

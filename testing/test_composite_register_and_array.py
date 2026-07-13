@@ -126,27 +126,23 @@ def test_composite_register_dummyagg_init_from_int():
     assert isinstance(bits, Signal)
     assert bits.kind == "reg"
 
-    # _init should be set
+    # _init is a Const re-typed to the packed register width
     assert bits._init is not None
     assert bits._init.typ.width == 5
-    # Usually bits._init will be a Const; if so, we can check the value
-    if bits._init.__class__.__name__ == "Const":
-        assert bits._init.value == 6
+    assert bits._init.__class__.__name__ == "Const"
+    assert bits._init.value == 6
 
 
-def test_composite_register_dummyagg_init_from_agg():
+def test_composite_register_init_from_agg_rejected():
+    # Composite leaves are wires, never constants — init must be a packed constant value.
     reset_shared_cache()
 
     src = DummyAgg(width=5, name="src_init")
     src.sig <<= 9
 
-    reg = CompositeRegister(DummyAgg, 5, name="dummy_reg_init", init=src)
-
-    bits = reg.bits
-    assert bits._init is not None
-    assert bits._init.typ.width == 5
-    # Init expression should match src bits
-    assert bits._init is src.to_bits()
+    import pytest
+    with pytest.raises(ValueError, match="constant packed value"):
+        CompositeRegister(DummyAgg, 5, name="dummy_reg_init", init=src)
 
 
 def test_composite_register_with_fixedpoint_basic():
@@ -218,17 +214,11 @@ def test_composite_register_fixedpoint_init():
     assert acc1.bits._init is not None
     assert acc1.bits._init.typ.width == 16
 
-    # Init from FixedPoint composite
+    # Init from a FixedPoint composite is rejected: composite leaves are wires, not constants.
     src = FixedPoint(ftype, name="src_fp")
-    acc2 = CompositeRegister(
-        FixedPoint,
-        ftype,
-        name="acc_reg_init2",
-        init=src,
-    )
-    assert acc2.bits._init is not None
-    assert acc2.bits._init.typ.width == 16
-    assert acc2.bits._init is src.bits
+    import pytest
+    with pytest.raises(ValueError, match="constant packed value"):
+        CompositeRegister(FixedPoint, ftype, name="acc_reg_init2", init=src)
 
 
 def sim_test_composite_register():

@@ -1,5 +1,5 @@
 *.png
-!imgs/spire_hdl.png
+!imgs/spire-hdl.png
 *.pyc
 *.v
 *.aig
@@ -9,7 +9,7 @@
 !src/spire/arithmetic/int_multipliers/data/optimized/*/*.map
 *.dot
 *.vscode
-*/__pycache__/*
+__pycache__/
 *.csv
 !src/spire/arithmetic/eval/best_configs.csv
 output/*
@@ -21,7 +21,6 @@ data/*
 *.vcd
 *.dat
 *.json
-!src/spire/arithmetic/eval/best_configs.json
 *.zip
 .devcontainer/*
 .claude
@@ -31,3 +30,5 @@ tests/*/*.v
 issue/*
 internal_docs/*
 metadocs/*
+!metadocs/REFIX_PLAN.md
+!metadocs/REFIX_STATUS.md

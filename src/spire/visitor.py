@@ -85,7 +85,9 @@ class ExprVisitor(Generic[T]):
     """
 
     def __init__(self) -> None:
-        self._cache: dict[int, T] = {}
+        # id -> (node, result). Storing the node pins it for the visitor's lifetime, so a freed node's id can
+        # never be recycled by a new node and inherit a stale cached result.
+        self._cache: dict[int, tuple] = {}
 
     def visit(self, e: Expr) -> T:
         """Dispatch *e* to the appropriate ``visit_*`` handler (cached).
@@ -96,8 +98,8 @@ class ExprVisitor(Generic[T]):
         """
         eid = id(e)
         if eid in self._cache:
-            return self._cache[eid]
-        self._cache[eid] = None  # in-progress sentinel — breaks back-edge cycles
+            return self._cache[eid][1]
+        self._cache[eid] = (e, None)  # in-progress sentinel — breaks back-edge cycles
 
         if isinstance(e, Const):
             result = self.visit_const(e)
@@ -120,7 +122,7 @@ class ExprVisitor(Generic[T]):
         else:
             raise TypeError(f"Unsupported Expr subclass: {type(e)}")
 
-        self._cache[eid] = result
+        self._cache[eid] = (e, result)
         return result
 
     def clear_cache(self) -> None:

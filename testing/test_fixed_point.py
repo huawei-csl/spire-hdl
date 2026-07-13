@@ -272,10 +272,11 @@ def test_fixedpoint_sign_mismatch_operands():
     a = FixedPoint(ft_s, bits=Const(1, ft_s.to_hdl_type()))
     b = FixedPoint(ft_u, bits=Const(1, ft_u.to_hdl_type()))
 
-    # Operand sign mismatch should raise
+    # Mixed-sign add/sub promote to a signed full type; mixed-sign mul stays rejected.
+    assert (a + b).signed
     try:
-        _ = a + b
-        assert False, "Expected ValueError due to operand sign mismatch"
+        _ = a.mul(b)
+        assert False, "Expected ValueError due to operand sign mismatch on mul"
     except ValueError:
         pass
 

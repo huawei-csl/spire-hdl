@@ -18,7 +18,8 @@ def verilog_to_aag_via_yosys(
     no_startoffset: bool = True,
     map_out_path: str | None = None,  # write_aiger -map
 ) -> Tuple[str, str | None]:
-    """Run yosys: read_verilog → synth -flatten → aigmap → write_aiger -ascii […]. Returns (aag_path, map_path_or_None)."""
+    """Run yosys: read_verilog → proc; async2sync → synth -flatten → dfflegalize → aigmap → write_aiger -ascii […].
+    Returns (aag_path, map_path_or_None)."""
     # reset yosys design to avoid crosstalk between runs
     ys.run_pass("design -reset")
     if aag_out_path is None:
@@ -31,7 +32,12 @@ def verilog_to_aag_via_yosys(
     ys.run_pass("design -reset")
     ys.run_pass(f"read_verilog -sv {verilog_path}")
     ys.run_pass("hierarchy -check " + ("-auto-top" if top is None else f"-top {top}"))
+    # The AIGER backend accepts only plain $_DFF_P_ with zero init: async2sync (RTL-level, before synth maps) turns async
+    # resets into sync ones, dfflegalize (after synth) lowers sync-reset/negedge/init-1 FFs into plain DFFs plus logic.
+    ys.run_pass("proc")
+    ys.run_pass("async2sync")
     ys.run_pass("synth -flatten")
+    ys.run_pass("dfflegalize -cell $_DFF_P_ 0")
     if tie_undriven in {"zero", "one", "random"}:
         flag = {"zero": "-zero", "one": "-one", "random": "-random"}[tie_undriven]
         ys.run_pass(f"setundef -undriven {flag}")
@@ -56,7 +62,7 @@ def verilog_to_aag_lines_via_yosys(
     embed_symbols: bool = True,
     no_startoffset: bool = True,
 ) -> List[str]:
-    """Run yosys: read_verilog → synth -flatten → aigmap → write_aiger -ascii […]. Returns AAG lines."""
+    """Same yosys pipeline as verilog_to_aag_via_yosys; returns the AAG lines instead of a path."""
     aag_path, _ = verilog_to_aag_via_yosys(
         verilog_path,
         top=top,

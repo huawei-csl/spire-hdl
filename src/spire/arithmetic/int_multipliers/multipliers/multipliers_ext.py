@@ -22,7 +22,7 @@ class StageBasedMultiplierBase(Component):
         a_encoding: Encoding = Encoding.unsigned,
         b_encoding: Encoding = Encoding.unsigned,
         optim_type: OptimType = "area",
-        ppg_cls: Optional[Type[PartialProductGeneratorBase]] = None,
+        ppg_cls: Optional[Type[PartialProductGeneratorBase]] = None,  # None → AND-array PPG (see body)
         ppa_cls: Optional[Type[PartialProductAccumulatorBase]] = None,
         fsa_cls: Optional[Type[FinalStageAdderBase]] = None,
         selection_mode: Optional[SelectionMode] = None,
@@ -34,6 +34,17 @@ class StageBasedMultiplierBase(Component):
         self.aw = a_w
         self.bw = b_w
         self.optim_type = optim_type
+        if ppg_cls is None:
+            # Advertised default: the plain AND-array PPG (the core requires a concrete class;
+            # None used to die later with an opaque AttributeError).
+            from spire.arithmetic.int_multipliers.stages.ppg_and_stages import AndPartialProductGenerator
+            ppg_cls = AndPartialProductGenerator
+        if ppa_cls is None:
+            from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import CompressorTreeAccumulator
+            ppa_cls = CompressorTreeAccumulator
+        if fsa_cls is None:
+            from spire.arithmetic.int_multipliers.multipliers.multiplier_stage_core import RippleCarryFinalAdder
+            fsa_cls = RippleCarryFinalAdder
         self.ppg_cls = ppg_cls
         self.ppa_cls = ppa_cls
         self.fsa_cls = fsa_cls
@@ -45,8 +56,8 @@ class StageBasedMultiplier(StageBasedMultiplierBase):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        assert self.a_encoding == Encoding.unsigned or self.b_encoding == Encoding.twos_complement, "Only unsigned or two's complement encoding is supported"
-        assert self.b_encoding == Encoding.unsigned or self.b_encoding == Encoding.twos_complement, "Only unsigned or two's complement encoding is supported"
+        assert self.a_encoding in (Encoding.unsigned, Encoding.twos_complement), "Only unsigned or two's complement encoding is supported"
+        assert self.b_encoding in (Encoding.unsigned, Encoding.twos_complement), "Only unsigned or two's complement encoding is supported"
         y_encoding = Encoding.twos_complement if (self.a_encoding == Encoding.twos_complement or self.b_encoding == Encoding.twos_complement) else Encoding.unsigned
 
         def get_type(enc: Encoding,) -> Type:
@@ -120,7 +131,10 @@ class StageBasedSignMagnitudeMultiplier(StageBasedMultiplierBase):
         
         self.mult = mult
 
-        W = self.aw  # assume square for now
+        if self.aw != self.bw:
+            raise ValueError(f"{type(self).__name__} expects square operands (aw == bw); "
+                             f"got {self.aw}x{self.bw} — b's sign/magnitude split is width-hardcoded")
+        W = self.aw
 
         sa = self.io.a[W - 1]
         sb = self.io.b[W - 1]
@@ -176,7 +190,10 @@ class StageBasedSignMagnitudeExtMultiplier(StageBasedMultiplierBase):
 
         self.mult = mult
 
-        W = self.aw  # assume square for now
+        if self.aw != self.bw:
+            raise ValueError(f"{type(self).__name__} expects square operands (aw == bw); "
+                             f"got {self.aw}x{self.bw} — b's sign/magnitude split is width-hardcoded")
+        W = self.aw
 
         sa = self.io.a[W - 1]
         sb = self.io.b[W - 1]
@@ -193,6 +210,9 @@ class StageBasedSignMagnitudeExtMultiplier(StageBasedMultiplierBase):
         #        ? {1'b1, operand_a_mag[N_IN-3:0]}  // 100 -> 4 ,  operand_a_mag[N_IN-3:0] is 00 in this case
         #          : operand_a_mag;
 
+        if W < 3:
+            raise ValueError(f"{type(self).__name__} needs width >= 3: the ext '100...' magnitude "
+                             f"rewrite has no bits to keep at width {W}")
         mag_a_mod = mux(sc_a, Concat([mag_a[0 : W - 2], Const(1, Bool())]), mag_a)
         mag_b_mod = mux(sc_b, Concat([mag_b[0 : W - 2], Const(1, Bool())]), mag_b)
 
@@ -268,7 +288,10 @@ class StageBasedSignMagnitudeExtUpMultiplier(StageBasedMultiplierBase):
 
         self.mult = mult
 
-        W = self.aw  # assume square for now
+        if self.aw != self.bw:
+            raise ValueError(f"{type(self).__name__} expects square operands (aw == bw); "
+                             f"got {self.aw}x{self.bw} — b's sign/magnitude split is width-hardcoded")
+        W = self.aw
 
         sa = self.io.a[W - 1]
         sb = self.io.b[W - 1]
@@ -285,6 +308,9 @@ class StageBasedSignMagnitudeExtUpMultiplier(StageBasedMultiplierBase):
         #        ? {1'b1, operand_a_mag[N_IN-3:0]}  // 100 -> 4 ,  operand_a_mag[N_IN-3:0] is 00 in this case
         #          : operand_a_mag;
 
+        if W < 3:
+            raise ValueError(f"{type(self).__name__} needs width >= 3: the ext '100...' magnitude "
+                             f"rewrite has no bits to keep at width {W}")
         mag_a_mod = mux(sc_a, Concat([mag_a[0 : W - 2], Const(1, Bool())]), mag_a)
         mag_b_mod = mux(sc_b, Concat([mag_b[0 : W - 2], Const(1, Bool())]), mag_b)
 
@@ -461,8 +487,8 @@ class StarMultiplier(StageBasedMultiplierBase):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        assert self.a_encoding == Encoding.unsigned or self.b_encoding == Encoding.twos_complement, "Only unsigned or two's complement encoding is supported"
-        assert self.b_encoding == Encoding.unsigned or self.b_encoding == Encoding.twos_complement, "Only unsigned or two's complement encoding is supported"
+        assert self.a_encoding in (Encoding.unsigned, Encoding.twos_complement), "Only unsigned or two's complement encoding is supported"
+        assert self.b_encoding in (Encoding.unsigned, Encoding.twos_complement), "Only unsigned or two's complement encoding is supported"
         y_encoding = (
             Encoding.twos_complement if (self.a_encoding == Encoding.twos_complement or self.b_encoding == Encoding.twos_complement) else Encoding.unsigned
         )

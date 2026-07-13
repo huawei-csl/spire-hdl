@@ -490,7 +490,6 @@ class StageBasedMultiplierBasic(Component):
         self.io.y <<= Concat(result_bits[:self.config.out_width])
 
         # debugging
-        self.colums = columns
         self.reduced_columns = reduced_columns
 
 @dataclass
@@ -501,9 +500,12 @@ class MultiplierTestVectorsInt:
     tb_sigma: Optional[float] = None
     signed_a: bool = False
     signed_b: bool = False
+    seed: Optional[int] = 42  # reproducible regressions; None for nondeterministic runs
 
     def generate(self) -> Tuple[Dict[str, UInt], List[Tuple[str, Dict[str, int], Dict[str, int]]], None]:
         vecs: List[Tuple[str, Dict[str, int], Dict[str, int]]] = []
+        if self.seed is not None:
+            np.random.seed(self.seed)
 
         for _ in range(self.num_vectors):
             if self.tb_sigma is not None:

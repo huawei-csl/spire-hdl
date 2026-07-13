@@ -125,10 +125,16 @@ class MacTestVectors:
     tb_sigma: float | None = None
     input_encoding: Encoding = Encoding.unsigned
     output_encoding: Encoding = Encoding.unsigned
+    seed: int | None = 42  # deterministic by default; None for random
 
     def generate(self) -> list[tuple[str, dict[str, int], dict[str, int]]]:
         if self.num_vectors <= 0:
             raise ValueError("num_vectors must be > 0")
+        if self.seed is not None:
+            import random as _random
+            import numpy as _np
+            _random.seed(self.seed)
+            _np.random.seed(self.seed)
 
         in_enc = EncodingModel(self.input_encoding)
         out_enc = EncodingModel(self.output_encoding)

@@ -24,7 +24,7 @@ class PPGOption(Enum):
     BAUGH_WOOLEY = BaughWooleyPartialProductGenerator
     BOOTH_UNOPTIMISED = BoothUnoptimizedPartialProductGenerator
     BOOTH_OPTIMISED = BoothOptimizedPartialProductGenerator
-    #BOOTH_OPTIMISED_PRECOMPUTED_B = BoothPrecomputedBPartialProductGenerator # doesnt really help compared to BOOTH_OPTIMISED, but included for completeness
+    BOOTH_OPTIMISED_PRECOMPUTED_B = BoothPrecomputedBPartialProductGenerator  # doesn't help vs BOOTH_OPTIMISED, kept for the sharing comparison
     NR4SD = NR4SDPartialProductGenerator  # non-redundant radix-4 signed-digit (signed multiplier only)
     NONE = None
 
@@ -151,7 +151,9 @@ def encoding_for_multiplier(multiplier_cls: type[StageBasedMultiplierBase]) -> L
     elif multiplier_cls == OptimizedMultiplierFrom4BitBlocksStrong:
         return [TwoInputAritEncodings.with_enc(Encoding.unsigned)]
     elif multiplier_cls == KaratsubaMultiplier:
-        return [TwoInputAritEncodings.with_enc(Encoding.unsigned), TwoInputAritEncodings.with_enc(Encoding.twos_complement)]
+        # unsigned only — the class asserts unsigned encodings; twos_complement sweep configs
+        # were guaranteed AssertionErrors.
+        return [TwoInputAritEncodings.with_enc(Encoding.unsigned)]
     elif multiplier_cls == KaratsubaMultiplierFromOptimized4BitBlocks:
         return [TwoInputAritEncodings.with_enc(Encoding.unsigned)]
     else:

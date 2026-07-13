@@ -26,6 +26,10 @@ def inner_product(
     b_list: List[Expr] = list(vec_b)
     if len(a_list) != len(b_list):
         raise ValueError("inner_product: length mismatch")
+    if len(a_list) % 2 != 0:
+        # The Winograd pairing below consumes elements two at a time; an odd tail element
+        # would be silently dropped, producing wrong products.
+        raise ValueError(f"inner_product (Winograd): vector length must be even, got {len(a_list)}")
 
     mult_k_list = []
     dim_k = len(a_list)
@@ -40,45 +44,33 @@ def inner_product(
         mult_k = build_multiplier(s0, s1, mult_cfg)
         mult_k_list.append(mult_k)
 
-    summands = mult_k_list + [-fit_type(alpha, SInt(alpha.typ.width)), -fit_type(beta, SInt(beta.typ.width))]
+    # Negation depends on the ENCODING, not the carrier type: under signed encodings the UInt
+    # carriers hold two's-complement patterns (same-width signed reinterpret is exact); under
+    # unsigned encodings they hold plain values, which must WIDEN before the signed cast (a
+    # same-width cast flips values >= 2^(w-1) negative — alpha 225 read as -31).
+    def _neg(x):
+        w = x.typ.width if is_signed(add_cfg.encoding) else x.typ.width + 1
+        return -fit_type(x, SInt(w))
 
-    # same with Spire operators
-    # for k in range(0, dim_k//2):
-    #     mult_k = (a_list[2*k] + b_list[2*k+1]) * (a_list[2*k+1] + b_list[2*k])
-    #     mult_k_list.append(mult_k)
-    # return sum(summands)
+    if is_signed(add_cfg.encoding):
+        summands = mult_k_list + [_neg(alpha), _neg(beta)]
+        return adder_tree(summands, add_cfg)
 
-    return adder_tree(summands, add_cfg)
+    # Unsigned encodings: Winograd's -alpha/-beta terms are inherently signed, and unsigned
+    # structural adders would zero-extend them. Accumulate through the IR's signed adds
+    # (values stay exact; the caller wraps the pattern to the output width).
+    acc = None
+    for term in [*(fit_type(mk, SInt(mk.typ.width + 1)) for mk in mult_k_list), _neg(alpha), _neg(beta)]:
+        acc = term if acc is None else acc + term
+    return acc
 
 
-@dataclass
-class MatmulAccumulateIO(CompositeRecord):
-    A: Array  # input
-    B: Array  # input
-    C: Array  # input
-    Y: Array  # output
-
-@dataclass
-class MMAcDims:
-    dim_m: int  # rows of A/C/Y
-    dim_n: int  # cols of B/C/Y
-    dim_k: int  # shared dimension between A and B
-
-@dataclass
-class MMAcWidths:
-    a_width: int
-    b_width: int
-    c_width: int
-
-@dataclass
-class MMAcCfg:
-    dims: MMAcDims
-    widths: MMAcWidths
-    mult_cfg: MultiplierConfig
-    add_cfg: AdderConfig
-
-class MatmulAccumulateCore(Component):
-    io: MatmulAccumulateIO
+# Shared IO/config dataclasses — the local redefinitions created distinct class identities
+# from every other variant (drift risk; matmul_test_vectors type-hints the shared ones).
+from spire.cores.matmul_accumulate.matmul_accumulate_core import (
+    MatmulAccumulateCore, MatmulAccumulateIO, MMAcCfg, MMAcDims, MMAcWidths,
+    _check_operator_mode_encodings,
+)
 
 class MatmulAccumulateComponent(MatmulAccumulateCore):
     """Reusable component for matrix multiply-accumulate."""
@@ -89,7 +81,13 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
         signed_io_type: bool = False,
     ):
 
+        _check_operator_mode_encodings(cfg.mult_cfg, cfg.add_cfg.encoding,
+                                       carriers_signed=False)  # pre-adder outputs are UInt-laundered
         self.cfg = cfg
+        if cfg.dims.dim_k % 2 != 0:
+            # The Winograd alpha/beta/pairing loops iterate range(dim_k // 2), silently dropping
+            # the last K-term for odd dim_k and computing wrong results.
+            raise ValueError(f"MatmulAccumulateComponent (Winograd): dim_k must be even, got {cfg.dims.dim_k}")
         self.io_hdl_type = SInt if (is_signed(self.cfg.add_cfg.encoding) and signed_io_type) else UInt
 
         def build_matrix(name: str, width: int, rows: int, cols: int, kind: str = "wire") -> Array:

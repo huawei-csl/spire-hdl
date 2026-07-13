@@ -15,7 +15,7 @@ from spire.arithmetic.int_multipliers.stages.ppg_booth_precomputed_b_stages impo
     precompute_booth_b_decode,
 )
 from spire.cores.matmul_accumulate.matmul_accumulate_core import MatmulAccumulateCore, MatmulAccumulateIO, MMAcDims, MMAcWidths
-from spire.expr import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, fit_type, fit_width, s_ext
+from spire.expr import Bool, Concat, Const, Expr, HDLType, SInt, Signal, UInt, fit_type, fit_width, reinterpret, s_ext
 from spire.component import Component, Netlist
 
 
@@ -58,6 +58,14 @@ def fused_inner_product(
     encoding: Encoding,
     precomputed_b_decode: Optional[List[List[BoothGroupDecode]]] = None,
 ) -> Expr:
+    """Fused y = sum(a_i * b_i) + c as ONE compressor tree (per-product partial products,
+    corrections and the C term all merge into shared columns; a single final-stage adder).
+
+    Supported encodings: Encoding.unsigned and Encoding.twos_complement. The single
+    `encoding` applies to A, B and C alike; mixed or per-operand encodings are not
+    supported. Sign-magnitude has its own variant in matmul_accumulate_core_sign_magnitude_fused.
+    This variant feeds precomputed-B Booth partial products into the shared tree.
+    """
     a_list: List[Expr] = list(vec_a)
     b_list: List[Expr] = list(vec_b)
     if len(a_list) != len(b_list):
@@ -101,6 +109,17 @@ def fused_inner_product(
     ppa = mult_cfg.ppa_opt.value(stage_cfg)
     fsa = mult_cfg.fsa_opt.value(stage_cfg)
 
+    # Booth PPGs select on operand signedness; signed encodings with UInt carriers must be
+    # reinterpreted (same rule as the fused path). NOTE: BOOTH_OPTIMISED inherits the fused
+    # path's known bias here too — see the fused sweep's xfail annotations.
+    def _to_signed(sig: Expr) -> Expr:
+        if is_signed(encoding) and not sig.typ.signed:
+            return reinterpret(sig, SInt(sig.typ.width))
+        return sig
+
+    a_list = [_to_signed(s) for s in a_list]
+    b_list = [_to_signed(s) for s in b_list]
+
     merged_cols: DefaultDict[int, List[Expr]] = defaultdict(list)
     for idx, (a_sig, b_sig) in enumerate(zip(a_list, b_list)):
         if use_precomputed_b:
@@ -119,8 +138,19 @@ def fused_inner_product(
 
     # common upper correction
     if fused_upper_correction:
-        for i in range(a_width - 1 + b_width - 1 + 1 + int(log2(len(a_list))), result_width):
-            merged_cols[i].append(Const(True, Bool()))
+        K = len(a_list)
+        shift = a_width + b_width - 1
+        if K & (K - 1) == 0:
+            # Power-of-2 K: the K per-product +1 runs collapse into one run log2(K) columns higher.
+            for i in range(shift + int(log2(K)), result_width):
+                merged_cols[i].append(Const(True, Bool()))
+        else:
+            # Arbitrary K: the total correction is -K * 2^(2n-1) mod 2^R (the pow2 form emitted a
+            # wrong constant for K in {3,5,6,7,...}).
+            correction = (-K << shift) & ((1 << result_width) - 1)
+            for i in range(result_width):
+                if (correction >> i) & 1:
+                    merged_cols[i].append(Const(True, Bool()))
 
     # add c term bits
     if is_signed(encoding):
@@ -131,7 +161,9 @@ def fused_inner_product(
     reduced_cols = ppa.accumulate(merged_cols)
     filtered_cols = {w: bits for w, bits in reduced_cols.items() if w < result_width}
     result_bits = fsa.resolve(filtered_cols)
-    return Concat(result_bits[:result_width])
+    packed = Concat(result_bits[:result_width])
+    # Same typing rule as the fused path: signed encodings carry SInt so refits sign-extend.
+    return reinterpret(packed, SInt(result_width)) if is_signed(encoding) else packed
 
 
 class MatmulAccumulateComponent(MatmulAccumulateCore):
@@ -201,13 +233,3 @@ class MatmulAccumulateComponent(MatmulAccumulateCore):
                 row.append(y_sig)
             rows.append(Array(row))
         self.Y = Array(rows)
-
-
-@dataclass
-class MatmulAccumulateBuildOut:
-    component: MatmulAccumulateComponent
-    module: Netlist
-    A: Array
-    B: Array
-    C: Array
-    Y: Array

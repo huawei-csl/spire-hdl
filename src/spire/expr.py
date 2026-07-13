@@ -7,7 +7,7 @@ from typing import Optional, Union, Sequence
 from spire.signal_name_inference import (
     infer_signal_name_from_assignment,
     mark_expr_name,
-    resolve_shared_wire_name,
+    sanitize_signal_name,
 )
 from spire.hdl_traits import BitSerializable, Assignable, BitSerializableLike
 
@@ -27,7 +27,7 @@ class _SharedCache:
     wires: list["Signal"] = []               # all created wires in encounter order
     index: int = 0                           # for naming sig_{index}
     uid = itertools.count(1)                 # unique id for each expression
-    used_names: set[str] = set()             # avoid duplicate auto-generated names
+    used_names: set[str] = set()             # legacy, no longer consulted (kept for optimize-state snapshots)
     opportunistic: bool = True               # wrap every subexpr into a wire (see flat_emit)
 
     @classmethod
@@ -50,12 +50,8 @@ import contextlib as _contextlib
 
 @_contextlib.contextmanager
 def flat_emit(enabled: bool = True):
-    """Emit Verilog without *opportunistic* common-subexpression sharing.
-
-    By default Spire wraps every non-leaf subexpression into a named wire (``assign sig_k = ...``) 
-    to shrink the emitted Verilog. This context manager disables this behavior, 
-    The emitted Verilog is larger but can give better PPA results in some cases.
-    """
+    """Build without opportunistic subexpression sharing — keeps value-safe (1-bit boolean) logic inline,
+    which can map better on PPA. Emission stays value-conformant: see ``spire.width_isolation``."""
     old = _SharedCache.opportunistic
     _SharedCache.opportunistic = not enabled
     try:
@@ -69,15 +65,17 @@ def get_shared_wires() -> list["Signal"]:
     return list(_SharedCache.wires)
 
 def _create_new_shared_wire(typ: HDLType, suggested_name: Optional[str] = None) -> "Signal":
-    name, _SharedCache.index = resolve_shared_wire_name(
-        suggested_name=suggested_name,
-        used_names=_SharedCache.used_names,
-        index=_SharedCache.index,
-    )
-
-    _SharedCache.used_names.add(name)
+    # Construction names are provisional (possibly duplicated across builds); the collector assigns canonical
+    # per-netlist names at emission — suggested names are uniquified there, anonymous ones renumbered.
+    base = sanitize_signal_name(suggested_name) if suggested_name else None
+    if base:
+        name = base
+    else:
+        name = f"sig_{_SharedCache.index}"
+        _SharedCache.index += 1
     sig = Signal(typ=typ, kind="wire", name=name)
     sig._auto_generated = True
+    sig._anonymous_name = base is None
     _SharedCache.wires.append(sig)
     return sig
 
@@ -109,7 +107,7 @@ def _maybe_share(e: "Expr", force_share=False) -> "Expr":
 
     cnt_share = 1  # at what count start sharing
     opportunistic = _SharedCache.opportunistic and cnt == cnt_share
-    if (force_share and cnt <= 1) or opportunistic:
+    if force_share or opportunistic:
         sig = _create_new_shared_wire(e.typ, getattr(e, "_suggested_name", None))
         sig._driver = e  # continuous assignment: assign sig = <original expr>;
         _SharedCache.expr2sig[uid] = sig
@@ -312,6 +310,16 @@ class Const(Expr):
     def __init__(self, value: int, typ: HDLType):
         self.value = int(value)
         self.typ = typ
+        w = typ.width
+        if w == 0:
+            lo = hi = 0  # zero-width placeholders (Concat) may only hold 0
+        elif typ.signed:
+            lo, hi = -(1 << (w - 1)), (1 << (w - 1)) - 1
+        else:
+            lo, hi = 0, (1 << w) - 1
+        if not lo <= self.value <= hi:
+            kind = f"SInt({w})" if typ.signed else f"UInt({w})"
+            raise ValueError(f"Const value {self.value} is not representable in {kind}")
 
     def to_verilog(self) -> str:
         if self.typ.is_bool:
@@ -321,9 +329,12 @@ class Const(Expr):
 
         val = int(self.value)
 
-        # For negatives, use unary minus + *signed* literal: -<width>'sd<abs>
         if val < 0:
-            return f"-{self.typ.width}'sd{abs(val)}"
+            w = self.typ.width
+            if val == -(1 << (w - 1)):
+                # `-w'sd<2^(w-1)>` would read back as +2^(w-1) in a wider context; emit the pattern reinterpreted.
+                return f"$signed({w}'d{val & ((1 << w) - 1)})"
+            return f"-{w}'sd{abs(val)}"
 
         # Non-negative: choose signedness from the declared type
         base = "sd" if self.typ.signed else "d"
@@ -337,6 +348,7 @@ class Signal(Expr, Assignable):
             raise TypeError("Signal(typ, kind, name=None): argument order changed — 'name' is now last (pass name= or reorder).")
         if typ is None or kind is None:
             raise TypeError("Signal requires a type and a kind, e.g. Signal(UInt(8), 'input')")
+        self._given_name = name  # or None ⇒ record machinery may (re)name this leaf from its field path
         if name is None:
             # Infer from the assignment target, e.g. ``clk = Signal(UInt(8), "input")`` → ``"clk"``.
             name = infer_signal_name_from_assignment(kind, "signal", __file__)
@@ -362,7 +374,10 @@ class Signal(Expr, Assignable):
     def set_init(self, init: ExprLike):
         if self.kind != "reg":
             raise TypeError("init can only be set on registers")
-        self._init = fit_width(as_expr(init), self.typ)
+        e = as_expr(init)
+        if not isinstance(e, Const):
+            raise ValueError("Register init must be a constant; build an explicit mux for dynamic reset values")
+        self._init = Const(e.value, self.typ)  # re-typed to the register; representability-checked by Const
 
     def to_verilog(self) -> str:
         return self.name
@@ -400,17 +415,16 @@ class Wire(Signal):
 
 # explicit IO ports — Signal with a preset direction (siblings of Wire/Register).
 # Used as IORecord fields; standalone `x = Input(UInt(8))` self-names via the same inference
-# as Wire/Register. `_io_autoname` marks "no explicit name given" so IORecord may override the
-# name from its field key (the robust source inside an `IORecord(a=Input(...))` call).
+# as Wire/Register. Inside a record, a leaf without an explicit name (`_given_name is None`) is
+# named from its field path (the robust source inside an `IORecord(a=Input(...))` call); an
+# explicit name= survives record wraps as the last path segment.
 class Input(Signal):
     def __init__(self, typ: HDLType, name: Optional[str]=None):
         super().__init__(typ, kind="input", name=name)   # name inferred by Signal when None
-        self._io_autoname = name is None
 
 class Output(Signal):
     def __init__(self, typ: HDLType, name: Optional[str]=None):
         super().__init__(typ, kind="output", name=name)  # name inferred by Signal when None
-        self._io_autoname = name is None
 
 
 # -----------------------------
@@ -512,11 +526,12 @@ class Resize(Expr):
         if aw == tw:
             return self.a.to_verilog()
         
-        # If operand is a constant, just re-emit it with the target width/signedness.
-        # This avoids patterns like (8'sd0)[7] and nested replications.
+        # If operand is a constant, re-emit its resized value directly (avoids patterns like (8'sd0)[7]).
+        # Truncation keeps low bits, extension follows the source sign — Python's `&` on negatives does both.
         if isinstance(self.a, Const):
-            adapted = Const(self.a.value, HDLType(tw, signed=self.a.typ.signed, is_bool=(tw == 1)))
-            return adapted.to_verilog()
+            pattern = self.a.value & ((1 << tw) - 1)
+            v = pattern - (1 << tw) if self.typ.signed and (pattern >> (tw - 1)) & 1 else pattern
+            return Const(v, HDLType(tw, signed=self.typ.signed, is_bool=(tw == 1))).to_verilog()
         
         if aw > tw:
             # truncate LSBs kept (common hardware pattern)
@@ -592,18 +607,28 @@ def z_ext(expr: Expr, width: int) -> Expr:
 
 # -----------------------------
 
+def _align_mixed_arith(a: Expr, b: Expr, t: HDLType) -> tuple:
+    """Materialize mixed-signedness operands at the result width, each extended per its own signedness."""
+    if a.typ.signed == b.typ.signed:
+        return a, b
+    return fit_width(a, t), fit_width(b, t)
+
+
 def op_add(a: Expr, b: Expr) -> Expr:
     t = add_result_type(a, b)
+    a, b = _align_mixed_arith(a, b, t)
     return mark_expr_name(Op2(a, b, "+", t), __file__)
 
 
 def op_sub(a: Expr, b: Expr) -> Expr:
     t = add_result_type(a, b)
+    a, b = _align_mixed_arith(a, b, t)
     return mark_expr_name(Op2(a, b, "-", t), __file__)
 
 
 def op_mul(a: Expr, b: Expr) -> Expr:
     t = mul_result_type(a, b)
+    a, b = _align_mixed_arith(a, b, t)
     return mark_expr_name(Op2(a, b, "*", t), __file__)
 
 
@@ -617,6 +642,8 @@ def op_not(a: Expr) -> Expr:
 
 
 def op_shift(a: Expr, b: Expr, sym: str) -> Expr:
+    if isinstance(b, Const) and b.value < 0:
+        raise ValueError(f"Shift amount must be >= 0, got {b.value}")
     # if b is const, widen on left shift; otherwise keep width
     if isinstance(b, Const) and sym == "<<":
         t = HDLType(a.typ.width + b.value, signed=a.typ.signed)
@@ -626,19 +653,25 @@ def op_shift(a: Expr, b: Expr, sym: str) -> Expr:
 
 
 def op_cmp(a: Expr, b: Expr, sym: str) -> Expr:
+    if a.typ.signed != b.typ.signed:
+        # Mixed signedness: promote both operands to a signed type one bit wider than the widest operand, so both
+        # values are represented exactly and the comparison is an exact integer compare (signed via declarations).
+        t_p = HDLType(max(a.typ.width, b.typ.width) + 1, signed=True)
 
-    # for verilog emmission we need to align widths for all compares, and if either is signed, align as signed
+        def _promote(e: Expr) -> Expr:
+            if isinstance(e, Const):
+                return Const(e.value, t_p)
+            if e.typ.signed:
+                return fit_width(e, t_p)
+            return fit_type(e, t_p)  # zero-extend, then a declared-signed wire
+
+        return mark_expr_name(Op2(_promote(a), _promote(b), sym, Bool()), __file__)
+
+    # Uniform signedness: align widths; each operand extends per the common signedness.
     w = max(a.typ.width, b.typ.width)
-    t_target = HDLType(w, signed=a.typ.signed or b.typ.signed)
-    # if a is not const
-    if not isinstance(a, Const):
-        a_al = fit_width(a, t_target)
-    else:
-        a_al = a
-    if not isinstance(b, Const):
-        b_al = fit_width(b, t_target)
-    else:
-        b_al = b
+    t_target = HDLType(w, signed=a.typ.signed)
+    a_al = a if isinstance(a, Const) else fit_width(a, t_target)
+    b_al = b if isinstance(b, Const) else fit_width(b, t_target)
     return mark_expr_name(Op2(a_al, b_al, sym, Bool()), __file__)
 
 
