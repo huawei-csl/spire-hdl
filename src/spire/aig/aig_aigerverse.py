@@ -15,6 +15,8 @@ def _parse_header(h: str) -> Tuple[int, int, int, int, int]:
     parts = h.strip().split()
     if len(parts) < 6 or parts[0] != "aag":
         raise AagParseError("Header must start with: aag M I L O A")
+    if len(parts) > 6:
+        raise AagParseError(f"Extended AIGER-1.9 header (B/C/J/F counts) is not supported: {h.strip()!r}")
     try:
         M = int(parts[1])
         I = int(parts[2])
@@ -105,6 +107,7 @@ def _read_aag(lines: List[str]) -> Dict[str, Any]:
         except ValueError:
             # allow empty name
             n_str, name = rest, ""
+        name = name.strip()  # CRLF files must not leak '\r' into port names
         try:
             n = int(n_str)
         except ValueError:
@@ -182,8 +185,8 @@ class AbstractAdapter(abc.ABC):
 
     # Latch support is opt-in per adapter; the defaults keep combinational-only adapters rejecting
     # sequential AAGs with a clear error.
-    def latch(self, init: Optional[bool], name: Optional[str] = None) -> Any:
-        """Create a latch state node (its current-value output). init: False/True, None = uninitialized."""
+    def latch(self, name: Optional[str] = None) -> Any:
+        """Create a latch state node (its current-value output). Latches power on at 0."""
         raise AagParseError(f"{type(self).__name__} supports combinational AAGs only (L must be 0)")
 
     def latch_next(self, latch_node: Any, next_node: Any) -> None:
@@ -301,15 +304,15 @@ def conv_aag_into_graph(lines: List[str], aig: Any, adapter: Type[AbstractAdapte
         var_to_node[v] = node
         nodes_in_order.append(node)
 
-    # 1b) Create latch state nodes: their current values feed the AND network like inputs.
-    # The AIGER init field: absent/0 → 0, 1 → 1, equal to the latch literal → uninitialized.
+    # 1b) Create latch state nodes (they feed the AND network like inputs). Latches power on at 0.
     latch_nodes: List[Any] = []
     for i, (curr, nxt, init) in enumerate(data["latches"]):
         if curr % 2 != 0:
             raise AagParseError(f"Latch literal must be even (got {curr})")
-        init_val: Optional[bool] = None if init == curr else bool(init or 0)
+        if init not in (None, 0, curr):
+            raise AagParseError(f"Latch init {init} is not supported, could be added in a few lines")
         name = data["sym_l"].get(i)
-        node = ad.latch(init_val, name)
+        node = ad.latch(name)
         var_to_node[curr >> 1] = node
         latch_nodes.append(node)
 

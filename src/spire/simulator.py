@@ -367,8 +367,10 @@ class Simulator(SimulatorBase):
             if key in visiting:
                 raise RuntimeError(f"Combinational loop detected involving '{s.name}'.")
             visiting.add(key)
-            drv_bits = self._expr_eval.visit(s._driver)
-            visiting.remove(key)
+            try:
+                drv_bits = self._expr_eval.visit(s._driver)
+            finally:
+                visiting.remove(key)
             bits = _resize_bits(drv_bits, s._driver.typ.width, s.typ.width, s._driver.typ.signed)
         else:
             if s.kind == "mem":

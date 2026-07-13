@@ -504,6 +504,11 @@ class _AigerExprEval(ExprVisitor[List[int]]):
         # fit result vector
         return fit(bits, w_out, signed=signed if op not in ("==", "!=", "<", "<=", ">", ">=") else False)
 
+    def visit_array_index(self, e) -> List[int]:
+        raise NotImplementedError(
+            f"AIGER export does not support memories: the cone reads memory '{getattr(e.mem, 'name', '?')}'."
+            )
+
     def visit_ternary(self, e: Ternary) -> List[int]:
         # Any nonzero selector is true (Verilog ?: / simulator semantics): OR-reduce all bits.
         sel_bits = self.visit(e.sel)
@@ -571,6 +576,14 @@ class AigerExporter:
     # ---- network construction
 
     def _build_network(self):
+        if getattr(self, "_built", False):
+            return
+        # Fresh state on every attempt: a failed build must not leave half-allocated inputs/latches
+        # behind (a retry would re-append everything and emit a corrupted AAG).
+        self.aig = _AIG()
+        self._sig_bits = {}
+        self._reg_list = []
+        self._expr_eval = _AigerExprEval(self)
         # 1) allocate all input bits first (AIGER requires inputs before gates)
         for p in self.m._ports:
             if p.kind == "input":
@@ -624,6 +637,8 @@ class AigerExporter:
         for p in self.m._ports:
             if p.kind != "output":
                 continue
+            if p._driver is None and not p._no_emit_drive:
+                raise ValueError(f"Signal '{p.name}' (output) has no driver.")  # same error as the simulator
             drv_bits = self._eval_expr_bits(p._driver) if p._driver is not None else [lit_const0()] * p.typ.width
             drv_bits = self._fit_bits(drv_bits, p.typ.width, signed=getattr(p.typ, "signed", False))
 
@@ -631,6 +646,8 @@ class AigerExporter:
             for i, b in enumerate(drv_bits):
                 self.aig.outputs.append(b)
                 self.aig.sym_outputs.append(self._bit_name(p, i))
+
+        self._built = True
 
     # ---- expression bit-blasting
 
@@ -644,14 +661,18 @@ class AigerExporter:
         # like a wire (membership, not raw kind, decides what's a primary input).
         if s.kind in WIRE_LIKE_KINDS:
             # protect against comb loops
+            if s._driver is None and not s._no_emit_drive:
+                raise ValueError(f"Signal '{s.name}' ({s.kind}) has no driver.")  # same error as the simulator
             visiting = self._expr_eval._visiting
             vk = ("sig", key)
             if vk in visiting:
                 raise RuntimeError(f"Combinational loop involving '{s.name}'.")
             visiting.add(vk)
-            bits = self._expr_eval.visit(s._driver) if s._driver is not None else [lit_const0()]
-            bits = self._fit_bits(bits, s.typ.width, signed=getattr(s.typ, "signed", False))
-            visiting.remove(vk)
+            try:
+                bits = self._expr_eval.visit(s._driver) if s._driver is not None else [lit_const0()]
+                bits = self._fit_bits(bits, s.typ.width, signed=getattr(s.typ, "signed", False))
+            finally:
+                visiting.remove(vk)
             self._sig_bits[key] = bits
             return bits
         raise TypeError(f"Unknown signal kind: {s.kind}")
@@ -771,11 +792,11 @@ class SpireAdapter(AbstractAdapter):
     def AND(self, a, b):
         return a & b
 
-    def latch(self, init, name=None):
-        """AIGER latch → 1-bit netlist register. init None (uninitialized) is kept as init-less;
-        the simulator starts it at 0 and a with_reset re-emission resets it to 0."""
+    def latch(self, name=None):
+        """AIGER latch → 1-bit init-less netlist register: the simulator starts it at 0 and a
+        with_reset re-emission resets it to 0."""
         reg_name = self._latch_reg_name(name)
-        return self.m.reg(self._bit_type(), reg_name, init=None if init is None else int(init))
+        return self.m.reg(self._bit_type(), reg_name)
 
     def latch_next(self, latch_node, next_node):
         latch_node <<= next_node
