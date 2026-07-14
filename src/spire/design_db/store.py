@@ -7,7 +7,7 @@ Layout (schema v1)::
         golden.v            # the golden reference candidates are verified against
         verification.json   # frozen verification (combinational default: Tier-0 CEC); absent = unverified
         designs/<id>/       # verification-gated implementations (design.v, metrics.json, provenance.json)
-        index.json          # roll-up {design_id -> {struct_hash, metrics, source, created}}
+        index.json          # roll-up {design_id -> {struct_hash, metrics, source, created, rediscoveries}}
     <db root>/v1/manifest.json   # reverse index {registered name -> {spec_key, class, selection}}
 
 DB-root resolution (zero-config): explicit ``db=`` → ``$SPIREHDL_DB_PATH`` → nearest ``design_db/``
@@ -28,6 +28,20 @@ VERSION_DIR = "v1"
 SPEC_SCHEMA = 1
 
 _autocreate_noted = False
+
+
+def now_ts() -> int:
+    """Stored timestamps are Unix epoch seconds (UTC by definition, zone-free on disk); readouts
+    render them in local time via :func:`fmt_ts_local`."""
+    return int(time.time())
+
+
+def fmt_ts_local(ts: Any) -> Optional[str]:
+    """A stored timestamp as a local-time string for human readouts. Legacy stamps (pre-epoch
+    entries stored local ISO strings) pass through unchanged."""
+    if isinstance(ts, (int, float)):
+        return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(ts))
+    return ts
 
 
 class DesignDBError(Exception):
@@ -121,7 +135,10 @@ class DesignDB:
             index[ddir.name] = {"struct_hash": struct_hash,
                                 "source": prov.get("source", ddir.name.rsplit(":", 1)[0]),
                                 "created": prov.get("created"),
+                                "rediscoveries": prov.get("rediscoveries", 0),
                                 "metrics": self.read_json(ddir / "metrics.json", {})}
+            if "last_rediscovered" in prov:
+                index[ddir.name]["last_rediscovered"] = prov["last_rediscovered"]
         return index
 
     def read_index(self, spec_key: str, *, materialize: bool = True) -> Dict[str, Any]:
@@ -186,7 +203,7 @@ def register_slot(module_or_component: Any, db: Optional[str | Path] = None, *,
             f"under a new name (rename the function or pass name=)")
     slot = d.slot_dir(key)
     (slot / "designs").mkdir(parents=True, exist_ok=True)
-    now = time.strftime("%Y-%m-%dT%H:%M:%S")
+    now = now_ts()
 
     clk = getattr(module, "clk", None)
     rst = getattr(module, "rst", None)

@@ -4,6 +4,7 @@ Offline but tool-real: yosys / yosys-abc must be on PATH (they are in the dev co
 Each test gets a fresh DB via the ``db`` fixture (SPIREHDL_DB_PATH → tmp_path).
 """
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -135,6 +136,27 @@ def test_dedup_by_structural_hash(db):
     assert second.deduped and second.design_id == first.design_id
     index = json.loads((_slot_dir(db, key) / "index.json").read_text())
     assert len(index) == 1
+
+
+def test_admit_timestamp_and_rediscovery_counter(db):
+    """Admits stamp `created` as epoch seconds (the improvement timeline); dedup hits bump
+    `rediscoveries`/`last_rediscovered` on the stored design (the convergence signal)."""
+    from spire.design_db.store import DesignDB
+    key = register_slot(Adder(), name="adder8")
+    before = int(time.time())
+    first = insert_design(key, EQUIV_V, source="test")
+    prov_path = _slot_dir(db, key) / "designs" / first.design_id / "provenance.json"
+    prov = json.loads(prov_path.read_text())
+    assert isinstance(prov["created"], int) and before <= prov["created"] <= int(time.time())
+    assert "rediscoveries" not in prov and "last_rediscovered" not in prov
+
+    for _ in range(2):
+        assert insert_design(key, EQUIV_V, source="test").deduped
+    prov = json.loads(prov_path.read_text())
+    assert prov["rediscoveries"] == 2 and prov["last_rediscovered"] >= prov["created"]
+    entry = DesignDB.open().derive_index(key)[first.design_id]      # surfaced in the roll-up
+    assert entry["rediscoveries"] == 2 and entry["created"] == prov["created"]
+    assert entry["last_rediscovered"] == prov["last_rediscovered"]
 
 
 def test_sequential_slot_registers_but_refuses_insert(db):

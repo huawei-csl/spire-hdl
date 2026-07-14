@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
-from spire.design_db.store import DB_ENV, DesignDB, DesignDBError, resolve_db_root
+from spire.design_db.store import DB_ENV, DesignDB, DesignDBError, fmt_ts_local, resolve_db_root
 from spire.design_db.verify import VerificationError
 
 
@@ -48,10 +48,15 @@ def _cmd_ls(args: argparse.Namespace) -> int:
     d = _open(args.db)
     manifest = d.read_json(d.manifest_path, {"slots": {}})
     rows = manifest.get("slots", {})
-    counts = {e["spec_key"]: len(d.derive_index(e["spec_key"]))     # derived, never stale
-              for e in rows.values() if e.get("spec_key")}
+    indexes = {e["spec_key"]: d.derive_index(e["spec_key"])         # derived, never stale
+               for e in rows.values() if e.get("spec_key")}
+    counts = {k: len(idx) for k, idx in indexes.items()}
+    last = {k: max((e["created"] for e in idx.values()              # newest admit (epoch; legacy
+                    if isinstance(e.get("created"), (int, float))), default=None)   # stamps skipped)
+            for k, idx in indexes.items()}
     if args.json:
-        out = {**manifest, "slots": {n: {**e, "n_designs": counts.get(e.get("spec_key"), 0)}
+        out = {**manifest, "slots": {n: {**e, "n_designs": counts.get(e.get("spec_key"), 0),
+                                         "last_created": last.get(e.get("spec_key"))}
                                      for n, e in rows.items()}}
         print(json.dumps(out, indent=2, sort_keys=True))
         return 0
@@ -63,7 +68,7 @@ def _cmd_ls(args: argparse.Namespace) -> int:
         return 0
     for name, e in sorted(rows.items()):
         print(f"{name:32s} {e.get('class', '?'):13s} designs={counts.get(e.get('spec_key'), 0):<3d} "
-              f"key={e['spec_key'][:12]}…")
+              f"last={fmt_ts_local(last.get(e.get('spec_key'))) or '-':19s} key={e['spec_key'][:12]}…")
     return 0
 
 
@@ -71,11 +76,16 @@ def _cmd_show(args: argparse.Namespace) -> int:
     d = _open(args.db)
     key = _resolve_slot(d, args.slot)
     slot = d.slot_dir(key)
+    designs = d.read_index(key)                     # derived from designs/ (cache refreshed)
+    for entry in designs.values():                  # local-time renderings: display-only, never stored
+        for f in ("created", "last_rediscovered"):
+            if isinstance(entry.get(f), (int, float)):
+                entry[f + "_local"] = fmt_ts_local(entry[f])
     out = {
         "spec_key": key,
         "spec": d.read_json(slot / "spec.json"),
         "verification": d.read_json(slot / "verification.json"),
-        "designs": d.read_index(key),               # derived from designs/ (cache refreshed)
+        "designs": designs,
     }
     if args.pareto:
         from spire.design_db.select import pareto_front

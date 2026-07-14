@@ -16,12 +16,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from spire.design_db.store import DesignDB, DesignDBError
+from spire.design_db.store import DesignDB, DesignDBError, now_ts
 from spire.design_db.verify import (CECInapplicable, SlotUnverified, VerificationFailed, cec_check)
 
 
@@ -256,6 +255,23 @@ def _run_gate(d: DesignDB, spec_key: str, method: str, design_v: Path, tdir: Pat
         run_frozen_tb(spec_key, design_v, tdir / "sim", db=db, budget_s=budget)
 
 
+def _bump_rediscovery(d: DesignDB, slot: Path, design_id: str) -> None:
+    """Count a dedup hit on the already-admitted design (``rediscoveries`` + ``last_rediscovered``
+    in its ``provenance.json``). Advisory analytics for timeline readers — a producer repeatedly
+    re-deriving stored designs is the convergence signal — so best-effort, unlocked, and it must
+    never break an insert."""
+    try:
+        prov_path = slot / "designs" / design_id / "provenance.json"
+        prov = d.read_json(prov_path, None)
+        if prov is None:
+            return
+        prov["rediscoveries"] = int(prov.get("rediscoveries", 0)) + 1
+        prov["last_rediscovered"] = now_ts()
+        d.write_json(prov_path, prov)
+    except Exception:
+        pass
+
+
 def check_design(spec_key: str, design: Any, *, db: Optional[str | Path] = None,
                  budget_s: Optional[float] = None) -> Dict[str, Any]:
     """Advisory verification: run the slot's frozen oracle against ``design`` **without admitting
@@ -304,7 +320,7 @@ def insert_design(spec_key: str, design: Any, *, source: str,
     if spec is None:
         raise DesignDBError(f"unknown slot {spec_key[:12]}… — register it first")
     verification, method, budget = _resolve_verification(d, spec_key, spec, budget_s)
-    now = time.strftime("%Y-%m-%dT%H:%M:%S")
+    now = now_ts()
 
     with tempfile.TemporaryDirectory(prefix="spire_ddb_") as td:
         tdir = Path(td)
@@ -318,6 +334,7 @@ def insert_design(spec_key: str, design: Any, *, source: str,
         index = d.derive_index(spec_key)             # designs/ is the source of truth
         for design_id, entry in index.items():
             if entry.get("struct_hash") == struct_hash:
+                _bump_rediscovery(d, slot, design_id)
                 return InsertResult(design_id, True, entry.get("metrics", {}))
 
         # The gate: run the frozen verification (raises on anything but PASS).
@@ -369,6 +386,7 @@ def insert_design(spec_key: str, design: Any, *, source: str,
         (tmp_dir / "provenance.json").write_text(_json(prov))
         if final_dir.exists():                      # lost a race — treat as dedup
             shutil.rmtree(tmp_dir)
+            _bump_rediscovery(d, slot, design_id)
             return InsertResult(design_id, True, metrics)
         os.replace(tmp_dir, final_dir)              # the admit: the only write that matters
 

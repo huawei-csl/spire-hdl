@@ -172,13 +172,20 @@ like `pin=`). An explicit source-level `pin=` always wins over an override, and 
 selections are **never recorded** in the manifest — overrides are what-if compiles, not
 library state. Scopes nest (innermost wins) and overlay the environment.
 
+### The per-slot index
+
+The per-slot index maps every admitted `design_id` to its `source`, `created`, `struct_hash`, and
+stamped `metrics` — and it is **derived from the `designs/` dirs on every read** (the on-disk
+`index.json` is only a self-healing cache for `cat`/`jq`, never an input), so it cannot be out
+of sync with the slot's contents. Timestamps are Unix epoch seconds (UTC by definition);
+`spire db ls`/`show` render them in local time. Sorting the index by `created` gives the slot's
+improvement timeline (best-metric-so-far over time), and each design's `rediscoveries` count +
+`last_rediscovered` stamp (bumped whenever an insert dedups against it) is the convergence
+signal — producers keep re-deriving what's already stored.
+
 ### Looping over a slot's designs
 
-The Python API works on `spec_key`s; starting from a manifest name is one lookup. The per-slot
-index maps every admitted `design_id` to its `source`, `created`, `struct_hash`, and stamped
-`metrics` — and it is **derived from the `designs/` dirs on every read** (the on-disk
-`index.json` is only a self-healing cache for `cat`/`jq`, never an input), so it cannot be out
-of sync with the slot's contents:
+The Python API works on `spec_key`s; starting from a manifest name is one lookup:
 
 ```python
 from spire.design_db import DesignDB, pick_design
@@ -370,10 +377,11 @@ design_db/v1/<spec_key>/        # spec_key = sha256(structural AAG + port spec)
                                 #   seeded originals: copy of starting_point.py)
         source/<rel>.py         #   .py inserts only: the entry's project-local import closure
         metrics.json            #   {<system>: {metrics: {...}, objectives: {axis -> field}}, …}
-        provenance.json         #   {source, created, verification: {...}, python_source: {kind, …}}
+        provenance.json         #   {source, created (epoch s, UTC), verification: {...},
+                                #   python_source: {kind, …}, …}
     index.json                  # DERIVED CACHE of the roll-up {design_id -> {struct_hash,
-                                #   metrics, source, created}} — the designs/ dirs are the source
-                                #   of truth; the cache self-heals on every read (inspection aid)
+                                #   metrics, source, created, …}} — the designs/ dirs are the
+                                #   source of truth; self-heals on every read (inspection aid)
 design_db/v1/manifest.json      # {registered name -> {spec_key, class}} — name bindings only
                                 #   (fcntl-locked writes); counts and indexes are derived
 ```
