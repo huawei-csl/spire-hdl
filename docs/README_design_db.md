@@ -1,28 +1,84 @@
-# Design DB — a verification-gated library of implementations
+# Design DB
 
-> **Status: complete.** Registration, the verification gate (CEC + sim tiers), the selection
-> decorator, and the CLI are in place. Generation and enrichment (the campaign filler, the
-> agent flows, per-technology PPA scoring) live in RTLScout — see its README.
+> Registration, gated insertion, the selection decorator, simulation/CEC
+> verification tiers, and the CLI are implemented. Candidate generation and campaign enrichment
+> live in RTLScout; see the RTLScout README for those flows.
 
-`spire.design_db` is a content-addressed store of **correct implementations of a subcircuit**. For
-each subcircuit — a *slot* — the DB holds any number of implementations, each **proven correct
-against the slot's golden** before it is admitted, and each carrying metric vectors and
-provenance. Producers (optimization tools, agents, humans) *insert* through the verification
-gate; consumers *pick* by objective. Generation and selection are fully decoupled: filling a
-slot once lets every later build pick from it.
+`spire.design_db` is a content-addressed library of correct implementations for reusable
+subcircuits. Each subcircuit is a **slot**. A slot stores its golden implementation, its port
+specification, its verification oracle, and any number of admitted candidate implementations.
 
-**Slot identity.** A slot is defined by its **`spec_key`** — `sha256(structural golden AAG +
-port spec)`, 64 hex chars, also the slot's directory name — which is what every Python API call
-takes (`pick_design(spec_key, …)`, `insert_design(spec_key, …)`, …) and what `register_slot`
-returns. Slots additionally carry a permanent human *name* in the manifest (`name → spec_key`,
-e.g. `adder8`); the CLI resolves either a name or a unique key prefix, so
-`spire db insert cand.py --slot adder8` is one manifest lookup followed by the same key-based
-operation. A name is an **alias, not a second identity**: it can never be re-bound to a
-different structure (re-registering a taken name with changed content raises), so within one DB
-a name is as trustworthy as the key it points to — while `spec_key`s are universal across DBs
-(the same structure always hashes to the same key).
+The core idea is simple:
 
-## Quick start — the decorator
+1. A producer inserts a candidate into a slot.
+2. The DB verifies the candidate against the slot's golden.
+3. Only passing candidates are admitted and stamped with metrics.
+4. A consumer later selects the best admitted candidate for a chosen objective.
+
+Generation and selection are deliberately separate. Filling a slot once makes every later build
+able to reuse the stored implementations without rerunning the search that found them.
+
+## Core Concepts
+
+### Slot identity
+
+A slot is identified by its **`spec_key`**:
+
+```
+sha256(structural golden AAG + port spec)
+```
+
+The key is 64 hex characters and is also the slot directory name. Python APIs use the key directly:
+
+```python
+pick_design(spec_key, ...)
+insert_design(spec_key, ...)
+```
+
+Slots can also have human names in the DB manifest, such as `adder8`. A name is an alias for one
+`spec_key`, not a second identity. Within one DB, the binding is permanent:
+
+- registering the same structure under the same name is idempotent;
+- registering different logic under an existing name raises;
+- several names may alias the same slot;
+- `spec_key`s remain universal across DBs.
+
+The CLI accepts a manifest name, a full key, or a unique key prefix of at least 8 characters.
+
+### Designs
+
+An admitted implementation is stored under:
+
+```
+designs/<source>:<hash10>/
+```
+
+That full string is the **`design_id`**. The `source` part is the tag supplied at insert time and
+may itself contain colons, so parse IDs from the right if needed:
+
+```
+agent:rtl-subcircuit-depth:15d010c21e
+```
+
+means source `agent:rtl-subcircuit-depth`, structural hash prefix `15d010c21e`.
+
+Use exact `design_id`s for reproducibility pins. Take them from `spire db show <slot>`.
+
+### Verification
+
+Every slot has one acceptance oracle. Every `insert` and `verify` call uses that oracle, so all
+designs in a slot are judged by the same yardstick.
+
+Combinational slots get Tier-0 CEC by default at registration. Sequential slots register
+successfully but stay unverified until a simulation tier is frozen.
+
+### Selection
+
+Selection is a pure query over admitted designs and their stored metric blocks. It does not generate
+new designs, update the manifest, or spend verification budget. If no eligible design exists,
+selection returns `None`; the decorator falls back to the original logic.
+
+## Quick Start: Use a Slot from Source
 
 ```python
 from spire import Bool, Component, IORecord, Input, Output, UInt
@@ -31,437 +87,512 @@ from spire.expr import mux
 
 @from_design_db(objective="area")
 def mac_step(a, b, acc, en, thresh):
-    p = mux(en, a * b, 0)          # enable gates the 4x4 product     (control)
-    t = acc + p                       # 8-bit accumulate, 9 bits wide    (arithmetic)
-    s = mux(t[8], 255, t[0:8])     # saturate at 255                  (bit test + mux)
-    return mux(s > thresh, s, 0)   # dead-zone: suppress small values (comparator)
+    p = mux(en, a * b, 0)
+    t = acc + p
+    s = mux(t[8], 255, t[0:8])
+    return mux(s > thresh, s, 0)
 
 class Top(Component):
     def __init__(self):
-        self.io = IORecord(a=Input(UInt(4)), b=Input(UInt(4)), c=Input(UInt(8)),
-                           en=Input(Bool()), thresh=Input(UInt(8)), y=Output(UInt(8)))
+        self.io = IORecord(
+            a=Input(UInt(4)),
+            b=Input(UInt(4)),
+            c=Input(UInt(8)),
+            en=Input(Bool()),
+            thresh=Input(UInt(8)),
+            y=Output(UInt(8)),
+        )
         self.elaborate()
+
     def elaborate(self):
-        self.io.y <<= mac_step(self.io.a, self.io.b, self.io.c,
-                               self.io.en, self.io.thresh)   # selected implementation spliced here
+        self.io.y <<= mac_step(
+            self.io.a, self.io.b, self.io.c, self.io.en, self.io.thresh
+        )
 ```
 
-A slot is **any traceable function** — here two arithmetic ops wrapped in enable gating, a
-saturating clamp, and a dead-zone comparator, optimized *as one unit* (candidates may restructure
-across the arithmetic/control boundary). The DB doesn't care what's inside; it only requires
-that admitted candidates prove equivalent to the slot's golden.
+A decorated function is treated as one optimization unit. Candidates may restructure across the
+function body as long as they remain equivalent to the slot golden.
 
-`@from_design_db` is a **pure reader** — it never generates and never spends budget:
+`@from_design_db` is a reader:
 
-1. The call is traced (exactly like `@abc_optimized`) and the slot is **registered automatically**:
-   golden + spec + default Tier-0 CEC verification + the function's source as the starting point.
-2. The best admitted implementation (by `objective`/`metric`) is selected and **spliced** in place
-   of the function.
-3. **Miss ⇒ the original logic** (one-line note; a build never fails because a slot isn't filled).
+1. The best admitted implementation is selected for `objective` and `metric`.
+2. The selected implementation is spliced into the circuit.
+3. On a miss, the original function body is used inline.
 
-Parameters: `objective=` (what to minimize — see Selection), `metric=` (measurement system),
-`pin=` (an exact `design_id` — see the format note under Selection; missing ⇒ error),
-`fill=` (opt-in callable invoked once on miss to generate, then re-select), `db=` (explicit
-DB root).
+The decorator never generates designs unless you explicitly provide `fill=`.
 
-The `fill=` contract: the hook is called as `fill(spec_key, db_root=…, objective=…, metric=…)`
-and populates the slot **through the insert gate** (anything else is refused); the decorator
-re-selects immediately after it returns, so a successful fill **splices in the same compile**.
-RTLScout ships a ready-made hook (`make_rtlscout_fill` — see its README).
+Decorator arguments:
 
-### First compile with no DB — the bootstrap path
+| Argument | Meaning |
+|---|---|
+| `objective=` | Objective to minimize: `area`, `delay`, `adp`, `edap`, or a combinator. |
+| `metric=` | Measurement system to use, such as `aig`, `transistors`, or `asap7`. |
+| `pin=` | Exact `design_id` to splice. Missing pins raise. |
+| `fill=` | Optional miss hook. Called once, then selection is retried. |
+| `name=` | Manifest name. Defaults to the function qualname and is a permanent binding. |
+| `db=` | Explicit DB root. |
 
-Decorating costs nothing up front: compiling a design that uses `@from_design_db` when no DB exists
-(or the slot is empty) succeeds unchanged.
-
-1. The call is traced and the slot **registers** — resolution finds no DB, so `./design_db` is
-   **auto-created** (one printed note; write paths may create — read-only commands never do).
-2. The slot gets `spec.json`, `golden.v`, the default Tier-0 CEC `verification.json`,
-   `starting_point.py` + `source_ref` (captured best-effort from the defining file), and a manifest
-   entry.
-3. Selection finds an empty slot → **miss ⇒ original logic**: one note
-   (`slot … has no admitted design — using the original logic for f`), and `f`'s own body is used
-   inline — the emitted circuit is **structurally identical to the undecorated function**
-   (test-asserted via AAG equality). No error, no CEC, no yosys, no budget spent.
-4. Later fills (`spire db seed`, `spire db insert`, a `fill=` hook, or an external filler such as
-   an RTLScout campaign) populate the slot; the **next compile splices** the selected
-   implementation.
-
-The only variants that behave differently on an empty slot: `pin=` errors (a broken
-reproducibility lock, by design), and `fill=` fires the generate hook on the miss.
-
-## Quick start — filling a slot
+The `fill` hook is called as:
 
 ```python
+fill(spec_key, db_root=..., objective=..., metric=...)
+```
+
+It must populate the slot through the normal insert gate. If it succeeds, the decorator reselects
+and can splice the new design in the same compile. RTLScout ships a ready-made hook,
+`make_rtlscout_fill`.
+
+### First compile with an empty DB
+
+Decorating code is cheap when the DB is empty:
+
+1. The traced call registers the slot.
+2. If no DB exists, write paths create `./design_db` and print one note.
+3. The slot receives `spec.json`, `golden.v`, default CEC verification for combinational slots,
+   `starting_point.py` when source capture succeeds, and a manifest entry.
+4. Selection misses, so the original function body is used inline.
+
+The emitted circuit is structurally identical to the undecorated function. No CEC, yosys run, or
+generation budget is spent on this miss path.
+
+Two cases intentionally behave differently:
+
+- `pin=` raises if the pinned design is absent;
+- `fill=` runs the generation hook before falling back.
+
+## Quick Start: Fill a Slot
+
+Filling is independent of the decorator flow above — any registered slot can be filled. Here a
+fresh 8-bit adder slot, registered directly:
+
+```python
+from spire import Component, IORecord, Input, Output, UInt
 from spire.design_db import insert_design, register_slot
 
-key = register_slot(Adder(), name="adder8")      # or the decorator registers it on first build
+class Adder(Component):
+    def __init__(self):
+        self.io = IORecord(a=Input(UInt(8)), b=Input(UInt(8)), s=Output(UInt(9)))
+        self.elaborate()
+
+    def elaborate(self):
+        self.io.s <<= self.io.a + self.io.b
+
+key = register_slot(Adder(), name="adder8")
 
 candidate = """
 module cand_add(input [7:0] a, input [7:0] b, output [8:0] s);
   assign s = {1'b0, a} + {1'b0, b};
 endmodule
 """
-res = insert_design(key, candidate, source="handwritten")   # verified, then admitted
+
+res = insert_design(key, candidate, source="handwritten")
 print(res.design_id, res.metrics["transistors"]["metrics"], res.metrics["aig"]["metrics"])
 ```
 
-An incorrect candidate raises `VerificationFailed` and leaves no trace in the DB; a candidate whose
-ports don't match the slot spec is rejected with a clear message. Inserting a structurally
-identical design again returns `deduped=True`. Spire-native producers can pass a
-`Component`/`Netlist` directly — `insert_design(key, MyOtherAdder(), source="spire")` lowers it
-internally.
+An incorrect candidate raises `VerificationFailed` and leaves no admitted design behind. A
+candidate with incompatible ports is rejected before admission. Re-inserting a structurally
+identical design returns `deduped=True`.
 
-## Selection
-
-Selection is deterministic and instant — pure functions over the metric vectors stamped at insert:
+Spire-native producers can pass a `Component` or `Netlist` directly:
 
 ```python
-from spire.design_db import pick_design, constrained, weighted, lexicographic, pareto_front
+insert_design(key, MyOtherAdder(), source="spire")
+```
 
-pick_design(key, objective="area")                                   # argmin
-pick_design(key, objective="delay", metric="aig")                    # explicit system
+Python design files are also accepted when they define `build() -> Component/Netlist`; the gate
+elaborates them and stores both the canonical Verilog and the Python source provenance.
+
+### Seed the baseline
+
+`seed_original(spec_key)` or `spire db seed --slot <slot>` inserts the slot golden as a design with
+`source="original"`. This gives selection a floor: an argmin cannot pick something worse than the
+original if the original is present and eligible.
+
+Seeding is idempotent through structural dedup. It is not automatic during registration because
+registration must stay cost-free; fillers are expected to seed before generating.
+
+## Selection and Metrics
+
+```python
+from spire.design_db import constrained, lexicographic, pareto_front, pick_design, weighted
+
+pick_design(key, objective="area")
+pick_design(key, objective="delay", metric="aig")
 pick_design(key, objective=constrained(minimize="area", subject_to={"delay": 500}))
 pick_design(key, objective=weighted({"area": 1.0, "delay": 0.1}))
 pick_design(key, objective=lexicographic(("area", "delay")))
-pick_design(key, pin="spire:1a2b3c4d5e")                             # reproducibility lock
-pareto_front(key)                                                      # non-dominated set
+pick_design(key, pin="spire:1a2b3c4d5e")
+pareto_front(key)
 ```
 
-- **Objectives**: `area | delay | adp | edap` (or a combinator above).
-- **`metric`** — the measurement system the objective is evaluated in: `"aig"` (structural
-  nodes/depth), `"transistors"` (heavy-pipeline Yosys estimate), or a technology (e.g. `"asap7"`,
-  once PPA scoring has run). `metric=None` resolves deterministically: technology → transistors →
-  aig. Constraints are evaluated in the same system.
-- **`design_id` format** (what `pin=` takes): always `<source>:<hash10>` — the `--source` tag
-  given at insert, a colon, and the first 10 hex chars of the design's structural hash (its
-  AAG content hash). Source tags may themselves contain colons
-  (`agent:rtl-subcircuit-depth:15d010c21e` = source `agent:rtl-subcircuit-depth` + hash
-  `15d010c21e`), so parse from the right. Take ids verbatim from `spire db show <slot>`;
-  `pin=` is **exact** — no prefix matching (unlike `annotate`/`db-score --design`, which are
-  one-shot interactive commands) — because a prefix that is unique today can become ambiguous
-  as the slot grows: a reproducibility lock must not rot. A missing pin raises rather than
-  falling back to a metric selection.
-- **Picking is a pure query** — nothing is written to the DB or its manifest. For an audit
-  trail of what a *compile* actually spliced, set `$SPIREHDL_DB_SELECTION_LOG=<path>`: every
-  splice appends one JSON line `{spec_key, name, design_id, objective, metric}` there. The
-  compile's caller owns that file — selections are a property of the compiled artifact, not
-  the library (a library-side record could only ever say what the *last* compile chose).
+Built-in objective axes are `area`, `delay`, `adp`, and `edap`. `adp` is derived as
+`area * delay` when a metric system maps `area` and `delay` but not `adp`. Other axes are available
+only when the metric system defines them.
 
-### Temporary selection overrides (what-if compiles)
+### Metric systems
 
-Force selections to specific designs **without touching source** — for sweeping splice
-combinations, A/B-ing a candidate in context, or reproducing a composition:
+Each design's `metrics.json` contains one block per measurement system. The insert gate stamps:
+
+- `aig`: structural nodes, depth, and latch count;
+- `transistors`: yosys heavy-pipeline transistor estimate, with delay borrowed from `aig`.
+
+Additional systems, such as `asap7`, can be added with `annotate`.
+
+When `metric=None`, selection resolves deterministically in this order:
+
+1. the alphabetically first non-built-in technology system, if any exists;
+2. `transistors`;
+3. `aig`.
+
+Constraints are evaluated in the same system as the objective.
+
+Example metric block:
+
+```json
+{
+  "aig": {
+    "metrics": {"aig_nodes": 105, "aig_depth": 12, "aig_latches": 8},
+    "objectives": {"area": "aig_nodes", "delay": "aig_depth"}
+  },
+  "transistors": {
+    "metrics": {"transistors_heavy": 202},
+    "objectives": {"area": "transistors_heavy", "delay": "aig.aig_depth"}
+  }
+}
+```
+
+The `objectives` map tells selection which metric field backs each axis. A value like
+`aig.aig_depth` borrows from a sibling system instead of duplicating the number.
+
+### Pins and selection logs
+
+`pin=` always requires an exact `design_id`. It does not accept prefixes, because a prefix that is
+unique today can become ambiguous as a slot grows. A missing pin raises instead of falling back to
+metric selection.
+
+Selection itself is not recorded in the DB. To audit what a compile actually spliced, set:
+
+```bash
+SPIREHDL_DB_SELECTION_LOG=selection.jsonl python design.py
+```
+
+Each splice appends one JSON line:
+
+```json
+{"spec_key": "...", "name": "adder8", "design_id": "...", "objective": "area", "metric": "aig"}
+```
+
+The log belongs to the compiled artifact. The library does not store "last selected" state.
+
+### Temporary selection overrides
+
+Use overrides for what-if compiles, A/B measurements, or reproducing one composition without
+changing source:
 
 ```python
 from spire.design_db import selection_overrides
 
-with selection_overrides({"adder8": "verilog:e218599799"}):   # slot -> design_id
-    Top().to_verilog_file("design.v")      # every @from_design_db splice obeys the pins
+with selection_overrides({"adder8": "verilog:e218599799"}):
+    Top().to_verilog_file("design.v")
 ```
 
-The same map works **across process boundaries** through the environment — this is how
-rtlscout's `measure_db_compositions.py` measures every splice combination of a run:
+The same map can cross process boundaries — RTLScout's `measure_db_compositions.py` uses it to
+measure every splice combination of a run:
 
 ```bash
 SPIREHDL_DB_PINS='{"adder8": "verilog:e218599799"}' python design.py
 ```
 
-Keys are exact spec_keys or manifest names; values are exact `design_id`s (unknown ⇒ error,
-like `pin=`). An explicit source-level `pin=` always wins over an override, and overridden
-selections are **never recorded** in the manifest — overrides are what-if compiles, not
-library state. Scopes nest (innermost wins) and overlay the environment.
+Keys are exact `spec_key`s or manifest names. Values are exact `design_id`s. An explicit source
+`pin=` wins over an override. Scopes nest (innermost wins) and overlay the environment. Overrides
+are never written to the manifest.
 
-### The per-slot index
+### Inspecting a slot from Python
 
-The per-slot index maps every admitted `design_id` to its `source`, `created`, `struct_hash`, and
-stamped `metrics` — and it is **derived from the `designs/` dirs on every read** (the on-disk
-`index.json` is only a self-healing cache for `cat`/`jq`, never an input), so it cannot be out
-of sync with the slot's contents. Timestamps are Unix epoch seconds (UTC by definition);
-`spire db ls`/`show` render them in local time. Sorting the index by `created` gives the slot's
-improvement timeline (best-metric-so-far over time), and each design's `rediscoveries` count +
-`last_rediscovered` stamp (bumped whenever an insert dedups against it) is the convergence
-signal — producers keep re-deriving what's already stored.
-
-### Looping over a slot's designs
-
-The Python API works on `spec_key`s; starting from a manifest name is one lookup:
+The Python API works on `spec_key`s. Starting from a manifest name is one lookup:
 
 ```python
 from spire.design_db import DesignDB, pick_design
 
-d = DesignDB.open()                                      # --db / $SPIREHDL_DB_PATH / nearest
-spec_key = d.read_json(d.manifest_path)["slots"]["adder8"]["spec_key"]   # name -> key
+d = DesignDB.open()
+spec_key = d.read_json(d.manifest_path)["slots"]["adder8"]["spec_key"]
 
 for design_id, info in d.read_index(spec_key).items():
     print(design_id, info["source"], info["metrics"]["transistors"])
-    sel = pick_design(spec_key, pin=design_id)         # e.g. visit each design exactly
+    sel = pick_design(spec_key, pin=design_id)
 ```
 
-Same from the shell: `spire db show adder8` dumps the slot as JSON with a `"designs"` object
-keyed by `design_id` (`spire db show adder8 | jq -r '.designs | keys[]'`).
+From the shell:
 
-**How a design stores its metrics.** Each design's `metrics.json` holds one *self-describing block
-per measurement system* — its raw `metrics` plus an `objectives` map saying which field plays each
-axis (a bare field is local; a `system.field` path borrows from a sibling system). The gate stamps
-`aig` and `transistors`; the reader (`metric_value`) is fully data-driven — no system is special-cased:
-
-```json
-{
-  "aig":         { "metrics": {"aig_nodes":105, "aig_depth":12, "aig_latches":8},
-                   "objectives": {"area":"aig_nodes", "delay":"aig_depth"} },
-  "transistors": { "metrics": {"transistors_heavy":202},
-                   "objectives": {"area":"transistors_heavy", "delay":"aig.aig_depth"} }
-}
+```bash
+spire db show adder8 | jq -r '.designs | keys[]'
 ```
 
-`transistors` has no timing of its own, so its `delay` axis explicitly **borrows** `aig.aig_depth`
-rather than duplicating the number. `adp` is derived (`area·delay`) whenever a system doesn't map
-it; `edap` (and any other axis) is available only if a system maps it. The `objectives` map is
-tooling-written and identical across a slot's designs — one interpretation per slot.
+The per-slot index maps each `design_id` to its source, creation time, structural hash, metrics,
+and rediscovery info. It is derived from the `designs/` directories on every read; `index.json`
+is only a self-healing cache for inspection.
 
-### Enriching designs with more metrics (`annotate`)
+Timestamps are Unix epoch seconds (UTC by definition); `spire db ls` and `spire db show` render
+them in local time. Sorting the index by `created` gives the slot's improvement timeline. A
+design's `rediscoveries` count and `last_rediscovered` stamp are bumped whenever an insert dedups
+against it, so rising rediscoveries without new admissions mean the search has converged.
 
-The gate stamps only what yosys gives it (the `aig` and `transistors` systems). Richer
-per-technology PPA is produced *outside* spire — a real ASAP7 flow, another tool, or by hand — and
-attached to a design through **`annotate`** (API and `spire db annotate` share the name) as one more
-self-describing system the design can then be selected in:
+## Adding Technology Metrics
 
-```
+The insert gate records only metrics Spire can compute itself. Richer per-technology PPA comes from
+external tools and is attached with `annotate`; RTLScout's `db-score` is exactly such a producer:
+
+```bash
 spire db annotate --slot adder8 --design agent:9f3c1a2b7d --tech asap7 area=118.3 delay=94.6
 ```
+
 ```python
 from spire.design_db import annotate
+
 annotate(key, "agent:9f3c1a2b7d", tech="asap7", values={"area": 118.3, "delay": 94.6})
 ```
 
-A design's `metrics.json` **before** (as the gate left it):
+`design_ref` may be an exact `design_id` or a unique prefix within the slot. That looseness is for
+interactive commands only; reproducibility pins still require exact IDs.
+
+This adds an `asap7` block to `metrics.json` without changing the gate-stamped `aig` or
+`transistors` blocks:
 
 ```json
-{ "aig":         { "metrics": {"aig_nodes":105, "aig_depth":12, "aig_latches":8},
-                   "objectives": {"area":"aig_nodes", "delay":"aig_depth"} },
-  "transistors": { "metrics": {"transistors_heavy":202},
-                   "objectives": {"area":"transistors_heavy", "delay":"aig.aig_depth"} } }
+{
+  "aig": {
+    "metrics": {"aig_nodes": 105, "aig_depth": 12, "aig_latches": 8},
+    "objectives": {"area": "aig_nodes", "delay": "aig_depth"}
+  },
+  "transistors": {
+    "metrics": {"transistors_heavy": 202},
+    "objectives": {"area": "transistors_heavy", "delay": "aig.aig_depth"}
+  },
+  "asap7": {
+    "metrics": {"area": 118.3, "delay": 94.6},
+    "objectives": {"area": "area", "delay": "delay"}
+  }
+}
 ```
 
-and **after** the annotate above (the `asap7` block is added; the gate's blocks are untouched):
+After that, `pick_design(key, objective="area", metric="asap7")` and
+`@from_design_db(metric="asap7")` can rank designs using ASAP7 area.
 
-```json
-{ "aig":         { "metrics": {"aig_nodes":105, "aig_depth":12, "aig_latches":8},
-                   "objectives": {"area":"aig_nodes", "delay":"aig_depth"} },
-  "transistors": { "metrics": {"transistors_heavy":202},
-                   "objectives": {"area":"transistors_heavy", "delay":"aig.aig_depth"} },
-  "asap7":       { "metrics": {"area":118.3, "delay":94.6},
-                   "objectives": {"area":"area", "delay":"delay"} } }
-```
+Rules for annotation:
 
-Now `pick_design(key, objective="area", metric="asap7")` (or `@from_design_db(metric="asap7")`)
-ranks on the ASAP7 area. `annotate` builds the block's `objectives` as the identity over the
-standard axes present in `values` (`area | delay | adp | edap`); other numeric keys are stored but
-not selectable; `--raw <file>` optionally stashes the full tool-stats blob under `.raw`. Reserved
-system names (`aig`/`transistors`/…) are refused, re-annotating a technology needs `--force`, and
-the map must agree with any sibling design's for the same system — measurements are commitments and
-a slot keeps one interpretation. Spire owns the write (`metrics.json` is authoritative; the
-`index.json` cache re-derives from it), so producers just hand it the numbers; RTLScout's `db-score` is exactly such a producer
-(its ASAP7 pipeline → `annotate`).
+- reserved systems such as `aig` and `transistors` cannot be overwritten;
+- re-annotating the same technology requires `--force`;
+- `values` must be numeric;
+- standard axes in `values` (`area`, `delay`, `adp`, `edap`) become selectable;
+- other numeric keys are stored but not used for selection;
+- `--raw <file>` stores an optional full tool-stats JSON blob under `.raw`;
+- every design in a slot must use the same `objectives` map for a given technology.
 
-> **Cover the whole slot.** A technology counts as "present" once *any* design in the slot has it,
-> and a design missing that system is ineligible for selection in it. Annotate **all** of a slot's
-> designs for a technology (the seeded `original:*` included) before selecting on it, or keep
-> `metric=` pinned — otherwise the default resolver may switch to a system that excludes the floor.
+Annotate all designs in a slot before selecting on a technology metric. A technology counts as
+present once any design has it, and designs missing that system are ineligible in that metric
+system. This includes the seeded `original:*` design if you use it as the baseline. Until coverage
+is complete, keep `metric=` explicit — the default resolver prefers technology systems and would
+otherwise select in a system that excludes the floor.
 
-## The CLI
+## Verification
 
-Installed as the `spire` console script (also `python -m spire.design_db …`):
-
-```
-spire db init                      # create (or print) the DB root
-spire db ls                        # slots: name, class, #designs, key, selected
-spire db show adder8 --pareto      # one slot as JSON (spec, verification, designs, Pareto front)
-spire db insert cand.py --slot adder8 --source agent:rtl-subcircuit   # spire design: check + admit
-spire db insert cand.v --slot adder8 --source handwritten [--budget 300]   # Verilog: check + admit
-spire db verify cand.py --slot adder8  # advisory: run the set oracle, no admit (PASS/FAIL)
-spire db verify cand.v --slot adder8   # (both commands take .py or .v/.sv)
-spire db seed --slot adder8            # insert the slot's own golden as the baseline candidate
-spire db annotate --slot adder8 --design 9f3c1a2b7d --tech asap7 area=118.3 delay=94.6 [--force]
-spire db set-verification --slot mypipe --auto [--vectors 256 --seed 0 --sim-budget 300]
-spire db set-verification --slot mypipe --stimulus stim.py --check   # dry-run the generator (no freeze)
-spire db set-verification --slot mypipe --stimulus stim.py     # authored stimulus (Tier 2)
-spire db set-verification --slot mypipe --stimulus stim.py --author agent:rtl-dv-prep   # attribution
-spire db set-verification --slot adder8 --cec [--budget 300]   # (re)confirm CEC on a combinational slot
-```
-
-The three verification commands are orthogonal — one configures the oracle, two apply it:
-- **`set-verification`** — *slot-level, once*: choose the method every later candidate is judged by
-  (CEC, or a sim tier). Fail-and-choose: a bare call defaults to CEC for **combinational** slots and
-  **errors with the options** for sequential ones (no safe default — CEC is inapplicable and sim
-  needs stimulus); there is never an auto-fallback, and a frozen sim verification is immutable. It
-  never checks a candidate — for CEC it is pure config, for sim it simulates the *golden* once to
-  freeze the reference. `--stimulus` records the author in `stimulus_author` (default `human`;
-  `--author agent:rtl-dv-prep` keeps agent-authored stimulus honestly attributed).
-- **`verify <design>`** — *candidate-level, advisory*: run the set oracle against a candidate and
-  report `PASS`/`FAIL` (exit 2 on fail), writing nothing. The dry run before committing.
-- **`insert <design>`** — *candidate-level*: the same check, then **admit** on pass. `verify` and
-  `insert` apply whatever `set-verification` established, so a slot judges every design the same way.
-
-**Spire designs first; Verilog is the IR.** Both `insert` and `verify` accept a **python design
-file** — a `.py` defining `build() -> Component/Netlist` — as the primary way in: the gate
-elaborates it itself, the generated Verilog becomes the canonical `design.v` (all downstream
-processing — dedup, metrics, splice — runs on Verilog, the DB's intermediate representation), and
-the **python source is stored with the design**, correct by construction (the `.v` *is* its
-elaboration; there is no way for the stored source to lie about the stored design). Multi-file
-designs work: the entry's transitive *project-local* import closure (helpers under the entry's git
-root; stdlib/site-packages/spire excluded) is vendored under the design's `source/` dir and listed
-in provenance. Verilog inserts remain fully supported (external, handwritten, harvested
-candidates) — they simply carry no python source.
-
-**What "freeze" means.** Freezing turns the chosen sim verification into the slot's *permanent
-acceptance oracle*. Concretely it (1) simulates the **golden** with the chosen stimulus and stores
-the input + expected-output trace as `vectors.dat`, (2) stores the generated `tb.sv` that replays
-this exact trace against any candidate, (3) makes both files read-only (0444), and (4) writes
-`verification.json` (tier, method, `stimulus_author`, vector count). From then on **every insert
-into the slot is judged against exactly this trace**. That is why a freeze is one-shot and
-immutable: re-freezing would silently swap the yardstick that already-admitted designs were
-measured with, making designs admitted before and after incomparable. (Tier-0 CEC is not
-"frozen" in this sense — it stores only parameters, since equivalence against `golden.v` needs no
-recorded trace; a CEC slot may still be switched **once** to a sim tier, after which the sim
-freeze is final.)
-
-Because the freeze is **one-shot**, iterate on the generator with `--check` first (API:
-`check_stimulus(spec_key, stimulus_file=…)`): it loads the file and produces the masked vectors
-against the slot's interface but simulates, writes, and freezes **nothing** — a failing generator
-is a clean error, a weak-but-working one can still be improved. Freeze only when the stimulus is
-worth committing.
-
-**Seeding the baseline.** `spire db seed` (API: `seed_original(spec_key)`) admits the slot's own
-golden as a design with `source="original"`. This gives selection a *floor* — argmin can never pick
-something worse than the original — and gives reports/Pareto a baseline. When the slot has a
-captured `starting_point.py` (decorator-registered slots), seed stores it with the seeded design as
-its python source (`python_source: {kind: copied}` — the origin of the golden). Idempotent
-(structural dedup). It is not done automatically at compile time (registration must stay
-cost-free); fillers
-are expected to seed before generating.
-
-`show`/`ls` are read-only (they never create a DB); `insert` exits 2 with a `REJECTED (...)` line
-on any verification failure. Slots are addressed by manifest name, full key, or a unique key
-prefix (≥ 8 chars).
-
-**Slot names are permanent bindings.** A manifest name maps to exactly one subcircuit, forever:
-re-registering the same content under the same name is idempotent, several names may alias one
-slot, but registering *different* logic under an existing name **raises** — change the name when
-the behavior changes (rename the function, or pass `name=`: both `register_slot(m, name="…")`
-and `@from_design_db(name="…")` take it; the decorator's default is the function's qualname).
-This keeps `--slot <name>` references stable: a name can never silently start meaning a
-different circuit.
-
-## Where the DB lives
-
-Resolution order (zero-config): explicit `db=`/`--db` → `$SPIREHDL_DB_PATH` → the nearest existing
-`design_db/` directory upward from the cwd → **auto-create `./design_db`** (write paths only; a
-one-line note is printed on first creation).
-
-## On-disk layout (schema `v1`)
-
-```
-design_db/v1/<spec_key>/        # spec_key = sha256(structural AAG + port spec)
-    spec.json                   # name, ports, class, clock, golden_sha, source_ref, registered_from
-    golden.v                    # the golden reference candidates are verified against
-    starting_point.py           # the decorated function's captured source (fidelity-tagged)
-    verification.json           # the frozen verification (absent = unverified, inserts refused)
-    tb.sv, vectors.dat          # sim tiers only: the frozen testbench + golden-simulated trace
-                                #   (read-only once frozen)
-    designs/<source>:<hash>/    # one admitted implementation
-        design.v                #   the implementation (canonical IR — all processing runs on this)
-        design.aag              #   precomputed splice input (structural AIG)
-        design.py               #   python source when known (.py inserts: elaborated-by-the-gate;
-                                #   seeded originals: copy of starting_point.py)
-        source/<rel>.py         #   .py inserts only: the entry's project-local import closure
-        metrics.json            #   {<system>: {metrics: {...}, objectives: {axis -> field}}, …}
-        provenance.json         #   {source, created (epoch s, UTC), verification: {...},
-                                #   python_source: {kind, …}, …}
-    index.json                  # DERIVED CACHE of the roll-up {design_id -> {struct_hash,
-                                #   metrics, source, created, …}} — the designs/ dirs are the
-                                #   source of truth; self-heals on every read (inspection aid)
-design_db/v1/manifest.json      # {registered name -> {spec_key, class}} — name bindings only
-                                #   (fcntl-locked writes); counts and indexes are derived
-```
-
-**Concurrency.** Admission is a single atomic directory rename, and the per-slot index is
-*derived* from the admitted `designs/` dirs (each carries its own `provenance.json` +
-`metrics.json`; `index.json` is only a materialized, self-healing cache). Concurrent inserts —
-same slot or across slots, threads or processes — can therefore never lose a design. The
-manifest's rare writes (name registration, selection recording) are serialized with an fcntl
-lock. Parallel fills of one DB are supported; the only rule left is per-slot *courtesy*: one
-filler per slot at a time beats two racing over the same search space.
-
-Everything is plain JSON + Verilog — inspectable, diffable, committable. A committed DB makes
-builds reproducible: selection reads it deterministically, nothing regenerates.
-
-**Spec keys** hash the *structural AAG* (the numeric `AigerExporter` section) plus the port spec —
-not the Verilog text, whose internal wire names depend on the build context. Identical logic with
-an identical interface maps to one slot, wherever and whenever it is built.
-
-**Starting points.** For decorator slots, registration captures the function's *current* source:
-`starting_point.py` (runnable wrapper when the body is self-contained, honestly tagged
-`fidelity: self-contained | fragment`) plus `source_ref = {file, qualname, line}` in `spec.json` —
-a pointer to the defining file for full context (helpers, sub-components, imports).
-
-## Verification: how correctness is gated
-
-Every insert runs the slot's **frozen verification**; only passing designs are admitted. One
-method-keyed ladder — the caller chooses, tooling only vetoes and fails loudly (no auto-fallback):
+Every insert runs the slot's configured verification. Passing designs are admitted; failing designs
+leave no admitted implementation behind.
 
 | Tier | Method | Applies to | Status |
-|------|--------|-----------|--------|
-| 0 | **CEC** vs `golden.v` (yosys → BLIF, `yosys-abc cec`) — formal, exhaustive | combinational only | **implemented** |
-| 1 | **auto sim harness**: corners + seeded random stimulus (exhaustive for tiny combinational input spaces), **golden-simulated** outputs, frozen `tb.sv` + `vectors.dat` | sequential; combinational where the caller chose sim | **implemented** |
-| 2 | **authored stimulus** (`--stimulus <file>`: a Python `generate(ports, n_vectors, seed)` generator), golden-simulated outputs | protocol-heavy sequential | **implemented** — human path + the rtlscout `rtl-dv-prep` subagent |
+|---:|---|---|---|
+| 0 | CEC against `golden.v` using yosys and `yosys-abc cec` | combinational only | implemented |
+| 1 | Auto simulation harness: corners plus seeded random stimulus (exhaustive for tiny input spaces), golden-simulated outputs, frozen `tb.sv` and `vectors.dat` | sequential, or combinational by choice | implemented |
+| 2 | Authored Python stimulus generator: `generate(ports, n_vectors, seed)` | protocol-heavy sequential designs | implemented |
 
-- Combinational slots get Tier-0 CEC **by default** at registration; sequential slots register
-  fine but stay **unverified** (inserts raise `SlotUnverified`) until a sim tier is frozen with
-  `spire db set-verification --slot <key> --auto | --stimulus <file>`.
-- CEC runs under a bounded budget (`budget_s`, default 120 s, per candidate at insert). A timeout
-  is a clean failure: `CECTimeout` — *"CEC timed out after 120 s. Options: --budget <t> | --auto |
-  --stimulus <file>"* — and the slot's verification is unchanged until the caller picks the next
-  rung. Requesting CEC for a sequential slot raises `CECInapplicable` (no register mapping).
-- **Sim-tier semantics: cycle-accurate trace equivalence** under the frozen stimulus. Expected
-  outputs always come from simulating the golden (Verilator); a sequential candidate must match
-  the golden's output trace cycle for cycle — a re-pipelined design with different latency is
-  rejected, by design. The frozen `tb.sv` follows the rtlscout testbench contract
-  (`TB_SUMMARY total=N errors=M`, `PASS`), and the DUT is bound by name via `-DDUT=<top>`.
-- **Frozen means frozen**: `tb.sv`/`vectors.dat` are written read-only and a re-freeze is refused —
-  it would silently change the oracle that admitted designs were checked against.
+### CEC
 
-## API summary
+Combinational slots receive CEC verification by default. CEC runs with a bounded budget
+(`budget_s`, default 120 seconds). A timeout raises `CECTimeout` and leaves the slot unchanged.
+Requesting CEC for a sequential slot raises `CECInapplicable`.
 
-| Symbol | What it does |
+### Simulation tiers
+
+Simulation tiers check cycle-accurate trace equivalence under frozen stimulus. Expected outputs are
+always produced by simulating the golden with Verilator. A sequential candidate must match the
+golden output trace cycle for cycle; a design with different latency is rejected.
+
+Freezing a sim verification:
+
+1. simulates the golden with the chosen stimulus;
+2. stores the input and expected-output trace as `vectors.dat`;
+3. stores the replay testbench as `tb.sv`;
+4. marks both files read-only;
+5. writes `verification.json`, recording tier, method, vector count, and `stimulus_author`
+   (Tier-1 records `auto`; authored freezes record `--author`, or null when omitted).
+
+After that, every candidate is checked against exactly that trace. The frozen `tb.sv` follows the
+RTLScout testbench contract (`TB_SUMMARY total=N errors=M`, then `PASS`) and binds the DUT by name
+via `-DDUT=<top>`. Re-freezing is refused because it would change the yardstick for designs
+already admitted to the slot. A CEC slot may still be switched once to a sim tier; that sim
+freeze is then final.
+
+Use `--check` before freezing authored stimulus:
+
+```bash
+spire db set-verification --slot mypipe --stimulus stim.py --check
+```
+
+The dry run loads the generator and produces masked vectors against the slot interface, but it does
+not simulate, write, or freeze anything. The API equivalent is `check_stimulus(...)`.
+
+## DB Location
+
+DB root resolution is zero-config:
+
+1. explicit `db=` or `--db`;
+2. `$SPIREHDL_DB_PATH`;
+3. nearest existing `design_db/` directory upward from the current working directory;
+4. auto-create `./design_db` for write paths only.
+
+## On-Disk Layout
+
+Schema `v1`:
+
+```text
+design_db/v1/<spec_key>/        # spec_key = sha256(structural AAG + port spec)
+    spec.json                   # name, ports, class, clock, golden_sha, source_ref, registered_from
+    golden.v                    # golden reference candidates are verified against
+    starting_point.py           # captured decorated function source, when available
+    verification.json           # configured/frozen verification; absent means inserts are refused
+    tb.sv, vectors.dat          # sim tiers only; read-only after freeze
+    designs/<source>:<hash>/    # one admitted implementation
+        design.v                # canonical IR
+        design.aag              # precomputed splice input
+        design.py               # Python source when known
+        source/<rel>.py         # vendored project-local imports for .py inserts
+        metrics.json            # measurement blocks
+        provenance.json         # source, created time, verification verdict, Python provenance
+    index.json                  # derived cache; designs/ is the source of truth
+design_db/v1/manifest.json      # name -> {spec_key, class}
+```
+
+Everything is plain JSON and Verilog, so a DB is inspectable, diffable, and committable. A committed
+DB makes builds reproducible because selection is deterministic and nothing regenerates during a
+read.
+
+Spec keys hash the structural AAG and port spec, not Verilog text. Verilog wire names can depend on
+build context; structural AAG avoids that instability.
+
+For decorator-registered slots, source capture stores:
+
+- `starting_point.py`, tagged by capture fidelity;
+- `source_ref` in `spec.json`, including file, qualname, and line.
+
+## Concurrency
+
+Admission uses one atomic directory rename. The slot index is derived from the admitted
+`designs/` directories, and each design carries its own `metrics.json` and `provenance.json`.
+Concurrent inserts cannot lose a design.
+
+Manifest writes are rare and serialized with an `fcntl` lock. Parallel fills of one DB are
+supported. For efficiency, run one filler per slot at a time when possible.
+
+## Python API
+
+| Symbol | Purpose |
 |---|---|
-| `@from_design_db(objective=, metric=, pin=, fill=, name=, db=)` | The selection decorator: register → select → splice; miss ⇒ original logic. `name=` = manifest name (default: fn qualname; permanent binding). |
-| `register_slot(module_or_component, db=None, name=None) -> spec_key` | Register a slot (idempotent): spec + golden + default verification + manifest entry. |
-| `insert_design(spec_key, design, *, source, db=None, budget_s=None, python_copy=None, provenance=None) -> InsertResult` | The gate: verify → dedup → stamp metrics → record provenance → admit atomically. `design`: a **`.py` design file** (`build()` — elaborated here, source stored), a spire `Component`/`Netlist`, a Verilog path, or Verilog text. |
-| `check_design(spec_key, design, *, db=None, budget_s=None) -> dict` | Advisory: run the slot's set oracle against a candidate (no admit, no write). The read-only sibling of `insert_design`; raises the same `VerificationError`s on failure. |
-| `seed_original(spec_key, db=None, budget_s=None) -> InsertResult` | Insert the slot's golden as the baseline candidate (`source="original"`) — a selection floor; stores the slot's `starting_point.py` as its python source when present. |
-| `annotate(spec_key, design_ref, *, tech, values, raw=None, force=False, db=None) -> dict` | Attach a per-technology metric block (`metrics[tech]`) to a stored design; makes `metric=<tech>` selectable. `design_ref` = a `design_id` **or a unique prefix** of one (ambiguous/unknown raises — the looser sibling of `pin=`'s exact match). Writes `metrics.json`; the `index.json` cache refreshes from it. |
-| `pick_design(spec_key, *, objective=, metric=, pin=, sources=)` | Deterministic pick → `SelectionResult` (or None on an empty slot). A pure query; consults active selection overrides when `pin=` is not given. |
-| `$SPIREHDL_DB_SELECTION_LOG` | Opt-in compile-scoped splice log (one JSON line per `@from_design_db` splice) — see *Selection*. |
-| `selection_overrides({slot: design_id, …})` / `$SPIREHDL_DB_PINS` | Temporary what-if pins (context manager / env var) — see *Temporary selection overrides*. Never recorded. |
-| `pareto_front(spec_key, objectives=("area","delay"), metric=None)` | The non-dominated set. |
+| `@from_design_db(objective=, metric=, pin=, fill=, name=, db=)` | Register, select, and splice. Misses use the original logic. |
+| `register_slot(module_or_component, db=None, *, name=None) -> spec_key` | Register a slot idempotently. |
+| `insert_design(spec_key, design, *, source, db=None, budget_s=None, python_copy=None, provenance=None)` | Verify, dedup, stamp metrics, record provenance, and admit atomically. |
+| `check_design(spec_key, design, *, db=None, budget_s=None) -> dict` | Advisory verification with no admission. |
+| `seed_original(spec_key, *, db=None, budget_s=None)` | Admit the golden as `source="original"`. |
+| `annotate(spec_key, design_ref, *, tech, values, raw=None, force=False, db=None)` | Attach a technology metric block to a stored design. |
+| `pick_design(spec_key, *, objective=, metric=, pin=, sources=, db=)` | Deterministic pure selection query. |
+| `selection_overrides({slot: design_id, ...})` / `$SPIREHDL_DB_PINS` | Temporary what-if pins. |
+| `$SPIREHDL_DB_SELECTION_LOG` | Compile-scoped JSONL log of decorator splices. |
+| `pareto_front(spec_key, objectives=("area", "delay"), *, metric=None, db=None)` | Non-dominated set. |
 | `constrained / weighted / lexicographic` | Objective combinators. |
-| `resolve_db_root(db=None)` / `DesignDB` | DB-root resolution / low-level store handle. |
-| `cec_check(design_v, golden_v, workdir, budget_s=…)` | Standalone Tier-0 CEC (raises on non-PASS). |
-| `freeze_sim_verification(spec_key, *, stimulus_file=None, n_vectors=, seed=, sim_budget_s=)` | Build + freeze a sim verification (Tier 1 auto / Tier 2 authored). |
-| `run_frozen_tb(spec_key, candidate_v, workdir, budget_s=…)` | The sim-tier gate check (raises on non-PASS). |
-| `detect_class(module)` | `"combinational"` / `"sequential"` (register scan). |
+| `resolve_db_root(db=None, *, create=True)` / `DesignDB` | DB-root resolution and low-level store access. |
+| `cec_check(design_v, golden_v, workdir, *, budget_s=...)` | Standalone Tier-0 CEC. |
+| `freeze_sim_verification(spec_key, *, stimulus_file=None, n_vectors=, seed=, sim_budget_s=, stimulus_author=None, db=None)` | Freeze Tier-1 or Tier-2 simulation verification. |
+| `check_stimulus(spec_key, *, stimulus_file, n_vectors=, seed=, db=)` | Dry-run an authored stimulus generator against the slot interface; writes nothing (`set-verification --check`). |
+| `run_frozen_tb(spec_key, candidate_v, workdir, *, db=None, budget_s=None)` | Run the frozen simulation oracle. |
+| `detect_class(module)` | Return `"combinational"` or `"sequential"`. |
 | Exceptions | `VerificationFailed`, `CECTimeout`, `SimTimeout`, `CECInapplicable`, `SlotUnverified`, `VerificationError`, `DesignDBError`. |
 
-`import spire.design_db` is dependency-light: pyosys/aigverse are only imported when an insert or
-splice actually needs them.
+`import spire.design_db` is dependency-light. Heavy modules such as pyosys and aigverse are imported
+only when insertion, verification, or splicing needs them.
 
-**Tool requirements.** A plain pip install is enough to insert and CEC-check — no EDA binaries
-needed: the gate uses the `yosys` binary when installed, otherwise the pyosys wheel in a child
-interpreter. Either way yosys runs in a separate process, so when it fails *on a candidate*
-(an unsupported construct, a non-equivalence) that candidate is cleanly rejected instead of
-taking your process down. Without `yosys-abc`, CEC switches from abc's `cec` to yosys' own
-`equiv` flow (both match ports by name). The one tool that must be installed is verilator — and
-only to *use* the sim tiers; the sim-tier unit tests skip when it is absent.
+## CLI
 
+The console entry point is `spire`; the module form drops the `db` prefix
+(`spire db ls` ≡ `python -m spire.design_db ls`).
+
+```bash
+spire db init
+spire db ls
+spire db ls --json
+spire db show adder8 --pareto
+
+spire db verify cand.py --slot adder8
+spire db verify cand.v --slot adder8
+
+spire db insert cand.py --slot adder8 --source agent:rtl-subcircuit
+spire db insert cand.v --slot adder8 --source handwritten --budget 300
+spire db seed --slot adder8
+
+spire db annotate --slot adder8 --design 9f3c1a2b7d --tech asap7 area=118.3 delay=94.6
+
+spire db set-verification --slot mypipe --auto --vectors 256 --seed 0 --sim-budget 300
+spire db set-verification --slot mypipe --stimulus stim.py --check
+spire db set-verification --slot mypipe --stimulus stim.py
+spire db set-verification --slot mypipe --stimulus stim.py --author agent:rtl-dv-prep
+spire db set-verification --slot adder8 --cec --budget 300
+```
+
+The verification-related commands have distinct jobs:
+
+| Command | Scope | Writes? | Purpose |
+|---|---:|---:|---|
+| `set-verification` | slot | yes | Choose the oracle used by later checks. Sim tiers freeze a trace. |
+| `verify <design>` | candidate | no | Run the slot oracle and report `PASS` or `FAIL`. |
+| `insert <design>` | candidate | yes, on pass | Run the same check, then admit the candidate. |
+
+`insert` and `verify` accept `.py`, `.v`, and `.sv` inputs. A `.py` design file must define
+`build() -> Component/Netlist`; the gate elaborates it and stores the generated Verilog as
+`design.v`, which is the DB's canonical intermediate representation. Project-local Python imports
+are vendored under the design's `source/` directory and listed in provenance. External Verilog
+inserts remain supported; they simply carry no Python source.
+
+`ls`, `show`, and `verify` never create a DB; the only write among them is `show` refreshing the
+self-healing `index.json` cache. `annotate` writes `metrics.json`, but it
+opens an existing DB only and does not auto-create one. Write paths such as registration, `init`,
+`insert`, `seed`, and `set-verification` may create a DB. Verification failures from `insert` exit
+with code 2 and print `REJECTED (...)`.
+
+### CLI ↔ Python equivalents
+
+Most operations exist on both sides; the gaps are deliberate:
+
+| CLI | Python | Remarks |
+|---|---|---|
+| `spire db init` | `resolve_db_root(create=True)` | |
+| `spire db ls` | — | Compose from `DesignDB` primitives (manifest + `read_index`); see *Inspecting a slot from Python*. |
+| `spire db show` | — | Same primitives; `--pareto` corresponds to `pareto_front()`. |
+| `spire db insert` | `insert_design()` | |
+| `spire db seed` | `seed_original()` | |
+| `spire db verify` | `check_design()` | |
+| `spire db annotate` | `annotate()` | |
+| `spire db set-verification --auto / --stimulus` | `freeze_sim_verification()` | |
+| `spire db set-verification --check` | `check_stimulus()` | |
+| `spire db set-verification --cec` | — | CLI-only; combinational slots already get CEC by default at registration. |
+| — | `register_slot()` / `@from_design_db` | Registration needs a live `Component`/`Netlist`, so it is Python-only. |
+| — | `pick_design()` + combinators | Selection is Python-only; from the shell, parse `show` JSON. |
+| — | `selection_overrides()` | `$SPIREHDL_DB_PINS` is its shell / cross-process form. |
+
+## Tool Requirements
+
+A plain pip install is enough for insertion and CEC in the common case. The gate uses the `yosys`
+binary when available; otherwise it uses the pyosys wheel in a child interpreter. Candidate failures
+stay isolated from the caller process.
+
+If `yosys-abc` is unavailable, CEC falls back from ABC's `cec` to yosys' `equiv` flow. Both match
+ports by name.
+
+Verilator is required only for simulation tiers. Sim-tier unit tests skip when Verilator is absent.

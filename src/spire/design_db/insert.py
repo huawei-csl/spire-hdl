@@ -62,7 +62,8 @@ def _local_import_closure(entry: Path) -> Dict[str, Path]:
     import ast
     import importlib.util
     entry = entry.resolve()
-    root = next((p for p in entry.parents if (p / ".git").exists()), entry.parent)
+    root = next((p for p in entry.parents                 # a real repo: .git/HEAD, or a .git file
+                 if (p / ".git" / "HEAD").exists() or (p / ".git").is_file()), entry.parent)
 
     def _imported_names(f: Path) -> set:
         names = set()

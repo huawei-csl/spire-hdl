@@ -102,7 +102,7 @@ def test_human_stimulus_is_tier_2(db, tmp_path):
         "    for i in range(n_vectors):\n"
         "        yield {p['name']: i * 3 + 1 for p in ports}\n")
     ver = freeze_sim_verification(key, stimulus_file=stim, n_vectors=40)
-    assert ver["tier"] == 2 and ver["stimulus_author"] == "human" and ver["n_vectors"] == 40
+    assert ver["tier"] == 2 and ver["stimulus_author"] is None and ver["n_vectors"] == 40
     insert_design(key, CORRECT_SEQ_V, source="test")
 
 

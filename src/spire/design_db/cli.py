@@ -286,7 +286,7 @@ def main(argv: Optional[list] = None) -> int:
     p.add_argument("--sim-budget", type=float, default=300.0,
                    help="verilator build/run budget in seconds (sim)")
     p.add_argument("--author", default=None,
-                   help="recorded stimulus author for --stimulus freezes (default: human; "
+                   help="recorded stimulus author for --stimulus freezes (unset if omitted; "
                         "agent layers pass e.g. agent:rtl-dv-prep)")
     p.add_argument("--check", action="store_true",
                    help="dry-run the --stimulus generator (load + produce vectors against the "

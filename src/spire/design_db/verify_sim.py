@@ -264,8 +264,9 @@ def freeze_sim_verification(spec_key: str, *, stimulus_file: Optional[str | Path
     """Build + freeze a sim verification for a slot: golden-simulated ``vectors.dat`` + ``tb.sv``.
 
     Tier 1 with auto stimulus, Tier 2 with an authored generator file. ``stimulus_author``
-    records who authored the generator (default ``"human"``; agent layers pass e.g.
-    ``"agent:rtl-dv-prep"``) — it only applies to a ``stimulus_file`` freeze. Immutable once
+    records who authored the generator (``None`` when not given — no assumed identity; agent
+    layers pass e.g. ``"agent:rtl-dv-prep"``) — it only applies to a ``stimulus_file`` freeze;
+    Tier-1 freezes always record ``"auto"``. Immutable once
     frozen (a re-freeze would silently change the oracle designs were admitted against).
     """
     d = DesignDB.open(db)
@@ -289,7 +290,7 @@ def freeze_sim_verification(spec_key: str, *, stimulus_file: Optional[str | Path
     if stimulus_author is not None and not authored:
         raise DesignDBError("stimulus_author only applies to an authored (stimulus-file) freeze — "
                             "auto stimulus is always recorded as \"auto\"")
-    author = (stimulus_author or "human") if authored else "auto"
+    author = stimulus_author if authored else "auto"
     if authored:
         vectors = load_stimulus_file(Path(stimulus_file), ins, n_vectors, seed)
     else:
