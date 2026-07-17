@@ -20,6 +20,9 @@ dynamic = [
     "dependencies"
 ]
 
+[project.scripts]
+spire = "spire.design_db.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/huawei-csl/spire-hdl"
 Repository = "https://github.com/huawei-csl/spire-hdl"
