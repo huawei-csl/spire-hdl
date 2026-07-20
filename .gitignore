@@ -32,3 +32,4 @@ internal_docs/*
 metadocs/*
 !metadocs/REFIX_PLAN.md
 !metadocs/REFIX_STATUS.md
+*.bak

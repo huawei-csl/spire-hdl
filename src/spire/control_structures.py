@@ -28,6 +28,9 @@ from typing import Callable, Iterable, List, Optional, Tuple
 
 from spire.expr import Const, Expr, ExprLike, Signal, as_expr, mux
 from spire.hdl_traits import BitSerializable
+# NOTE: this import direction is load-bearing — selection_emission must only
+# import control_structures lazily (inside functions), or the modules cycle.
+from spire.selection_emission import _DisjointnessTracker
 
 
 # Condition stack helpers
@@ -36,6 +39,36 @@ class _ConditionState:
     active: List[Expr] = []
     pending_if_chain: Optional["_IfChain"] = None
     switch_stack: List["_SwitchState"] = []
+    # Active `mux_emission` regions (see spire.selection_emission), innermost
+    # last. They capture every signal assigned in scope and eagerly rewrite the
+    # resulting selection cascades on region exit. Part of the chain-claim
+    # scope identity, so an if_/elif_ chain cannot straddle a region boundary.
+    mux_emission_stack: List[object] = []
+
+
+def _ambient_emission_mode() -> Optional[str]:
+    """Mode of the innermost active mux_emission region (None if none)."""
+    if _ConditionState.mux_emission_stack:
+        return _ConditionState.mux_emission_stack[-1]._mode
+    return None
+
+
+def _claim_or_gate(tracker, cond: Expr, covered: Expr, context: str) -> Expr:
+    """The one shared arm-condition policy for switch_ and if_/elif_ chains:
+    skip the first-match gating (``& ~covered``) exactly when the arm is
+    provably disjoint from every earlier arm (per the tracker), and anchor the
+    early validation error for ambient one-hot emission modes here — the
+    closest line to the offending arm."""
+    claimed = tracker.claim(cond)
+    ambient = _ambient_emission_mode()
+    if ambient in ("andor", "bittree") and not claimed:
+        raise ValueError(
+            f"mux_emission({ambient!r}): {context} is not provably disjoint "
+            f"from the earlier arms — the one-hot modes require pairwise-"
+            f"distinct compile-time-constant labels on a single selector. "
+            f"Use 'tournament' (priority-preserving) for overlapping or "
+            f"non-constant conditions.")
+    return cond if claimed else cond & ~covered
 
 
 @contextlib.contextmanager
@@ -49,23 +82,27 @@ def fresh_condition_scope():
     Plain Python functions share the caller's scope by design (conditions apply to what a helper assigns); a helper
     that wants isolation can wrap its body in this context manager itself.
     """
-    saved = (_ConditionState.active, _ConditionState.pending_if_chain, _ConditionState.switch_stack)
-    _ConditionState.active, _ConditionState.pending_if_chain, _ConditionState.switch_stack = [], None, []
+    saved = (_ConditionState.active, _ConditionState.pending_if_chain,
+             _ConditionState.switch_stack, _ConditionState.mux_emission_stack)
+    _ConditionState.active, _ConditionState.pending_if_chain = [], None
+    _ConditionState.switch_stack, _ConditionState.mux_emission_stack = [], []
     try:
         yield
     finally:
-        _ConditionState.active, _ConditionState.pending_if_chain, _ConditionState.switch_stack = saved
+        (_ConditionState.active, _ConditionState.pending_if_chain,
+         _ConditionState.switch_stack, _ConditionState.mux_emission_stack) = saved
 
 
-def _current_scope() -> Tuple[tuple, tuple]:
-    return (tuple(_ConditionState.active), tuple(_ConditionState.switch_stack))
+def _current_scope() -> Tuple[tuple, ...]:
+    return (tuple(_ConditionState.active), tuple(_ConditionState.switch_stack),
+            tuple(_ConditionState.mux_emission_stack))
 
 
-def _same_scope(a: Tuple[tuple, tuple], b: Tuple[tuple, tuple]) -> bool:
+def _same_scope(a: Tuple[tuple, ...], b: Tuple[tuple, ...]) -> bool:
     # Element-wise identity: tuple == would invoke Expr.__eq__ (which builds hardware).
-    return (len(a[0]) == len(b[0]) and len(a[1]) == len(b[1])
-            and all(x is y for x, y in zip(a[0], b[0]))
-            and all(x is y for x, y in zip(a[1], b[1])))
+    return (len(a) == len(b)
+            and all(len(sa) == len(sb) and all(x is y for x, y in zip(sa, sb))
+                    for sa, sb in zip(a, b)))
 
 
 def _bool_const(value: bool) -> Expr:
@@ -104,14 +141,17 @@ class _IfChain:
     closed: bool = False
     # The condition/switch ambience (strong refs) in which the chain was left pending; elif_/else_ may only claim
     # it from the identical ambience, so a trailing chain in one case_/branch can't be continued in another.
-    scope: Optional[Tuple[tuple, tuple]] = None
+    scope: Optional[Tuple[tuple, ...]] = None
+    # shared incremental disjointness proof (same class switch_ uses)
+    tracker: _DisjointnessTracker = field(default_factory=_DisjointnessTracker)
 
     def branch(self, condition: ExprLike, *, context: str) -> Expr:
         if self.closed:
             raise RuntimeError("Cannot add a branch to a closed if/elif/else chain")
         cond_expr = as_expr(condition)
         _validate_bool(cond_expr, context=context)
-        gated = cond_expr & ~self.covered
+        gated = _claim_or_gate(self.tracker, cond_expr, self.covered,
+                               f"this {context}_ condition")
         self.covered = self.covered | gated
         return gated
 
@@ -214,6 +254,9 @@ class _SwitchState:
         self._selector = as_expr(selector)
         self._covered = _bool_const(False)
         self._closed = False
+        self._default_used = False
+        # shared incremental disjointness proof (same class if_ chains use)
+        self._tracker = _DisjointnessTracker()
 
     def _claim_cases(self, cases: Iterable[ExprLike]) -> Expr:
         if self._closed:
@@ -235,7 +278,7 @@ class _SwitchState:
         if merged is None:
             raise ValueError("case_() requires at least one value")
 
-        cond = merged & ~self._covered
+        cond = _claim_or_gate(self._tracker, merged, self._covered, "this case_")
         self._covered = self._covered | cond
         return cond
 
@@ -245,18 +288,37 @@ class _SwitchState:
     def default_condition(self) -> Expr:
         if self._closed:
             raise RuntimeError("default() has already been used for this switch")
+        self._default_used = True
         cond = ~self._covered
         self._covered = _bool_const(True)
         self._closed = True
         return cond
 
+    def _validate_on_close(self) -> None:
+        """Late validation for emission modes needing the full label picture."""
+        if _ambient_emission_mode() == "bittree":
+            if not self._tracker.trackable:
+                raise ValueError("mux_emission('bittree') requires constant case labels")
+            k = self._selector.typ.width
+            full = frozenset(range(1 << k))
+            if not self._default_used and self._tracker.seen_labels != full:
+                missing = sorted(full - self._tracker.seen_labels)[:8]
+                raise ValueError(
+                    f"mux_emission('bittree') requires labels covering all "
+                    f"{1 << k} selector values or a default() branch; missing "
+                    f"e.g. {missing}")
+
     def reset(self) -> None:
-        self._covered = _bool_const(False)
-        self._closed = False
+        self.__init__(self._selector)
 
 
 class switch_:
-    """Context manager modeling a Verilog-style `switch_`/`case_` statement."""
+    """Context manager modeling a Verilog-style `switch_`/`case_` statement.
+
+    To emit the resulting selection cascades in a log-depth form (one-hot
+    AND-OR, bit-tree, tournament) wrap the switch in a
+    ``with mux_emission("<mode>"):`` region — see spire.selection_emission.
+    """
 
     def __init__(self, selector: ExprLike):
         self._state = _SwitchState(selector)
@@ -275,6 +337,8 @@ class switch_:
         if not _ConditionState.switch_stack or _ConditionState.switch_stack[-1] is not self._state:
             raise RuntimeError("switch_ stack corruption detected")
         _ConditionState.switch_stack.pop()
+        if exc_type is None:
+            self._state._validate_on_close()
         self._state.reset()
         self._entered = False
         return False
@@ -355,7 +419,13 @@ def _patch_signal_assignments() -> None:
         if isinstance(rhs, BitSerializable) and not isinstance(rhs, Expr):
             rhs = rhs.to_bits()  # pack composites before gating, as the unconditional path does
         wrapped_rhs = _apply_active_conditions_to_expr(self, rhs)
-        return original_assign(self, wrapped_rhs)
+        result = original_assign(self, wrapped_rhs)
+        # Region capture for mux_emission: every assigned signal (conditional or
+        # plain — hand-built cascades count too) is registered with the active
+        # regions, which rewrite the final cascades on region exit.
+        for region in _ConditionState.mux_emission_stack:
+            region._register(self)
+        return result
 
     Signal.assign = conditional_assign  # type: ignore[assignment]
 

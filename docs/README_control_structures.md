@@ -113,3 +113,108 @@ express per-state transition and output logic.
 See [`testing/basic/test_control_structures.py`](../testing/basic/test_control_structures.py)
 for the full behavioural test suite (priority, grouped cases, nested switches,
 register hold, and the missing-default-driver error).
+
+## Emission modes (`mux_emission`)
+
+`switch_`, `if_`/`elif_`, and hand-nested `mux()` calls all lower to linear mux
+cascades, which synthesis cannot rebalance (O(N) logic depth). `mux_emission`
+sets a log-depth emission style for a scope — one object, two roles:
+
+```python
+from spire import mux_emission
+
+# Region: applies to every selection cascade finalized inside — switch_,
+# if_/elif_ chains, and hand-built chains alike. Rewrites eagerly on exit.
+with mux_emission("andor"):
+    with switch_(op):
+        with case_(A, B): y <<= ...
+
+with mux_emission("tournament"):
+    with if_(c0):   y <<= 1
+    with elif_(c1): y <<= 2
+
+with mux_emission("tournament"):
+    y <<= hand_built_mux_chain
+
+# Function: the same object as a decorator — rewrites the returned cascade.
+@mux_emission("tournament")
+def ff1_index(bits):
+    chain = Const(0, UInt(5))
+    for k in reversed(range(32)):
+        chain = mux(bits[k], Const(k, UInt(5)), chain)
+    return chain
+```
+
+Both roles are **eager**: the rewrite is baked into the expression graph, so
+every backend (Verilog, AIGER export, Simulator, analyze) sees the same
+structure. Signals without a cascade are skipped; an if_/elif_ chain may not
+straddle a region boundary (fails loudly). For whole-design automatic
+treatment without annotations, `to_verilog_file(..., selection_emission=True)`
+auto-detects cascades above size thresholds
+(`spire.selection_emission.SelectionEmissionConfig`).
+
+### Worked example: register-file / RAM read mux
+
+A 32-entry read port written as the natural loop. The loop builds a 31-deep
+priority chain — O(N) logic depth if emitted as-is; since the `rd_ptr == i`
+selects are provably one-hot, the region rewrites it into the flat one-hot
+AND-OR network (what a Verilog `case` lowers to via `$pmux`), O(log N) deep:
+
+```python
+# cells[rd_ptr]: priority chain like the RTL's RAM read; emitted as
+# one-hot AND-OR (the $pmux form) via the emission region.
+with mux_emission("andor"):
+    rd = cells[31]                       # chain tail = the last entry:
+    for i in range(30, -1, -1):          # reached exactly when rd_ptr == 31,
+        rd = mux(rd_ptr == Const(i, UInt(5)), cells[i], rd)
+    rd_q <<= rd                          # captured by the region, rewritten on exit
+```
+
+The tail `cells[31]` becomes the network's fallback term
+(`~any_other_match & cells[31]`), so coverage stays exact. The same loop under
+`mux_emission("bittree")` would instead index a mux tree directly with
+`rd_ptr`'s five bits (no comparators at all) — the classic RAM-mux structure;
+with 32 dense labels either form is legal, and `"auto"` picks for you.
+
+### All modes and when they apply
+
+Validation is **shape-based**: the analyzer judges each cascade's select
+expressions, never the construct it came from.
+
+| mode | requires | what is built / depth |
+|---|---|---|
+| `"chain"` | nothing | the plain serial mux cascade (default lowering). Depth O(N). |
+| `"tournament"` | nothing — priority (first match wins) preserved by construction | balanced first-match tree: node `(sl \| sr, mux(sl, vl, vr))`. Depth O(log N), area ≈ the chain's. |
+| `"andor"` | **provably disjoint** arm selects: `sel == const` terms (or ORs of them) on one selector, pairwise-distinct constants | one-hot network: values AND-masked by their selects, OR-reduced in a balanced tree (the parallel `$pmux` form), plus a fallback term for the unmatched space. Cheapest log-depth form when legal. |
+| `"bittree"` | `"andor"`'s requirements **plus** a value for all 2^K selector values (labels cover the range or a `default()`/fallthrough fills the gaps); selector width capped by `bittree_max_sel_bits` | mux tree indexed by the **selector bits** — arm compares vanish (no decoders). Depth K muxes. Niche: dense selectors; prefer `"andor"` for sparse labels. |
+| `"auto"` | nothing (never raises) | best legal form per cascade, subject to config thresholds; small cascades stay chains. |
+
+Notes on disjointness:
+
+* Redundant first-match gating (`cond & ~covered`) is **seen through** when
+  provably dead — so eq-const `if_`/`elif_` chains qualify for `"andor"` just
+  like switches: the classifier evaluates `&`/`|`/`~` set-theoretically over
+  the labels of one selector.
+* Conditions whose exclusivity is real but not structurally provable
+  (`a < 10` / `a >= 10`, one-hot state flags) are rejected for the one-hot
+  modes — trusting an assertion would recreate Verilog's `parallel_case` bug
+  class (silent OR-garbage on overlap). Use `"tournament"`: same O(log N)
+  depth, no proof obligations.
+* Genuinely overlapping arms: priority is semantics — only `"chain"` and
+  `"tournament"` apply; `"auto"` degrades to them.
+* Small cascades are deliberately left alone by `"auto"` — below ~8–16 arms
+  the plain chain synthesizes as well or better.
+
+Errors are raised as early as the information allows: a duplicate or
+non-constant `case_` label under an ambient `"andor"`/`"bittree"` region
+raises at that `case_` line; everything else raises at region exit, naming
+the signal.
+
+Independent of `mux_emission`, arm conditions that are **provably disjoint**
+no longer emit `& ~covered` priority gating (it is provably redundant). This
+applies uniformly to `switch_` cases with distinct constant labels *and* to
+`if_`/`elif_` chains whose conditions are `sel == const` compares on one
+selector — both constructs share one incremental disjointness tracker.
+Overlapping, colliding, or non-classifiable conditions keep exact
+first-match-wins semantics as before (only the offending arm and, for
+non-classifiable conditions, later arms are gated).

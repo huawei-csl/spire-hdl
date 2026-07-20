@@ -19,6 +19,8 @@ from spire.expr import Bool, SInt, UInt, Signal, Wire, Register, Input, Output  
 from spire.io_record import IORecord, Flipped, connect  # noqa: E402
 from spire.component import Component, CustomVerilogComponent, ImportedComponent  # noqa: E402
 from spire.simulator import Simulator  # noqa: E402
+from spire.selection_emission import (  # noqa: E402
+    SelectionEmissionConfig, mux_emission)
 
 __all__ = [
     "Component", "CustomVerilogComponent", "ImportedComponent",
@@ -26,6 +28,7 @@ __all__ = [
     "Signal", "Wire", "Register",
     "Bool", "UInt", "SInt",
     "Simulator",
+    "SelectionEmissionConfig", "mux_emission",
     "VERILOG_BANNER",
 ]
 
