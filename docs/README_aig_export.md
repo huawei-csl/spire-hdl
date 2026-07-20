@@ -4,8 +4,8 @@ Spire can lower a `Component` to an **And-Inverter Graph** in AIGER ASCII
 (`.aag`) form, and read AIG/AAG netlists back in as a `Component`. That makes it
 easy to round-trip a design through external AIG tooling (ABC, mockturtle,
 Yosys) and continue composing or simulating the result in Python. This is the
-same machinery the [`@abc_optimized` / `@flowy_optimized`](README_optimization_decorators.md)
-decorators use under the hood.
+same machinery the [`@abc_optimized`](README_optimization_decorators.md)
+decorator uses under the hood.
 
 The exporter/importer live in [`spire/aiger.py`](../src/spire/aiger.py);
 the import entry points are `Component.from_aag_lines` / `Component.from_aig_file`

@@ -17,7 +17,7 @@
 - **Integrated with ABC and mockturtle:** modern synthesis optimization wired directly into the compilation pipeline
 - **Arithmetic library with automated replacement:** swap adders, multipliers, and FP cores driven by an objective
 - **Cycle-accurate Python simulator:** drive inputs, tick clocks, inspect expressions/outputs without leaving Python
-- **Content-addressed optimization cache:** instant re-runs via `@abc_optimized` /`@flowy_optimized` decorators
+- **Content-addressed optimization cache:** instant re-runs via the `@abc_optimized` decorator
 
 ## Optimizations built in 💡
 
@@ -35,9 +35,9 @@ Drops in topology-tuned adders, multipliers, and MAC fusions against an `area` /
 
 MAC patterns (`a*b + c`) are fused into single column-reduction units, eliminating a full adder stage. See [`README_arithmetic_optimization.md`](docs/README_arithmetic_optimization.md).
 
-### 🧩 ABC + mockturtle decorators: `@abc_optimized` / `@flowy_optimized`
+### 🧩 ABC decorator: `@abc_optimized`
 
-One decorator stacks modern AIG synthesis (`resyn2`, `&deepsyn`, mockturtle) onto any `Component` or `Netlist`, with a content-addressed cache for instant re-runs:
+One decorator stacks modern AIG synthesis (`resyn2`, `&deepsyn`) onto any `Component` or `Netlist`, with a content-addressed cache for instant re-runs:
 
 - **−69% AIG gates** on an 8-bit multiplier (`resyn2`)
 - **−83%** on a 16-bit multiplier
@@ -57,15 +57,7 @@ An 8-opcode CPU decoder sees **−66.7% cells** from a single `optimized_encodin
 
 ### 🔀 Selection-cascade emission: `selection_topology`
 
-`switch_`/`case_`, `if_`/`elif_`, and hand-nested `mux()` all lower to linear mux cascades — O(N) logic depth that downstream synthesis cannot rebalance. `selection_topology` sets a log-depth emission style for a scope, as a region context manager or a decorator:
-
-```python
-with selection_topology("onehot"):          # one-hot AND-OR (the parallel $pmux form)
-    with switch_(op): ...            #   requires provably disjoint case labels
-
-@selection_topology("tournament")          # balanced first-match tree — always legal,
-def ff1_index(bits): ...             #   preserves priority (if_ chains, priority encoders)
-```
+`switch_`/`case_`, `if_`/`elif_`, and hand-nested `mux()` all lower to linear mux cascades — O(N) logic depth that downstream synthesis cannot rebalance. `selection_topology` sets a log-depth emission style for a scope, as a region context manager or a decorator.
 
 Modes: `onehot` / `bittree` (one-hot forms, validated against provably-disjoint constant labels — overlap-safe by construction), `tournament` (universal, priority-preserving), `auto` (best legal form per cascade). Rewrites are eager, so Verilog, AIG export, and the simulator all see the same structure; `to_verilog_file(..., selection_emission=True)` additionally auto-detects large cascades design-wide. Independently, provably-disjoint arms skip the redundant first-match gating altogether. See [`README_control_structures.md`](docs/README_control_structures.md).
 
@@ -103,7 +95,7 @@ Deeper guides for specific features:
 - **[Control structures](docs/README_control_structures.md)** — `if_` / `elif_` / `else_` and `switch_` / `case_` / `default` context managers
 - **[Memories](docs/README_memories.md)** — RAM / ROM / FIFO primitives, port wiring with `<<=`, simulation, and reading state
 - **[Arithmetic optimization](docs/README_arithmetic_optimization.md)** — automatic replacement with optimized versions (adders, multipliers, MAC, etc)
-- **[Optimization decorators](docs/README_optimization_decorators.md)** — `@abc_optimized` / `@flowy_optimized` circuit optimization
+- **[Optimization decorators](docs/README_optimization_decorators.md)** — `@abc_optimized` circuit optimization
 - **[FSM optimization](docs/README_fsm_optimization.md)** — `optimized_fsm` and `optimized_encoding` (state minimisation + encoding search)
 - **[Arithmetic generators](docs/README_arithmetic_generator.md)** — evaluation scripts and extra tooling notes
 - **[Design DB](docs/README_design_db.md)** — verification-gated library of subcircuit implementations with deterministic selection and splice (`@from_design_db`)
