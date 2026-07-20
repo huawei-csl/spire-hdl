@@ -166,7 +166,7 @@ class Netlist:
                     self.collect_signals()
             # Selection-emission auto-detection (opt-in): rewrite mux cascades
             # above the config thresholds into their best legal log-depth form.
-            # Scope-level requests (`with mux_emission(...)` / decorator) are
+            # Scope-level requests (`with selection_topology(...)` / decorator) are
             # eager at construction and independent of this pass. See
             # spire/selection_emission.py for modes and requirements.
             if selection_emission or selection_cfg is not None:

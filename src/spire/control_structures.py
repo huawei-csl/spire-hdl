@@ -37,12 +37,12 @@ class _ConditionState:
     active: List[Expr] = []
     pending_if_chain: Optional["_IfChain"] = None
     switch_stack: List["_SwitchState"] = []
-    # Active `mux_emission` regions (see spire.selection_emission), innermost
+    # Active `selection_topology` regions (see spire.selection_emission), innermost
     # last. The innermost region captures every signal assigned in scope and
     # eagerly rewrites the resulting selection cascades on region exit. Part
     # of the chain-claim scope identity, so an if_/elif_ chain cannot straddle
     # a region boundary.
-    mux_emission_stack: List[object] = []
+    selection_topology_stack: List[object] = []
 
 
 def _claim_or_gate(tracker: DisjointnessTracker, cond: Expr, covered: Expr) -> Expr:
@@ -89,19 +89,19 @@ def fresh_condition_scope():
     that wants isolation can wrap its body in this context manager itself.
     """
     saved = (_ConditionState.active, _ConditionState.pending_if_chain,
-             _ConditionState.switch_stack, _ConditionState.mux_emission_stack)
+             _ConditionState.switch_stack, _ConditionState.selection_topology_stack)
     _ConditionState.active, _ConditionState.pending_if_chain = [], None
-    _ConditionState.switch_stack, _ConditionState.mux_emission_stack = [], []
+    _ConditionState.switch_stack, _ConditionState.selection_topology_stack = [], []
     try:
         yield
     finally:
         (_ConditionState.active, _ConditionState.pending_if_chain,
-         _ConditionState.switch_stack, _ConditionState.mux_emission_stack) = saved
+         _ConditionState.switch_stack, _ConditionState.selection_topology_stack) = saved
 
 
 def _current_scope() -> Tuple[tuple, ...]:
     return (tuple(_ConditionState.active), tuple(_ConditionState.switch_stack),
-            tuple(_ConditionState.mux_emission_stack))
+            tuple(_ConditionState.selection_topology_stack))
 
 
 def _same_scope(a: Tuple[tuple, ...], b: Tuple[tuple, ...]) -> bool:
@@ -306,7 +306,7 @@ class switch_:
 
     To emit the resulting selection cascades in a log-depth form (one-hot
     AND-OR, bit-tree, tournament) wrap the switch in a
-    ``with mux_emission("<mode>"):`` region — see spire.selection_emission.
+    ``with selection_topology("<mode>"):`` region — see spire.selection_emission.
     """
 
     def __init__(self, selector: ExprLike):
@@ -407,11 +407,11 @@ def _patch_signal_assignments() -> None:
             rhs = rhs.to_bits()  # pack composites before gating, as the unconditional path does
         wrapped_rhs = _apply_active_conditions_to_expr(self, rhs)
         result = original_assign(self, wrapped_rhs)
-        # Region capture for mux_emission: every assigned signal (conditional or
+        # Region capture for selection_topology: every assigned signal (conditional or
         # plain — hand-built cascades count too) is registered with the innermost
         # active region, which rewrites the final cascades on region exit.
-        if _ConditionState.mux_emission_stack:
-            _ConditionState.mux_emission_stack[-1]._register(self)
+        if _ConditionState.selection_topology_stack:
+            _ConditionState.selection_topology_stack[-1]._register(self)
         return result
 
     Signal.assign = conditional_assign  # type: ignore[assignment]

@@ -1,6 +1,6 @@
-"""Tests for spire.selection_emission — the `mux_emission` scope object
+"""Tests for spire.selection_emission — the `selection_topology` scope object
 (region context-manager + decorator), the shape-based cascade rewrites
-(chain / tournament / andor / bittree), the redundant-gating skip in
+(chain / tournament / onehot / bittree), the redundant-gating skip in
 _claim_or_gate, and the opt-in whole-design auto pass."""
 
 import contextlib
@@ -8,7 +8,7 @@ import random
 
 import pytest
 
-from spire import Simulator, SelectionEmissionConfig, mux_emission
+from spire import Simulator, SelectionEmissionConfig, selection_topology
 from spire.component import Netlist
 from spire.control_structures import case_, default, elif_, else_, if_, switch_
 from spire.expr import Const, UInt, mux
@@ -28,7 +28,7 @@ def _clear_pending_if_chain():
 
 
 def _region(mode):
-    return mux_emission(mode) if mode else contextlib.nullcontext()
+    return selection_topology(mode) if mode else contextlib.nullcontext()
 
 
 def _equiv(m_ref: Netlist, m_new: Netlist, input_gen, n=300, outs=("y",)):
@@ -63,10 +63,10 @@ def _build_ff1(mode, via="region"):
     if mode is None:
         y <<= _ff1_chain(x, 16)
     elif via == "region":
-        with mux_emission(mode):
+        with selection_topology(mode):
             y <<= _ff1_chain(x, 16)      # hand-built chain captured by region
     else:  # decorator
-        deco = mux_emission(mode)(lambda bits: _ff1_chain(bits, 16))
+        deco = selection_topology(mode)(lambda bits: _ff1_chain(bits, 16))
         y <<= deco(x)
     return m
 
@@ -124,11 +124,11 @@ def test_if_chain_tournament_equivalence():
            lambda r: {f"c{i}": r.getrandbits(1) for i in range(18)}, n=600)
 
 
-def test_if_chain_andor_when_eq_const():
+def test_if_chain_onehot_when_eq_const():
     # the gating (`cond & ~covered`) is provably redundant for eq-const chains;
-    # the classifier sees through it and andor applies to an if_ chain.
+    # the classifier sees through it and onehot applies to an if_ chain.
     ref = _build_if_chain(None, conds="eq")
-    ao = _build_if_chain("andor", conds="eq")
+    ao = _build_if_chain("onehot", conds="eq")
     assert ao.to_verilog().count("?") == 0
     sr, sa = Simulator(ref), Simulator(ao)
     for v in range(32):
@@ -177,13 +177,13 @@ def test_if_chain_duplicate_condition_keeps_priority():
         assert sim.get("y") == expect, v
 
 
-def test_if_chain_andor_opaque_raises():
+def test_if_chain_onehot_opaque_raises():
     m = Netlist("Bad", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     y = m.output(UInt(4), "y")
     y <<= 0
     with pytest.raises(ValueError, match="disjoint"):
-        with mux_emission("andor"):
+        with selection_topology("onehot"):
             with if_(a < 10):
                 y <<= 1
             with else_():
@@ -212,7 +212,7 @@ def _build_switch(mode, with_default=True, sparse=False, n_cases=16, selw=4):
     return m
 
 
-@pytest.mark.parametrize("mode", ["andor", "bittree", "tournament", "auto", "chain"])
+@pytest.mark.parametrize("mode", ["onehot", "bittree", "tournament", "auto", "chain"])
 @pytest.mark.parametrize("with_default", [True, False])
 def test_switch_modes_equivalence(mode, with_default):
     ref = _build_switch(None, with_default)
@@ -223,17 +223,17 @@ def test_switch_modes_equivalence(mode, with_default):
            n=400)
 
 
-def test_switch_andor_sparse_labels_with_default():
+def test_switch_onehot_sparse_labels_with_default():
     ref = _build_switch(None, True, sparse=True, n_cases=8, selw=5)
-    new = _build_switch("andor", True, sparse=True, n_cases=8, selw=5)
+    new = _build_switch("onehot", True, sparse=True, n_cases=8, selw=5)
     _equiv(ref, new,
            lambda r: {"s": r.getrandbits(5),
                       **{f"v{i}": r.getrandbits(8) for i in range(8)}},
            n=500)
 
 
-def test_switch_andor_emits_no_ternary_and_no_covered():
-    vl = _build_switch("andor", True).to_verilog()
+def test_switch_onehot_emits_no_ternary_and_no_covered():
+    vl = _build_switch("onehot", True).to_verilog()
     assert vl.count("?") == 0
     assert "_covered" not in vl
 
@@ -267,13 +267,13 @@ def test_overlapping_switch_keeps_priority():
             assert sim.get("y") == expect, (mode, s_val)
 
 
-def test_switch_register_hold_with_andor():
+def test_switch_register_hold_with_onehot():
     m = Netlist("RegSw", with_clock=True, with_reset=False)
     s = m.input(UInt(4), "s")
     v = m.input(UInt(8), "v")
     reg = m.reg(UInt(8), "r")
     reg.set_init(0)
-    with mux_emission("andor"):
+    with selection_topology("onehot"):
         with switch_(s):
             for i in range(16):
                 if i == 5:
@@ -298,9 +298,9 @@ def test_nested_regions_inner_wins():
         vs = [m.input(UInt(8), f"v{i}") for i in range(16)]
         y = m.output(UInt(8), "y")
         y <<= 0
-        outer = mux_emission("tournament") if nested else contextlib.nullcontext()
+        outer = selection_topology("tournament") if nested else contextlib.nullcontext()
         with outer:
-            with _region("andor" if nested else None):
+            with _region("onehot" if nested else None):
                 with switch_(s):
                     for i in range(16):
                         with case_(i):
@@ -308,7 +308,7 @@ def test_nested_regions_inner_wins():
         return m
 
     ref, new = build(False), build(True)
-    assert new.to_verilog().count("?") == 0  # inner andor applied
+    assert new.to_verilog().count("?") == 0  # inner onehot applied
     _equiv(ref, new,
            lambda r: {"s": r.getrandbits(4),
                       **{f"v{i}": r.getrandbits(8) for i in range(16)}},
@@ -321,7 +321,7 @@ def test_chain_may_not_straddle_region_boundary():
     c1 = m.input(UInt(1), "c1")
     y = m.output(UInt(4), "y")
     y <<= 0
-    with mux_emission("tournament"):
+    with selection_topology("tournament"):
         with if_(c0):
             y <<= 1
     with pytest.raises(RuntimeError, match="scope"):
@@ -333,13 +333,13 @@ def test_chain_may_not_straddle_region_boundary():
 # validation (shape-based, at region exit — the error names the signal)
 # ---------------------------------------------------------------------------
 
-def test_andor_duplicate_label_raises():
+def test_onehot_duplicate_label_raises():
     m = Netlist("Dup", with_clock=False, with_reset=False)
     s = m.input(UInt(2), "s")
     y = m.output(UInt(4), "y")
     y <<= 0
     with pytest.raises(ValueError, match="signal 'y'.*distinct"):
-        with mux_emission("andor"):
+        with selection_topology("onehot"):
             with switch_(s):
                 with case_(1):
                     y <<= 1
@@ -347,14 +347,14 @@ def test_andor_duplicate_label_raises():
                     y <<= 2
 
 
-def test_andor_nonconst_label_raises():
+def test_onehot_nonconst_label_raises():
     m = Netlist("NC", with_clock=False, with_reset=False)
     s = m.input(UInt(2), "s")
     t = m.input(UInt(2), "t")
     y = m.output(UInt(4), "y")
     y <<= 0
     with pytest.raises(ValueError, match="constant"):
-        with mux_emission("andor"):
+        with selection_topology("onehot"):
             with switch_(s):
                 with case_(t):
                     y <<= 1
@@ -388,7 +388,7 @@ def test_bittree_partial_coverage_fills_from_fallback():
 
 def test_unknown_mode_raises():
     with pytest.raises(ValueError, match="mode"):
-        mux_emission("magic")
+        selection_topology("magic")
 
 
 def test_region_skips_plain_assignments():
@@ -396,7 +396,7 @@ def test_region_skips_plain_assignments():
     m = Netlist("Plain", with_clock=False, with_reset=False)
     a = m.input(UInt(8), "a")
     y = m.output(UInt(8), "y")
-    with mux_emission("andor"):
+    with selection_topology("onehot"):
         y <<= a + 1  # no cascade — must not raise
     sim = Simulator(m)
     sim.set("a", 41)
@@ -426,7 +426,7 @@ def test_pass_auto_detects_hand_chain():
     n = apply_selection_emission(m, SelectionEmissionConfig(enabled=True))
     assert n == 1
     vl = m.to_verilog()
-    assert vl.count("?") == 0  # disjoint eq-chain -> andor
+    assert vl.count("?") == 0  # disjoint eq-chain -> onehot
     _equiv(_hand_eq_chain_module(), m,
            lambda r: {"s": r.getrandbits(4),
                       **{f"v{i}": r.getrandbits(8) for i in range(16)}},

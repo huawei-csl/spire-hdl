@@ -1,4 +1,4 @@
-"""Selection-cascade emission rewrites: chain / tournament / andor / bittree.
+"""Selection-cascade emission rewrites: chain / tournament / onehot / bittree.
 
 Spire lowers ``switch_``/``case_``, ``if_``/``elif_`` and hand-written nested
 ``mux()`` calls to *linear chains* of binary ``Ternary`` nodes at construction
@@ -11,10 +11,10 @@ identical area; full design 9342 AND / 91 levels vs 8901 / 79 restructured).
 
 One concept — *set the emission style for a scope* — at three granularities:
 
-  * region:        ``with mux_emission("andor"): ...`` — captures every signal
+  * region:        ``with selection_topology("onehot"): ...`` — captures every signal
                     assigned inside (switch_/if_ arms and hand-built chains
                     alike) and eagerly rewrites their final cascades on exit;
-  * function:      ``@mux_emission("tournament")`` — the same object as a
+  * function:      ``@selection_topology("tournament")`` — the same object as a
                     decorator; eagerly rewrites the returned cascade;
   * whole design:  ``to_verilog_file(..., selection_emission=True)`` — the
                     :func:`apply_selection_emission` pass auto-detects untagged
@@ -32,7 +32,7 @@ it came from, so hand-built chains and constructs are treated identically):
   * ``"tournament"`` — parallel-prefix first-match tree, node
                        ``(sl | sr, mux(sl, vl, vr))``. Preserves priority
                        universally, O(log N) depth. Always legal.
-  * ``"andor"``      — one-hot AND-mask + balanced OR (the ``$pmux`` form).
+  * ``"onehot"``     — one-hot AND-mask + balanced OR (the ``$pmux`` form).
                        Requires provably disjoint arm selects: ``sel == const``
                        terms (or ORs of them) on one selector with pairwise-
                        distinct constants. Redundant first-match gating
@@ -79,14 +79,14 @@ from spire.selection_analysis import (
     collect_chain,
 )
 
-MODES = ("chain", "tournament", "andor", "bittree")
+MODES = ("chain", "tournament", "onehot", "bittree")
 REGION_MODES = MODES + ("auto",)
 
 
 @dataclass
 class SelectionEmissionConfig:
     enabled: bool = False        # auto-detect untagged chains in the pass
-    andor_min_n: int = 16        # auto: disjoint cascades at/above this -> andor
+    onehot_min_n: int = 16       # auto: disjoint cascades at/above this -> onehot
     tournament_min_n: int = 16   # auto: priority cascades at/above this -> tournament
     bittree_max_sel_bits: int = 6  # refuse bittree beyond 2**6 = 64 leaves
 
@@ -125,7 +125,7 @@ def build_tournament(pairs: List[Tuple[Expr, Expr]], default: Expr) -> Expr:
     return Ternary(s, v, default)
 
 
-def build_andor(analysis: ChainAnalysis, out_typ) -> Expr:
+def build_onehot(analysis: ChainAnalysis, out_typ) -> Expr:
     """One-hot AND-OR network (the `$pmux` form). Caller must have verified
     ``analysis.disjoint``. Arm conditions are REBUILT as balanced OR-trees of
     fresh ``selector == const`` compares — the originals may drag serial
@@ -167,7 +167,7 @@ def build_bittree(analysis: ChainAnalysis, out_typ,
     if k > max_sel_bits:
         raise ValueError(
             f"bittree: selector has {k} bits -> {1 << k} leaves exceeds the "
-            f"limit of 2**{max_sel_bits}; use 'andor' for sparse label sets")
+            f"limit of 2**{max_sel_bits}; use 'onehot' for sparse label sets")
     fallback = (analysis.pairs[analysis.complement_arm][1]
                 if analysis.complement_arm is not None else analysis.default)
     leaves: List[Expr] = [fit_width(as_expr(fallback), out_typ)] * (1 << k)
@@ -187,8 +187,8 @@ def build_bittree(analysis: ChainAnalysis, out_typ,
 # ---------------------------------------------------------------------------
 
 def choose_mode(analysis: ChainAnalysis, cfg: SelectionEmissionConfig) -> str:
-    if analysis.disjoint and analysis.n >= cfg.andor_min_n:
-        return "andor"
+    if analysis.disjoint and analysis.n >= cfg.onehot_min_n:
+        return "onehot"
     if analysis.n >= cfg.tournament_min_n:
         return "tournament"
     return "chain"
@@ -200,7 +200,7 @@ def rewrite(head: Expr, mode: Optional[str] = None,
     (None/"auto" = pick via ``choose_mode``). Returns ``head`` unchanged when
     the mode resolves to "chain" or no cascade is found under an auto mode.
     Raises ValueError when an explicitly requested mode's prerequisites don't
-    hold (shape-based: provable disjointness for "andor"/"bittree")."""
+    hold (shape-based: provable disjointness for "onehot"/"bittree")."""
     if mode == "auto":
         mode = None
     if mode is not None and mode not in MODES:
@@ -218,7 +218,7 @@ def rewrite(head: Expr, mode: Optional[str] = None,
 
     if mode is None:
         mode = choose_mode(analysis, cfg)
-    elif mode in ("andor", "bittree") and not analysis.disjoint:
+    elif mode in ("onehot", "bittree") and not analysis.disjoint:
         raise ValueError(
             f"emission mode {mode!r} requires provably disjoint arm selects — "
             f"the analyzer recognizes pairwise-distinct constant labels on a "
@@ -230,43 +230,51 @@ def rewrite(head: Expr, mode: Optional[str] = None,
         return head_e
     if mode == "tournament":
         return build_tournament(pairs, default)
-    if mode == "andor":
-        return build_andor(analysis, out_typ)
+    if mode == "onehot":
+        return build_onehot(analysis, out_typ)
     return build_bittree(analysis, out_typ, cfg.bittree_max_sel_bits)
 
 
 # ---------------------------------------------------------------------------
-# the user-facing scope object: `mux_emission`
+# the user-facing scope object: `selection_topology`
 # ---------------------------------------------------------------------------
 
-class mux_emission:
+class selection_topology:
     """Set the selection-emission style for a scope — one object, two roles.
 
     Region (context manager)::
 
-        with mux_emission("andor"):
+        with selection_topology("onehot"):
             with switch_(op):
                 with case_(A, B): y <<= ...
 
-        with mux_emission("tournament"):
+        with selection_topology("tournament"):
             with if_(c0):   y <<= 1
             with elif_(c1): y <<= 2
 
-        with mux_emission("tournament"):
+        with selection_topology("tournament"):
             y <<= hand_built_mux_chain      # hand chains count too
 
     Every signal assigned inside the region is captured by the *innermost*
     active region; on exit each captured signal's final selection cascade is
     eagerly rewritten to ``mode``. Signals without a cascade (plain
-    assignments) are skipped. Explicit one-hot modes ("andor"/"bittree")
+    assignments) are skipped. Explicit one-hot modes ("onehot"/"bittree")
     raise at region exit if a captured cascade cannot provably satisfy them;
     "auto" picks the best legal form per cascade and never raises.
     An if_/elif_ chain may not straddle the region boundary (the region is
     part of the chain-claim scope, so a straddling elif_ fails loudly).
 
+    Caveat: the rewrite covers a captured signal's ENTIRE final cascade —
+    conditional arms assigned *before* the region count too, and can fail a
+    one-hot proof the in-region arms alone would pass. Workaround: give the
+    signal an unconditional driver before the region (it becomes the chain
+    tail, which needs no proof). A proper fix exists but is not implemented:
+    snapshot the driver at a signal's first in-region assignment and stop
+    the rewrite there.
+
     Function (decorator)::
 
-        @mux_emission("tournament")
+        @selection_topology("tournament")
         def ff1_index(bits):
             chain = Const(0, UInt(5))
             for k in reversed(range(32)):
@@ -280,7 +288,7 @@ class mux_emission:
     def __init__(self, mode: str):
         if mode not in REGION_MODES:
             raise ValueError(
-                f"mux_emission: unknown mode {mode!r}; expected one of {REGION_MODES}")
+                f"selection_topology: unknown mode {mode!r}; expected one of {REGION_MODES}")
         self._mode = mode
         self._entered = False
         self._signals: List[Signal] = []
@@ -299,18 +307,18 @@ class mux_emission:
             self._seen_ids.add(id(signal))
             self._signals.append(signal)
 
-    def __enter__(self) -> "mux_emission":
+    def __enter__(self) -> "selection_topology":
         if self._entered:
-            raise RuntimeError("mux_emission region cannot be re-entered while active")
+            raise RuntimeError("selection_topology region cannot be re-entered while active")
         self._signals, self._seen_ids = [], set()
-        _ConditionState.mux_emission_stack.append(self)
+        _ConditionState.selection_topology_stack.append(self)
         self._entered = True
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        stack = _ConditionState.mux_emission_stack
+        stack = _ConditionState.selection_topology_stack
         if not self._entered or not stack or stack[-1] is not self:
-            raise RuntimeError("mux_emission region stack corruption detected")
+            raise RuntimeError("selection_topology region stack corruption detected")
         stack.pop()
         self._entered = False
         if exc_type is not None:
@@ -339,7 +347,9 @@ def _rewrite_outermost_cascade(e: Expr, mode: str, signal_name: str) -> Expr:
         try:
             return rewrite(e, mode, DEFAULT_CONFIG)
         except ValueError as err:
-            raise ValueError(f"mux_emission: signal '{signal_name}': {err}") from None
+            raise ValueError(
+                f"selection_topology: signal '{signal_name}': {err} (note: the rewrite covers the "
+                f"signal's entire final cascade — pre-region conditional arms count too)") from None
     if isinstance(e, Resize):
         e.a = _rewrite_outermost_cascade(e.a, mode, signal_name)
         return e
@@ -358,7 +368,7 @@ def apply_selection_emission(module,
                              cfg: SelectionEmissionConfig = DEFAULT_CONFIG) -> int:
     """Auto-detect and rewrite selection cascades across a netlist per the
     config thresholds (``choose_mode``). Returns the number of cascades
-    rewritten. Scope-level requests (``mux_emission`` regions/decorators) are
+    rewritten. Scope-level requests (``selection_topology`` regions/decorators) are
     eager and independent of this pass."""
     if not cfg.enabled:
         return 0
