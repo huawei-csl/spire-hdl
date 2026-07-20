@@ -73,6 +73,15 @@ Modes: `onehot` / `bittree` (one-hot forms, validated against provably-disjoint 
 
 Beyond the automatic passes above, the unified arithmetic generator lets you hand-pick the exact micro-architecture of an adder, multiplier, MAC, or matmul (partial-product generation, compression-tree topology, and final-stage adder), then emit Verilog/AIG, simulate, and collect Yosys metrics for direct comparison. See [`README_arithmetic_generator.md`](docs/README_arithmetic_generator.md).
 
+### 🗃️ Design DB — a verified subcircuit library: `@from_design_db`
+
+A content-addressed, **verification-gated library of subcircuit implementations**. Decorating a
+function registers its golden spec as a *slot*; producers (tools, agents, humans) insert
+alternative implementations through a verification gate, where each candidate is **proven
+equivalent to the golden** (CEC or golden-simulated sim) before admission. Every later compile
+**splices in the best admitted design** for the chosen objective (`area` / `delay` / `adp`).
+See [`README_design_db.md`](docs/README_design_db.md).
+
 ## Overview
 
 ### 🪶 Minimal core
@@ -83,7 +92,7 @@ In its simplest form, Spire only needs these core files. This is intentional —
 - **[`spire/component.py`](src/spire/component.py)** – the `Component` base class: author reusable designs, declare IO with `IORecord`/`Input`/`Output`, emit Verilog/AIG, analyze, and import/embed sub-designs. The flat netlist IR it lowers to lives in **[`spire/ir.py`](src/spire/ir.py)** (`Netlist`).
 - **[`spire/simulator.py`](src/spire/simulator.py)** – a lightweight simulator that can drive inputs, tick clocks, inspect outputs or internal expressions, and capture probes for debugging—all without leaving Python.
 
-### 📚 Further reading
+### 📖 Further reading
 
 Deeper guides for specific features:
 
@@ -97,6 +106,7 @@ Deeper guides for specific features:
 - **[Optimization decorators](docs/README_optimization_decorators.md)** — `@abc_optimized` / `@flowy_optimized` circuit optimization
 - **[FSM optimization](docs/README_fsm_optimization.md)** — `optimized_fsm` and `optimized_encoding` (state minimisation + encoding search)
 - **[Arithmetic generators](docs/README_arithmetic_generator.md)** — evaluation scripts and extra tooling notes
+- **[Design DB](docs/README_design_db.md)** — verification-gated library of subcircuit implementations with deterministic selection and splice (`@from_design_db`)
 - **[Tiled matmul accelerator](docs/README_output_stationary_matmul.md)** — parametrizable signed output-stationary matmul over a `T×T×T` core, with input/output RAMs and a `mode` + RAM-access interface
 - **[Custom Verilog](docs/README_custom_verilog.md)** — emit a raw Verilog block from a `CustomVerilogComponent`, with or without a Python sim model (blackbox)
 - **[AIG / AAG export & import](docs/README_aig_export.md)** — lower a `Component` to an AIGER netlist and read AIG/AAG back in as a `Component`
