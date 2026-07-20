@@ -31,7 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from spire.expr import Const, Expr, Op1, Op2, Resize, Signal, Ternary
+from spire.expr import Concat, Const, Expr, Op1, Op2, Resize, Signal, Slice, Ternary
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +70,50 @@ def collect_chain(head: Expr,
         pairs.append((cur.sel, cur.a))
         cur = _deref(cur.b, spine)
     return pairs, cur
+
+
+def chain_is_self_referential(head: Expr) -> bool:
+    """True if any arm references the chain's *interior* — a reduction
+    (running max: ``mux(x > acc, x, acc)``), not a selection."""
+    interior: set = set()
+    arms: List[Expr] = []
+    hop: set = set()
+    cur = _deref(head, hop)
+    while isinstance(cur, Ternary) and cur.sel.typ.width == 1:
+        interior |= hop          # wrappers leading to this Ternary
+        interior.add(id(cur))
+        arms.append(cur.sel)
+        arms.append(cur.a)
+        hop = set()
+        cur = _deref(cur.b, hop)
+    # `hop` now holds the tail and the wrappers leading to it: not interior.
+    if len(arms) < 4:            # fewer than 2 arms: not a cascade
+        return False
+
+    safe: set = set()
+    stack = arms
+    while stack:
+        e = stack.pop()
+        if id(e) in safe:
+            continue
+        if id(e) in interior:
+            return True
+        safe.add(id(e))
+        if isinstance(e, (Op1, Slice, Resize)):
+            stack.append(e.a)
+        elif isinstance(e, Op2):
+            stack.append(e.a)
+            stack.append(e.b)
+        elif isinstance(e, Ternary):
+            stack.append(e.sel)
+            stack.append(e.a)
+            stack.append(e.b)
+        elif isinstance(e, Concat):
+            stack.extend(e.parts)
+        elif (isinstance(e, Signal) and getattr(e, "_auto_generated", False)
+                and e._driver is not None):
+            stack.append(e._driver)
+    return False
 
 
 # ---------------------------------------------------------------------------

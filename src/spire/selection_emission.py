@@ -26,7 +26,10 @@ Simulator, analyze) sees the same structure.
 
 Modes and their prerequisites (validation is *shape-based* — the analyzer in
 :mod:`spire.selection_analysis` judges the final cascade, never the construct
-it came from, so hand-built chains and constructs are treated identically):
+it came from, so hand-built chains and constructs are treated identically).
+Reduction-shaped chains (running max/min, accumulators — arms referencing the
+chain itself) are never rewritten: regions and "auto" skip them, explicit
+modes raise; restructure those as balanced reduction trees instead:
 
   * ``"chain"``      — leave as-is. O(N) depth. Always legal.
   * ``"tournament"`` — parallel-prefix first-match tree, node
@@ -76,6 +79,7 @@ from spire.selection_analysis import (
     ChainAnalysis,
     _deref,
     analyze_chain,
+    chain_is_self_referential,
     collect_chain,
 )
 
@@ -206,7 +210,7 @@ def rewrite(head: Expr, mode: Optional[str] = None,
     if mode is not None and mode not in MODES:
         raise ValueError(f"unknown emission mode {mode!r}; expected one of {REGION_MODES}")
 
-    head_e = as_expr(head)
+    head_e = head if isinstance(head, Expr) else as_expr(head)
     pairs, default = collect_chain(head_e)
     if len(pairs) < 2:
         if mode is not None and mode != "chain":
@@ -218,6 +222,14 @@ def rewrite(head: Expr, mode: Optional[str] = None,
 
     if mode is None:
         mode = choose_mode(analysis, cfg)
+        if mode != "chain" and chain_is_self_referential(head_e):
+            mode = "chain"  # a reduction, not a selection — never rewritten
+    elif mode != "chain" and chain_is_self_referential(head_e):
+        raise ValueError(
+            f"emission mode {mode!r}: this mux chain is a reduction, not a "
+            f"selection — its arms reference the chain itself (e.g. a running "
+            f"max/min or accumulator), so no selection topology can shorten "
+            f"it; restructure it as a balanced reduction tree instead")
     elif mode in ("onehot", "bittree") and not analysis.disjoint:
         raise ValueError(
             f"emission mode {mode!r} requires provably disjoint arm selects — "
@@ -258,7 +270,10 @@ class selection_topology:
     Every signal assigned inside the region is captured by the *innermost*
     active region; on exit each captured signal's final selection cascade is
     eagerly rewritten to ``mode``. Signals without a cascade (plain
-    assignments) are skipped. Explicit one-hot modes ("onehot"/"bittree")
+    assignments) are skipped, as are reduction-shaped chains — running
+    max/min or accumulators, whose arms reference the chain itself (see
+    :func:`spire.selection_analysis.chain_is_self_referential`); no
+    selection topology can shorten those. Explicit one-hot modes ("onehot"/"bittree")
     raise at region exit if a captured cascade cannot provably satisfy them;
     "auto" picks the best legal form per cascade and never raises.
     An if_/elif_ chain may not straddle the region boundary (the region is
@@ -344,6 +359,8 @@ def _rewrite_outermost_cascade(e: Expr, mode: str, signal_name: str) -> Expr:
     alone — a region legitimately contains plain assignments."""
     pairs, _default = collect_chain(e)
     if len(pairs) >= 2:
+        if chain_is_self_referential(e):
+            return e  # a reduction, not a selection — skipped like plain assignments
         try:
             return rewrite(e, mode, DEFAULT_CONFIG)
         except ValueError as err:

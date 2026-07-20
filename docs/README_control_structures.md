@@ -181,13 +181,15 @@ with 32 dense labels either form is legal, and `"auto"` picks for you.
 Validation is **shape-based**: the analyzer judges each cascade's select
 expressions, never the construct it came from.
 
-| mode | requires | what is built / depth |
-|---|---|---|
-| `"chain"` | nothing | the plain serial mux cascade (default lowering). Depth O(N). |
-| `"tournament"` | nothing — priority (first match wins) preserved by construction | balanced first-match tree: node `(sl \| sr, mux(sl, vl, vr))`. Depth O(log N), area ≈ the chain's. |
-| `"onehot"` | **provably disjoint** arm selects: `sel == const` terms (or ORs of them) on one selector, pairwise-distinct constants | one-hot network: values AND-masked by their selects, OR-reduced in a balanced tree (the parallel `$pmux` form), plus a fallback term for the unmatched space. Cheapest log-depth form when legal. |
-| `"bittree"` | `"onehot"`'s requirements; selector width capped by `bittree_max_sel_bits`. Missing labels are legal — absent leaves fill from the fallback (the `default()` value or the signal's prior driver) | mux tree indexed by the **selector bits** — arm compares vanish (no decoders). Depth K muxes. Niche: dense selectors; prefer `"onehot"` for sparse labels. |
-| `"auto"` | nothing (never raises) | best legal form per cascade, subject to config thresholds; small cascades stay chains. |
+N = arms, W = data width, K = selector bits (2^K possible labels).
+
+| mode | requires | what is built | depth | area |
+|---|---|---|---|---|
+| `"chain"` | nothing | the plain serial mux cascade (default lowering) | O(N) | N−1 muxes ≈ O(N·W) |
+| `"tournament"` | nothing — priority (first match wins) preserved by construction | balanced first-match tree: node `(sl \| sr, mux(sl, vl, vr))` | O(log N) | chain + N−1 ORs ≈ O(N·W) |
+| `"onehot"` | **provably disjoint** arm selects: `sel == const` terms (or ORs of them) on one selector, pairwise-distinct constants | one-hot network: values AND-masked by their selects, OR-reduced in a balanced tree (the parallel `$pmux` form), plus a fallback term for the unmatched space | O(log N) | N compares + N masks + OR tree ≈ O(N·W) — cheapest log-depth form |
+| `"bittree"` | `"onehot"`'s requirements; selector width capped by `bittree_max_sel_bits`. Missing labels are legal — absent leaves fill from the fallback (the `default()` value or the signal's prior driver) | mux tree indexed by the **selector bits** — arm compares vanish (no decoders) | K mux levels | 2^K−1 muxes ≈ O(2^K·W) — O(N·W) only for dense labels; prefer `"onehot"` when sparse |
+| `"auto"` | nothing (never raises) | best legal form per cascade, subject to config thresholds; small cascades stay chains | per chosen form | per chosen form |
 
 Notes on disjointness:
 
@@ -202,6 +204,12 @@ Notes on disjointness:
   depth, no proof obligations.
 * Genuinely overlapping arms: priority is semantics — only `"chain"` and
   `"tournament"` apply; `"auto"` degrades to them.
+* **Reductions are not selections**: a chain whose arms reference the chain
+  itself (running max/min `mux(x > acc, x, acc)`, accumulators) has its
+  serial dependency in the arms, not the muxes — no topology can shorten it.
+  Such chains are detected and skipped (explicit modes raise); write a
+  balanced reduction tree instead. Arms referencing only the chain *tail*
+  (`reg <<= reg + 1` in a case) are normal selections and rewrite fine.
 * Small cascades are deliberately left alone by `"auto"` — below ~8–16 arms
   the plain chain synthesizes as well or better.
 

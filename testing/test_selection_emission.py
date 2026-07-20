@@ -405,6 +405,91 @@ def test_region_skips_plain_assignments():
 
 
 # ---------------------------------------------------------------------------
+# reductions (self-referential chains) are not selections
+# ---------------------------------------------------------------------------
+
+def _build_max_chain(mode=None, n=20):
+    """Running max — shape-wise a mux cascade, semantically a reduction:
+    every arm's select references the chain below it."""
+    m = Netlist("MaxChain", with_clock=False, with_reset=False)
+    xs = [m.input(UInt(8), f"x{i}") for i in range(n)]
+    y = m.output(UInt(8), "y")
+    acc = xs[0]
+    for i in range(1, n):
+        acc = mux(xs[i] > acc, xs[i], acc)
+    with _region(mode):
+        y <<= acc
+    return m
+
+
+def test_reduction_chain_region_skipped():
+    # a tournament region leaves the reduction untouched (rewriting keeps the
+    # original chain alive via the selects: pure area/depth loss)
+    m = _build_max_chain("tournament")
+    drv = next(s for s in m._ports if s.name == "y")._driver
+    pairs, _ = collect_chain(drv)
+    assert len(pairs) == 19  # still the plain chain, not a tournament root
+    _equiv(_build_max_chain(None), m,
+           lambda r: {f"x{i}": r.getrandbits(8) for i in range(20)}, n=200)
+
+
+def test_reduction_chain_explicit_rewrite_raises():
+    from spire.selection_emission import rewrite
+    m = _build_max_chain(None)
+    drv = next(s for s in m._ports if s.name == "y")._driver
+    with pytest.raises(ValueError, match="reduction"):
+        rewrite(drv, "tournament")
+
+
+def test_pass_skips_reduction_chain():
+    # regression: the auto pass used to rewrite the overlapping sub-chains
+    # inside the selects and corrupt the graph (simulator crash)
+    m = _build_max_chain(None)
+    m.collect_signals()
+    assert apply_selection_emission(m, SelectionEmissionConfig(enabled=True)) == 0
+    sim = Simulator(m)
+    rng = random.Random(3)
+    for _ in range(100):
+        vals = {f"x{i}": rng.getrandbits(8) for i in range(20)}
+        for k, v in vals.items():
+            sim.set(k, v)
+        sim.eval()
+        assert sim.get("y") == max(vals.values())
+
+
+def test_tail_reference_is_not_a_reduction():
+    # arms referencing the chain TAIL (register hold/modify) are normal
+    # selections — the reduction guard must not block them
+    def build(mode):
+        m = Netlist("Cnt", with_clock=True, with_reset=False)
+        s = m.input(UInt(4), "s")
+        reg = m.reg(UInt(8), "r")
+        reg.set_init(0)
+        with _region(mode):
+            with switch_(s):
+                for i in range(16):
+                    with case_(i):
+                        reg <<= (reg + i)[0:8]  # value references reg (the tail)
+        return m, reg
+
+    m_t, reg_t = build("tournament")
+    pairs, _ = collect_chain(reg_t._driver)
+    assert len(pairs) == 1  # tournament root: the rewrite DID happen
+
+    m_ref, reg_ref = build(None)
+    sr, st = Simulator(m_ref), Simulator(m_t)
+    for sim in (sr, st):
+        sim.eval()
+        sim.set("r", 7)
+    for v in (0, 3, 15):
+        sr.set("s", v)
+        st.set("s", v)
+        assert (sr._compute_next_state()[_sid(reg_ref)]
+                == st._compute_next_state()[_sid(reg_t)]
+                == (7 + v) & 0xFF)
+
+
+# ---------------------------------------------------------------------------
 # emission pass: whole-design auto-detection (opt-in)
 # ---------------------------------------------------------------------------
 
