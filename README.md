@@ -55,11 +55,13 @@ Hopcroft state minimisation and bit-assignment search as two composable context 
 
 An 8-opcode CPU decoder sees **−66.7% cells** from a single `optimized_encoding`, because the search discovers an opcode layout where each wide OR collapses to one bit-test. See [`README_fsm_optimization.md`](docs/README_fsm_optimization.md).
 
-### 🔀 Selection-cascade emission: `selection_topology`
+### 🔀 Selection & reduction topologies: `selection_topology` / `spire.reduce`
 
 `switch_`/`case_`, `if_`/`elif_`, and hand-nested `mux()` all lower to linear mux cascades — O(N) logic depth that downstream synthesis cannot rebalance. `selection_topology` sets a log-depth emission style for a scope, as a region context manager or a decorator.
 
 Modes: `onehot` / `bittree` (one-hot forms, validated against provably-disjoint constant labels — overlap-safe by construction), `tournament` (universal, priority-preserving), `auto` (best legal form per cascade). Rewrites are eager, so Verilog, AIG export, and the simulator all see the same structure; `to_verilog_file(..., selection_emission=True)` additionally auto-detects large cascades design-wide. Independently, provably-disjoint arms skip the redundant first-match gating altogether. See [`README_control_structures.md`](docs/README_control_structures.md).
+
+The same O(N) problem hits *reduction* loops (running max/min, accumulators). `spire.reduce` provides balanced-tree builders — `max_` / `min_` / `argmax_` / `argmin_` (leftmost-wins ties), `sum_` / `prod_` / `clamp_`, and a generic `reduce_tree` — with selectable topologies (`tree` / `chain` / `huffman` / `matrix`) plus `prefix_scan` (Sklansky / Brent-Kung / Kogge-Stone) for tapped running results. See [`README_reductions.md`](docs/README_reductions.md).
 
 ### 🛠️ Fine-grained architecture selection: `arithmetic_generator`
 
@@ -93,6 +95,7 @@ Deeper guides for specific features:
 - **[Interfaces](docs/README_interfaces.md)** — reusable IO bundles (`Stream`, `Flow`, `MemPort`) with `Flipped` / `connect` / `view_as_flipped` and on-interface behaviour
 - **[State machines](docs/README_state_machines.md)** — declaration with the `State` / `Encoding` API and `switch_` / `case_` bodies
 - **[Control structures](docs/README_control_structures.md)** — `if_` / `elif_` / `else_` and `switch_` / `case_` / `default` context managers
+- **[Reductions](docs/README_reductions.md)** — balanced log-depth trees: `max_` / `argmax_` / `sum_` / `reduce_tree`
 - **[Memories](docs/README_memories.md)** — RAM / ROM / FIFO primitives, port wiring with `<<=`, simulation, and reading state
 - **[Arithmetic optimization](docs/README_arithmetic_optimization.md)** — automatic replacement with optimized versions (adders, multipliers, MAC, etc)
 - **[Optimization decorators](docs/README_optimization_decorators.md)** — `@abc_optimized` circuit optimization
