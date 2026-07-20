@@ -1,7 +1,7 @@
 """Tests for spire.selection_emission — the `mux_emission` scope object
 (region context-manager + decorator), the shape-based cascade rewrites
-(chain / tournament / andor / bittree), the redundant-gating fix in
-_SwitchState._claim_cases, and the opt-in whole-design auto pass."""
+(chain / tournament / andor / bittree), the redundant-gating skip in
+_claim_or_gate, and the opt-in whole-design auto pass."""
 
 import contextlib
 import random
@@ -12,7 +12,8 @@ from spire import Simulator, SelectionEmissionConfig, mux_emission
 from spire.component import Netlist
 from spire.control_structures import case_, default, elif_, else_, if_, switch_
 from spire.expr import Const, UInt, mux
-from spire.selection_emission import apply_selection_emission, collect_chain
+from spire.selection_analysis import collect_chain
+from spire.selection_emission import apply_selection_emission
 from spire.simulator import _sid
 
 
@@ -139,7 +140,7 @@ def test_if_chain_andor_when_eq_const():
 
 
 def test_if_chain_eq_const_has_no_gating():
-    # the unified _DisjointnessTracker: eq-const if_/elif_ arms skip the
+    # the unified DisjointnessTracker: eq-const if_/elif_ arms skip the
     # `& ~covered` gating exactly like disjoint switch cases (no else_ here,
     # so `covered` is never consumed and must vanish entirely)
     m = Netlist("IfClean", with_clock=False, with_reset=False)
@@ -329,15 +330,15 @@ def test_chain_may_not_straddle_region_boundary():
 
 
 # ---------------------------------------------------------------------------
-# validation
+# validation (shape-based, at region exit — the error names the signal)
 # ---------------------------------------------------------------------------
 
-def test_andor_duplicate_label_raises_at_case():
+def test_andor_duplicate_label_raises():
     m = Netlist("Dup", with_clock=False, with_reset=False)
     s = m.input(UInt(2), "s")
     y = m.output(UInt(4), "y")
     y <<= 0
-    with pytest.raises(ValueError, match="distinct"):
+    with pytest.raises(ValueError, match="signal 'y'.*distinct"):
         with mux_emission("andor"):
             with switch_(s):
                 with case_(1):
@@ -346,7 +347,7 @@ def test_andor_duplicate_label_raises_at_case():
                     y <<= 2
 
 
-def test_andor_nonconst_label_raises_at_case():
+def test_andor_nonconst_label_raises():
     m = Netlist("NC", with_clock=False, with_reset=False)
     s = m.input(UInt(2), "s")
     t = m.input(UInt(2), "t")
@@ -357,19 +358,32 @@ def test_andor_nonconst_label_raises_at_case():
             with switch_(s):
                 with case_(t):
                     y <<= 1
+                with case_(0):
+                    y <<= 2
 
 
-def test_bittree_missing_coverage_raises():
-    m = Netlist("BT", with_clock=False, with_reset=False)
-    s = m.input(UInt(3), "s")
-    y = m.output(UInt(4), "y")
-    y <<= 0
-    with pytest.raises(ValueError, match="covering"):
-        with mux_emission("bittree"):
+def test_bittree_partial_coverage_fills_from_fallback():
+    # missing labels are legal: build_bittree fills absent leaves from the
+    # signal's fallback driver (a partial switch has defined semantics)
+    def build(mode):
+        m = Netlist("BT", with_clock=False, with_reset=False)
+        s = m.input(UInt(3), "s")
+        y = m.output(UInt(4), "y")
+        y <<= 9
+        with _region(mode):
             with switch_(s):
                 for i in range(5):  # 5 of 8 labels, no default
                     with case_(i):
                         y <<= i
+        return m
+
+    sr, sb = Simulator(build(None)), Simulator(build("bittree"))
+    for v in range(8):
+        sr.set("s", v)
+        sb.set("s", v)
+        sr.eval()
+        sb.eval()
+        assert sr.get("y") == sb.get("y") == (v if v < 5 else 9), v
 
 
 def test_unknown_mode_raises():

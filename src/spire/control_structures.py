@@ -28,9 +28,7 @@ from typing import Callable, Iterable, List, Optional, Tuple
 
 from spire.expr import Const, Expr, ExprLike, Signal, as_expr, mux
 from spire.hdl_traits import BitSerializable
-# NOTE: this import direction is load-bearing — selection_emission must only
-# import control_structures lazily (inside functions), or the modules cycle.
-from spire.selection_emission import _DisjointnessTracker
+from spire.selection_analysis import DisjointnessTracker
 
 
 # Condition stack helpers
@@ -40,35 +38,43 @@ class _ConditionState:
     pending_if_chain: Optional["_IfChain"] = None
     switch_stack: List["_SwitchState"] = []
     # Active `mux_emission` regions (see spire.selection_emission), innermost
-    # last. They capture every signal assigned in scope and eagerly rewrite the
-    # resulting selection cascades on region exit. Part of the chain-claim
-    # scope identity, so an if_/elif_ chain cannot straddle a region boundary.
+    # last. The innermost region captures every signal assigned in scope and
+    # eagerly rewrites the resulting selection cascades on region exit. Part
+    # of the chain-claim scope identity, so an if_/elif_ chain cannot straddle
+    # a region boundary.
     mux_emission_stack: List[object] = []
 
 
-def _ambient_emission_mode() -> Optional[str]:
-    """Mode of the innermost active mux_emission region (None if none)."""
-    if _ConditionState.mux_emission_stack:
-        return _ConditionState.mux_emission_stack[-1]._mode
-    return None
-
-
-def _claim_or_gate(tracker, cond: Expr, covered: Expr, context: str) -> Expr:
+def _claim_or_gate(tracker: DisjointnessTracker, cond: Expr, covered: Expr) -> Expr:
     """The one shared arm-condition policy for switch_ and if_/elif_ chains:
     skip the first-match gating (``& ~covered``) exactly when the arm is
-    provably disjoint from every earlier arm (per the tracker), and anchor the
-    early validation error for ambient one-hot emission modes here — the
-    closest line to the offending arm."""
-    claimed = tracker.claim(cond)
-    ambient = _ambient_emission_mode()
-    if ambient in ("andor", "bittree") and not claimed:
-        raise ValueError(
-            f"mux_emission({ambient!r}): {context} is not provably disjoint "
-            f"from the earlier arms — the one-hot modes require pairwise-"
-            f"distinct compile-time-constant labels on a single selector. "
-            f"Use 'tournament' (priority-preserving) for overlapping or "
-            f"non-constant conditions.")
-    return cond if claimed else cond & ~covered
+    provably disjoint from every earlier arm (per the tracker). Pure
+    semantics-preserving simplification — emission-mode validation happens at
+    region exit in spire.selection_emission, on the finished cascade.
+
+    Example::
+
+        with switch_(s):
+            with case_(0): y <<= a
+            with case_(1): y <<= b
+
+    Assignments wrap the previous driver, so the *last* arm becomes the
+    outermost mux — nesting order is the reverse of priority order. The
+    case_(1) arm can therefore be emitted two ways::
+
+        gated:    y = mux((s==1) & ~(s==0), b, mux(s==0, a, y_prev))
+        ungated:  y = mux( s==1,            b, mux(s==0, a, y_prev))
+
+    The *gate* is the ``& ~covered`` term (here ``~(s==0)``; ``covered`` is
+    the OR of all earlier arm conditions): it keeps a structurally-outer but
+    lower-priority arm from stealing a match, restoring first-match
+    semantics. A *claim* is the tracker's proof that the gate is dead:
+    ``tracker.claim(cond)`` is True iff cond's labels cannot overlap any
+    earlier arm's — here ``s==1`` and ``s==0`` can never hold at once, so
+    both forms compute identical values and the bare condition is emitted.
+    Arms that overlap an earlier arm (or don't classify as ``sel == const``
+    labels at all) fail the claim and keep the gate."""
+    return cond if tracker.claim(cond) else cond & ~covered
 
 
 @contextlib.contextmanager
@@ -143,15 +149,14 @@ class _IfChain:
     # it from the identical ambience, so a trailing chain in one case_/branch can't be continued in another.
     scope: Optional[Tuple[tuple, ...]] = None
     # shared incremental disjointness proof (same class switch_ uses)
-    tracker: _DisjointnessTracker = field(default_factory=_DisjointnessTracker)
+    tracker: DisjointnessTracker = field(default_factory=DisjointnessTracker)
 
     def branch(self, condition: ExprLike, *, context: str) -> Expr:
         if self.closed:
             raise RuntimeError("Cannot add a branch to a closed if/elif/else chain")
         cond_expr = as_expr(condition)
         _validate_bool(cond_expr, context=context)
-        gated = _claim_or_gate(self.tracker, cond_expr, self.covered,
-                               f"this {context}_ condition")
+        gated = _claim_or_gate(self.tracker, cond_expr, self.covered)
         self.covered = self.covered | gated
         return gated
 
@@ -254,9 +259,8 @@ class _SwitchState:
         self._selector = as_expr(selector)
         self._covered = _bool_const(False)
         self._closed = False
-        self._default_used = False
         # shared incremental disjointness proof (same class if_ chains use)
-        self._tracker = _DisjointnessTracker()
+        self._tracker = DisjointnessTracker()
 
     def _claim_cases(self, cases: Iterable[ExprLike]) -> Expr:
         if self._closed:
@@ -278,7 +282,7 @@ class _SwitchState:
         if merged is None:
             raise ValueError("case_() requires at least one value")
 
-        cond = _claim_or_gate(self._tracker, merged, self._covered, "this case_")
+        cond = _claim_or_gate(self._tracker, merged, self._covered)
         self._covered = self._covered | cond
         return cond
 
@@ -288,25 +292,10 @@ class _SwitchState:
     def default_condition(self) -> Expr:
         if self._closed:
             raise RuntimeError("default() has already been used for this switch")
-        self._default_used = True
         cond = ~self._covered
         self._covered = _bool_const(True)
         self._closed = True
         return cond
-
-    def _validate_on_close(self) -> None:
-        """Late validation for emission modes needing the full label picture."""
-        if _ambient_emission_mode() == "bittree":
-            if not self._tracker.trackable:
-                raise ValueError("mux_emission('bittree') requires constant case labels")
-            k = self._selector.typ.width
-            full = frozenset(range(1 << k))
-            if not self._default_used and self._tracker.seen_labels != full:
-                missing = sorted(full - self._tracker.seen_labels)[:8]
-                raise ValueError(
-                    f"mux_emission('bittree') requires labels covering all "
-                    f"{1 << k} selector values or a default() branch; missing "
-                    f"e.g. {missing}")
 
     def reset(self) -> None:
         self.__init__(self._selector)
@@ -337,8 +326,6 @@ class switch_:
         if not _ConditionState.switch_stack or _ConditionState.switch_stack[-1] is not self._state:
             raise RuntimeError("switch_ stack corruption detected")
         _ConditionState.switch_stack.pop()
-        if exc_type is None:
-            self._state._validate_on_close()
         self._state.reset()
         self._entered = False
         return False
@@ -421,10 +408,10 @@ def _patch_signal_assignments() -> None:
         wrapped_rhs = _apply_active_conditions_to_expr(self, rhs)
         result = original_assign(self, wrapped_rhs)
         # Region capture for mux_emission: every assigned signal (conditional or
-        # plain — hand-built cascades count too) is registered with the active
-        # regions, which rewrite the final cascades on region exit.
-        for region in _ConditionState.mux_emission_stack:
-            region._register(self)
+        # plain — hand-built cascades count too) is registered with the innermost
+        # active region, which rewrites the final cascades on region exit.
+        if _ConditionState.mux_emission_stack:
+            _ConditionState.mux_emission_stack[-1]._register(self)
         return result
 
     Signal.assign = conditional_assign  # type: ignore[assignment]

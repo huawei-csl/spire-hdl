@@ -186,7 +186,7 @@ expressions, never the construct it came from.
 | `"chain"` | nothing | the plain serial mux cascade (default lowering). Depth O(N). |
 | `"tournament"` | nothing — priority (first match wins) preserved by construction | balanced first-match tree: node `(sl \| sr, mux(sl, vl, vr))`. Depth O(log N), area ≈ the chain's. |
 | `"andor"` | **provably disjoint** arm selects: `sel == const` terms (or ORs of them) on one selector, pairwise-distinct constants | one-hot network: values AND-masked by their selects, OR-reduced in a balanced tree (the parallel `$pmux` form), plus a fallback term for the unmatched space. Cheapest log-depth form when legal. |
-| `"bittree"` | `"andor"`'s requirements **plus** a value for all 2^K selector values (labels cover the range or a `default()`/fallthrough fills the gaps); selector width capped by `bittree_max_sel_bits` | mux tree indexed by the **selector bits** — arm compares vanish (no decoders). Depth K muxes. Niche: dense selectors; prefer `"andor"` for sparse labels. |
+| `"bittree"` | `"andor"`'s requirements; selector width capped by `bittree_max_sel_bits`. Missing labels are legal — absent leaves fill from the fallback (the `default()` value or the signal's prior driver) | mux tree indexed by the **selector bits** — arm compares vanish (no decoders). Depth K muxes. Niche: dense selectors; prefer `"andor"` for sparse labels. |
 | `"auto"` | nothing (never raises) | best legal form per cascade, subject to config thresholds; small cascades stay chains. |
 
 Notes on disjointness:
@@ -205,10 +205,11 @@ Notes on disjointness:
 * Small cascades are deliberately left alone by `"auto"` — below ~8–16 arms
   the plain chain synthesizes as well or better.
 
-Errors are raised as early as the information allows: a duplicate or
-non-constant `case_` label under an ambient `"andor"`/`"bittree"` region
-raises at that `case_` line; everything else raises at region exit, naming
-the signal.
+Errors are raised at region exit, when the finished cascade is judged —
+the message names the offending signal. The constructs themselves know
+nothing about emission modes: `switch_`/`if_` build priority-correct
+selections; `mux_emission` chooses (and validates) their physical topology
+afterwards.
 
 Independent of `mux_emission`, arm conditions that are **provably disjoint**
 no longer emit `& ~covered` priority gating (it is provably redundant). This
