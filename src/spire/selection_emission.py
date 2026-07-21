@@ -229,7 +229,8 @@ def rewrite(head: Expr, mode: Optional[str] = None,
             f"emission mode {mode!r}: this mux chain is a reduction, not a "
             f"selection — its arms reference the chain itself (e.g. a running "
             f"max/min or accumulator), so no selection topology can shorten "
-            f"it; restructure it as a balanced reduction tree instead")
+            f"it; use spire.reduce (max_/min_/reduce_tree) to build a "
+            f"balanced tree instead")
     elif mode in ("onehot", "bittree") and not analysis.disjoint:
         raise ValueError(
             f"emission mode {mode!r} requires provably disjoint arm selects — "
