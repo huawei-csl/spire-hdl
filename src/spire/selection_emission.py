@@ -54,7 +54,6 @@ See docs/README_control_structures.md for the applicability table.
 from __future__ import annotations
 
 import functools
-import sys
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
@@ -389,10 +388,6 @@ def apply_selection_emission(module,
     eager and independent of this pass."""
     if not cfg.enabled:
         return 0
-
-    limit = sys.getrecursionlimit()
-    if limit < 20000:
-        sys.setrecursionlimit(20000)
 
     n_changed = 0
     visited: set = set()
