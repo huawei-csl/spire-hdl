@@ -21,6 +21,7 @@ from spire.component import Component, CustomVerilogComponent, ImportedComponent
 from spire.simulator import Simulator  # noqa: E402
 from spire.selection_emission import (  # noqa: E402
     SelectionEmissionConfig, selection_topology)
+from spire import reduce  # noqa: E402  # submodule: spire.reduce.max_(...) etc.
 
 __all__ = [
     "Component", "CustomVerilogComponent", "ImportedComponent",
@@ -29,6 +30,7 @@ __all__ = [
     "Bool", "UInt", "SInt",
     "Simulator",
     "SelectionEmissionConfig", "selection_topology",
+    "reduce",
     "VERILOG_BANNER",
 ]
 
