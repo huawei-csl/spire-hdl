@@ -57,11 +57,12 @@ An 8-opcode CPU decoder sees **−66.7% cells** from a single `optimized_encodin
 
 ### 🔀 Selection & reduction topologies: `selection_topology` / `spire.reduce`
 
-`switch_`/`case_`, `if_`/`elif_`, and hand-nested `mux()` all lower to linear mux cascades — O(N) logic depth that downstream synthesis cannot rebalance. `selection_topology` sets a log-depth emission style for a scope, as a region context manager or a decorator.
+Chained conditionals and reduction loops both lower to linear, O(N)-deep mux cascades. Two features re-emit them in log-depth form at the source:
 
-Modes: `onehot` / `bittree` (one-hot forms, validated against provably-disjoint constant labels — overlap-safe by construction), `tournament` (universal, priority-preserving), `auto` (best legal form per cascade). Rewrites are eager, so Verilog, AIG export, and the simulator all see the same structure; `to_verilog_file(..., selection_emission=True)` additionally auto-detects large cascades design-wide. Independently, provably-disjoint arms skip the redundant first-match gating altogether. See [`README_control_structures.md`](docs/README_control_structures.md).
+- **`selection_topology`** re-emits `switch_`/`if_` blocks and hand-built mux chains in a log-depth form. Wrap a scope (region or decorator), pick a mode: `onehot`, `bittree`, `tournament` (priority-preserving), or `auto`. The one-hot modes are validated against provably-disjoint case labels — overlap-safe by construction.
+- **`spire.reduce`** builds balanced trees for reductions: `max_` / `min_` / `argmax_` / `sum_` / `reduce_tree`, plus `prefix_scan` for running results. A 20-input max: **171 → 45 gate levels** at fewer cells.
 
-The same O(N) problem hits *reduction* loops (running max/min, accumulators). `spire.reduce` provides balanced-tree builders — `max_` / `min_` / `argmax_` / `argmin_` (leftmost-wins ties), `sum_` / `prod_` / `clamp_`, and a generic `reduce_tree` — with selectable topologies (`tree` / `chain` / `huffman` / `matrix`) plus `prefix_scan` (Sklansky / Brent-Kung / Kogge-Stone) for tapped running results. See [`README_reductions.md`](docs/README_reductions.md).
+Rewrites are eager, so Verilog, AIG export, and the simulator all see the same structure. Details: [`README_control_structures.md`](docs/README_control_structures.md) and [`README_reductions.md`](docs/README_reductions.md).
 
 ### 🛠️ Fine-grained architecture selection: `arithmetic_generator`
 
