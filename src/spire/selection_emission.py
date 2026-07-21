@@ -413,12 +413,15 @@ def apply_selection_emission(module,
             pairs, default = collect_chain(e, spine=spine)
             if len(pairs) >= 2:
                 visited.update(spine)  # the whole cascade is handled here
-                # walk leaves first so nested cascades inside arm values get
-                # their own treatment
-                for s, v in pairs:
-                    walk(s)
-                    walk(v)
-                walk(default)
+                # walk leaves first, REASSIGNING, so a nested cascade in an
+                # arm lands even when the arm is a bare Ternary (wrapper-less)
+                node = _deref(e)
+                while isinstance(node, Ternary) and node.sel.typ.width == 1:
+                    node.sel = walk(node.sel)
+                    node.a = walk(node.a)
+                    node = _deref(node.b)
+                visited.discard(id(node))  # the tail is spine-marked: unblock
+                walk(node)  # never a cascade head here -> mutates in place
                 return try_rewrite(e)
             e.sel = walk(e.sel)
             e.a = walk(e.a)

@@ -11,7 +11,7 @@ import pytest
 from spire import Simulator, SelectionEmissionConfig, selection_topology
 from spire.component import Netlist
 from spire.control_structures import case_, default, elif_, else_, if_, switch_
-from spire.expr import Const, UInt, mux
+from spire.expr import Const, Ternary, UInt, mux
 from spire.selection_analysis import collect_chain
 from spire.selection_emission import apply_selection_emission
 from spire.simulator import _sid
@@ -515,6 +515,38 @@ def test_pass_auto_detects_hand_chain():
     _equiv(_hand_eq_chain_module(), m,
            lambda r: {"s": r.getrandbits(4),
                       **{f"v{i}": r.getrandbits(8) for i in range(16)}},
+           n=300)
+
+
+def _nested_bare_ternary_module():
+    """Outer cascade on `s` whose arm 2 is itself a cascade on `t`, both built
+    from bare Ternary nodes (no _maybe_share wrappers)."""
+    m = Netlist("Nested", with_clock=False, with_reset=False)
+    s = m.input(UInt(4), "s")
+    t = m.input(UInt(4), "t")
+    xs = [m.input(UInt(8), f"x{i}") for i in range(5)]
+    y = m.output(UInt(8), "y")
+    inner = Const(0, UInt(8))
+    for i in range(5):
+        inner = Ternary(t == Const(i, UInt(4)), xs[i], inner)
+    outer = Const(0, UInt(8))
+    for i in range(5):
+        outer = Ternary(s == Const(i, UInt(4)), inner if i == 2 else xs[i], outer)
+    y <<= outer
+    return m
+
+
+def test_pass_rewrites_nested_bare_ternary_arm():
+    # regression: the pass walk discarded nested-arm rewrite results — the
+    # inner rewrite was built and counted but never spliced into the outer arm
+    m = _nested_bare_ternary_module()
+    m.collect_signals()
+    cfg = SelectionEmissionConfig(enabled=True, onehot_min_n=2, tournament_min_n=2)
+    assert apply_selection_emission(m, cfg) == 2  # outer AND inner
+    assert m.to_verilog().count("?") == 0  # both landed as onehot: no muxes left
+    _equiv(_nested_bare_ternary_module(), m,
+           lambda r: {"s": r.getrandbits(4), "t": r.getrandbits(4),
+                      **{f"x{i}": r.getrandbits(8) for i in range(5)}},
            n=300)
 
 
