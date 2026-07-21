@@ -141,9 +141,8 @@ choosing among values by independent predicates. Reduction-shaped chains (arms
 referencing the chain itself) are deliberately **skipped** by
 `selection_topology` — no selection topology can shorten them, since the serial
 dependency lives in the arms. These helpers are the intended replacement: state
-the reduction, get the tree. A future recognition layer that rebalances
-loop-built reductions automatically is sketched in
-`metadocs/REDUCTION_TOPOLOGY_PLAN.md`.
+the reduction, get the tree. A future recognition layer may rebalance
+loop-built reductions automatically.
 
 Integer/bitwise only — floating-point folds are not associative.
 

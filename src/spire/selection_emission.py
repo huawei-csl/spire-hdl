@@ -48,8 +48,7 @@ modes raise; restructure those as balanced reduction trees instead:
   * ``"auto"``       — best legal form per cascade, subject to the config
                        thresholds; never raises.
 
-See rtl_scout's metadocuments/spire_selection_emission.md for measurements and
-the applicability table.
+See docs/README_control_structures.md for the applicability table.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Tests for spire.reduce — balanced reduction trees (REDUCTION_TOPOLOGY_PLAN P1)."""
+"""Tests for spire.reduce — balanced reduction trees."""
 
 import functools
 import itertools

@@ -22,7 +22,7 @@ results are tapped, instead of duplicating a chain.
 
 All order-preserving forms pair left-to-right; ``argmax_``/``argmin_`` resolve
 ties to the leftmost element in every topology. Integer/bitwise only.
-See docs/README_reductions.md and metadocs/REDUCTION_TOPOLOGY_PLAN.md.
+See docs/README_reductions.md.
 """
 
 from __future__ import annotations
