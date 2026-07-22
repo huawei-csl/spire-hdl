@@ -109,6 +109,20 @@ self.io.y <<= cat(*[result[0:11] for result in results])
 
 Tip: if unsure, inspect the generated Verilog wire widths to confirm element sizes.
 
+**Width growth compounds in expression loops.** Ops widen their results;
+only assignment to a typed signal (`Register`/`Output`) truncates. A loop that
+chains expressions with no signal in between grows one bit per iteration —
+`SInt(32)` becomes `SInt(48)` after 16 steps. That inflates every downstream
+adder/multiplier (larger, slower synthesis), and when mirroring RTL whose
+intermediates are fixed-width regs it silently changes overflow behavior (no
+wraparound, and `x[W-1:W]` is no longer the sign bit). Re-fit wherever the
+reference design has a width anchor:
+
+```python
+for i in range(M):
+    x = fit_type(x - asr(y, i), SInt(IW))   # wrap each step, like reg [IW-1:0]
+```
+
 ## Synthesis-quality notes
 
 - When accumulating in a loop, start from the first element rather than a zero constant, to avoid

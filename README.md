@@ -92,6 +92,7 @@ In its simplest form, Spire only needs these core files. This is intentional —
 Deeper guides for specific features:
 
 - **[Type system](docs/README_type_system.md)** — values, the `BitSerializable` / `Assignable` traits, the `Expr` vs `HDLComposite` hierarchy, and the `…Like` coercion aliases (class diagram + philosophy)
+- **[Hints & common mistakes](docs/hints.md)** — core API in a page, width-inference pitfalls, synthesis-quality tips
 - **[Composite data types](docs/README_composite_types.md)** — structured bit-packable values (`Array`, `CompositeRecord`, `FixedPoint`, `FloatingPoint`, `CompositeRegister`) with `to_bits` / `<<=` / `@=`
 - **[Interfaces](docs/README_interfaces.md)** — reusable IO bundles (`Stream`, `Flow`, `MemPort`) with `Flipped` / `connect` / `view_as_flipped` and on-interface behaviour
 - **[State machines](docs/README_state_machines.md)** — declaration with the `State` / `Encoding` API and `switch_` / `case_` bodies
