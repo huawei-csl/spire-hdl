@@ -401,6 +401,9 @@ class _SignalCollector(ExprVisitor[None]):
         self.in_list = set(self.port_ids)
         self.name_to_sig: Dict[str, "Signal"] = {p.name: p for p in module._ports}
         self._auto_ix = 0  # per-netlist counter for the auto-wire naming scheme
+        # Next-free-suffix memo per base name: keeps _uniquify's collision probing O(1) amortized
+        # (the 1..k rescan was O(k^2) per base and dominated emission on large structural designs).
+        self._suffix_next: Dict[str, int] = {}
 
     def run(self, seeds: List["Signal"]) -> None:
         for s in seeds:
@@ -470,11 +473,12 @@ class _SignalCollector(ExprVisitor[None]):
         if existing is None:
             self.name_to_sig[base] = sig
             return
-        # Collision: suffix until free.
-        idx = 1
+        # Collision: suffix until free (next-index memo keeps this O(1) amortized).
+        idx = self._suffix_next.get(base, 1)
         while True:
             candidate = f"{base}_{idx}"
             if candidate not in self.name_to_sig:
+                self._suffix_next[base] = idx + 1
                 sig.name = candidate
                 self.name_to_sig[candidate] = sig
                 # If we just renamed a Memory, propagate to its port wires that have already been uniquified
