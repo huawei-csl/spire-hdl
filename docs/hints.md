@@ -136,6 +136,17 @@ for i in range(M):
   (`w = Wire(UInt(N)); w <<= expr`). Explicit wires are cut-points that help Yosys optimize each
   stage; precomputing products as explicit wires before an adder tree often improves delay. Exact
   ordering can shift timing — worth trying variations.
+- **Arithmetic-optimizer pattern matching is syntactic.** `replace_arithmetic_ops`/`@arithmetic_optimized` fuses
+  `a*b + c` (MAC) and add chains only when the ops are DIRECT operands of each other; any
+  `fit_type`/slice/`mux` in between hides the pattern and the ops get replaced individually:
+  ```python
+  y <<= c + a * b                      # fuses (implicit widening is fine)
+  y <<= c + fit_type(a * b, SInt(32))  # no fusion
+  y <<= c + mux(en, a * b, zero)       # no fusion
+  y <<= mux(en, c + a * b, c)          # fuses — put the selection AFTER the operation
+  y <<= c + (a * b)[4:16]              # no fusion (slice between * and +)
+  y <<= (c + a * b)[4:20]              # fuses — slice AFTER the full operation (mind the semantics)
+  ```
 
 ## How evaluation works
 
