@@ -136,7 +136,8 @@ class Netlist:
 
     # Verilog generation
     def to_verilog_lines(self, collect_signals=True, simplify=False, cse=True,
-                          balance_mux_trees=False, balance_mux_min_n=16) -> list[str]:
+                          balance_mux_trees=False, balance_mux_min_n=16,
+                          selection_emission=False, selection_cfg=None) -> list[str]:
         """Emit the module as Verilog source lines.
 
         Caveat: ``simplify=True`` is experimental — its rewrites are not yet verified to preserve node signedness,
@@ -162,6 +163,18 @@ class Netlist:
             if balance_mux_trees:
                 from spire.simplify import apply_mux_tree_balance
                 if apply_mux_tree_balance(self, min_n=balance_mux_min_n):
+                    self.collect_signals()
+            # Selection-emission auto-detection (opt-in): rewrite mux cascades
+            # above the config thresholds into their best legal log-depth form.
+            # Scope-level requests (`with selection_topology(...)` / decorator) are
+            # eager at construction and independent of this pass. See
+            # spire/selection_emission.py for modes and requirements.
+            if selection_emission or selection_cfg is not None:
+                from spire.selection_emission import (
+                    SelectionEmissionConfig, apply_selection_emission)
+                _sel_cfg = selection_cfg or SelectionEmissionConfig(
+                    enabled=bool(selection_emission))
+                if apply_selection_emission(self, _sel_cfg):
                     self.collect_signals()
             # Post-construction structural CSE (Common Subexpression Elimination): collapse any
             # duplicate subtrees. Then re-collect so the freshly-created shared wires land in self._signals for emission.
@@ -292,20 +305,26 @@ class Netlist:
         return lines
 
     def to_verilog(self, simplify=False, cse=True,
-                    balance_mux_trees=False, balance_mux_min_n=16) -> str:
+                    balance_mux_trees=False, balance_mux_min_n=16,
+                    selection_emission=False, selection_cfg=None) -> str:
         lines = self.to_verilog_lines(
             simplify=simplify, cse=cse,
             balance_mux_trees=balance_mux_trees,
             balance_mux_min_n=balance_mux_min_n,
+            selection_emission=selection_emission,
+            selection_cfg=selection_cfg,
         ) + [""]  # final newline
         return "\n".join(lines)
 
     def to_verilog_file(self, filepath: str, simplify=False, cse=True,
-                         balance_mux_trees=False, balance_mux_min_n=16) -> None:
+                         balance_mux_trees=False, balance_mux_min_n=16,
+                         selection_emission=False, selection_cfg=None) -> None:
         verilog_str = self.to_verilog(
             simplify=simplify, cse=cse,
             balance_mux_trees=balance_mux_trees,
             balance_mux_min_n=balance_mux_min_n,
+            selection_emission=selection_emission,
+            selection_cfg=selection_cfg,
         )
         with open(filepath, "w") as f:
             f.write(verilog_str)
@@ -382,6 +401,9 @@ class _SignalCollector(ExprVisitor[None]):
         self.in_list = set(self.port_ids)
         self.name_to_sig: Dict[str, "Signal"] = {p.name: p for p in module._ports}
         self._auto_ix = 0  # per-netlist counter for the auto-wire naming scheme
+        # Next-free-suffix memo per base name: keeps _uniquify's collision probing O(1) amortized
+        # (the 1..k rescan was O(k^2) per base and dominated emission on large structural designs).
+        self._suffix_next: Dict[str, int] = {}
 
     def run(self, seeds: List["Signal"]) -> None:
         for s in seeds:
@@ -451,11 +473,12 @@ class _SignalCollector(ExprVisitor[None]):
         if existing is None:
             self.name_to_sig[base] = sig
             return
-        # Collision: suffix until free.
-        idx = 1
+        # Collision: suffix until free (next-index memo keeps this O(1) amortized).
+        idx = self._suffix_next.get(base, 1)
         while True:
             candidate = f"{base}_{idx}"
             if candidate not in self.name_to_sig:
+                self._suffix_next[base] = idx + 1
                 sig.name = candidate
                 self.name_to_sig[candidate] = sig
                 # If we just renamed a Memory, propagate to its port wires that have already been uniquified

@@ -109,6 +109,20 @@ self.io.y <<= cat(*[result[0:11] for result in results])
 
 Tip: if unsure, inspect the generated Verilog wire widths to confirm element sizes.
 
+**Width growth compounds in expression loops.** Ops widen their results;
+only assignment to a typed signal (`Register`/`Output`) truncates. A loop that
+chains expressions with no signal in between grows one bit per iteration —
+`SInt(32)` becomes `SInt(48)` after 16 steps. That inflates every downstream
+adder/multiplier (larger, slower synthesis), and when mirroring RTL whose
+intermediates are fixed-width regs it silently changes overflow behavior (no
+wraparound, and `x[W-1:W]` is no longer the sign bit). Re-fit wherever the
+reference design has a width anchor:
+
+```python
+for i in range(M):
+    x = fit_type(x - asr(y, i), SInt(IW))   # wrap each step, like reg [IW-1:0]
+```
+
 ## Synthesis-quality notes
 
 - When accumulating in a loop, start from the first element rather than a zero constant, to avoid
@@ -122,6 +136,17 @@ Tip: if unsure, inspect the generated Verilog wire widths to confirm element siz
   (`w = Wire(UInt(N)); w <<= expr`). Explicit wires are cut-points that help Yosys optimize each
   stage; precomputing products as explicit wires before an adder tree often improves delay. Exact
   ordering can shift timing — worth trying variations.
+- **Arithmetic-optimizer pattern matching is syntactic.** `replace_arithmetic_ops`/`@arithmetic_optimized` fuses
+  `a*b + c` (MAC) and add chains only when the ops are DIRECT operands of each other; any
+  `fit_type`/slice/`mux` in between hides the pattern and the ops get replaced individually:
+  ```python
+  y <<= c + a * b                      # fuses (implicit widening is fine)
+  y <<= c + fit_type(a * b, SInt(32))  # no fusion
+  y <<= c + mux(en, a * b, zero)       # no fusion
+  y <<= mux(en, c + a * b, c)          # fuses — put the selection AFTER the operation
+  y <<= c + (a * b)[4:16]              # no fusion (slice between * and +)
+  y <<= (c + a * b)[4:20]              # fuses — slice AFTER the full operation (mind the semantics)
+  ```
 
 ## How evaluation works
 

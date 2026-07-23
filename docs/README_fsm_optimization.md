@@ -393,6 +393,6 @@ PYTHONPATH=src python -m pytest testing/fsm/ -q
 - [`README_state_machines.md`](README_state_machines.md) — basic `State` /
   `Encoding` / `state()` API (this doc builds on it).
 - [`README_optimization_decorators.md`](README_optimization_decorators.md) —
-  the sibling `@abc_optimized` / `@flowy_optimized` decorators (these
-  operate at AIG level; the FSM wrappers operate at expression-DAG level,
-  so they compose cleanly with each other).
+  the sibling `@abc_optimized` decorator (it operates at AIG level; the
+  FSM wrappers operate at expression-DAG level, so they compose cleanly
+  with each other).

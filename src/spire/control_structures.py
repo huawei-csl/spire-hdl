@@ -28,6 +28,7 @@ from typing import Callable, Iterable, List, Optional, Tuple
 
 from spire.expr import Const, Expr, ExprLike, Signal, as_expr, mux
 from spire.hdl_traits import BitSerializable
+from spire.selection_analysis import DisjointnessTracker
 
 
 # Condition stack helpers
@@ -36,6 +37,44 @@ class _ConditionState:
     active: List[Expr] = []
     pending_if_chain: Optional["_IfChain"] = None
     switch_stack: List["_SwitchState"] = []
+    # Active `selection_topology` regions (see spire.selection_emission), innermost
+    # last. The innermost region captures every signal assigned in scope and
+    # eagerly rewrites the resulting selection cascades on region exit. Part
+    # of the chain-claim scope identity, so an if_/elif_ chain cannot straddle
+    # a region boundary.
+    selection_topology_stack: List[object] = []
+
+
+def _claim_or_gate(tracker: DisjointnessTracker, cond: Expr, covered: Expr) -> Expr:
+    """The one shared arm-condition policy for switch_ and if_/elif_ chains:
+    skip the first-match gating (``& ~covered``) exactly when the arm is
+    provably disjoint from every earlier arm (per the tracker). Pure
+    semantics-preserving simplification — emission-mode validation happens at
+    region exit in spire.selection_emission, on the finished cascade.
+
+    Example::
+
+        with switch_(s):
+            with case_(0): y <<= a
+            with case_(1): y <<= b
+
+    Assignments wrap the previous driver, so the *last* arm becomes the
+    outermost mux — nesting order is the reverse of priority order. The
+    case_(1) arm can therefore be emitted two ways::
+
+        gated:    y = mux((s==1) & ~(s==0), b, mux(s==0, a, y_prev))
+        ungated:  y = mux( s==1,            b, mux(s==0, a, y_prev))
+
+    The *gate* is the ``& ~covered`` term (here ``~(s==0)``; ``covered`` is
+    the OR of all earlier arm conditions): it keeps a structurally-outer but
+    lower-priority arm from stealing a match, restoring first-match
+    semantics. A *claim* is the tracker's proof that the gate is dead:
+    ``tracker.claim(cond)`` is True iff cond's labels cannot overlap any
+    earlier arm's — here ``s==1`` and ``s==0`` can never hold at once, so
+    both forms compute identical values and the bare condition is emitted.
+    Arms that overlap an earlier arm (or don't classify as ``sel == const``
+    labels at all) fail the claim and keep the gate."""
+    return cond if tracker.claim(cond) else cond & ~covered
 
 
 @contextlib.contextmanager
@@ -49,23 +88,27 @@ def fresh_condition_scope():
     Plain Python functions share the caller's scope by design (conditions apply to what a helper assigns); a helper
     that wants isolation can wrap its body in this context manager itself.
     """
-    saved = (_ConditionState.active, _ConditionState.pending_if_chain, _ConditionState.switch_stack)
-    _ConditionState.active, _ConditionState.pending_if_chain, _ConditionState.switch_stack = [], None, []
+    saved = (_ConditionState.active, _ConditionState.pending_if_chain,
+             _ConditionState.switch_stack, _ConditionState.selection_topology_stack)
+    _ConditionState.active, _ConditionState.pending_if_chain = [], None
+    _ConditionState.switch_stack, _ConditionState.selection_topology_stack = [], []
     try:
         yield
     finally:
-        _ConditionState.active, _ConditionState.pending_if_chain, _ConditionState.switch_stack = saved
+        (_ConditionState.active, _ConditionState.pending_if_chain,
+         _ConditionState.switch_stack, _ConditionState.selection_topology_stack) = saved
 
 
-def _current_scope() -> Tuple[tuple, tuple]:
-    return (tuple(_ConditionState.active), tuple(_ConditionState.switch_stack))
+def _current_scope() -> Tuple[tuple, ...]:
+    return (tuple(_ConditionState.active), tuple(_ConditionState.switch_stack),
+            tuple(_ConditionState.selection_topology_stack))
 
 
-def _same_scope(a: Tuple[tuple, tuple], b: Tuple[tuple, tuple]) -> bool:
+def _same_scope(a: Tuple[tuple, ...], b: Tuple[tuple, ...]) -> bool:
     # Element-wise identity: tuple == would invoke Expr.__eq__ (which builds hardware).
-    return (len(a[0]) == len(b[0]) and len(a[1]) == len(b[1])
-            and all(x is y for x, y in zip(a[0], b[0]))
-            and all(x is y for x, y in zip(a[1], b[1])))
+    return (len(a) == len(b)
+            and all(len(sa) == len(sb) and all(x is y for x, y in zip(sa, sb))
+                    for sa, sb in zip(a, b)))
 
 
 def _bool_const(value: bool) -> Expr:
@@ -104,14 +147,16 @@ class _IfChain:
     closed: bool = False
     # The condition/switch ambience (strong refs) in which the chain was left pending; elif_/else_ may only claim
     # it from the identical ambience, so a trailing chain in one case_/branch can't be continued in another.
-    scope: Optional[Tuple[tuple, tuple]] = None
+    scope: Optional[Tuple[tuple, ...]] = None
+    # shared incremental disjointness proof (same class switch_ uses)
+    tracker: DisjointnessTracker = field(default_factory=DisjointnessTracker)
 
     def branch(self, condition: ExprLike, *, context: str) -> Expr:
         if self.closed:
             raise RuntimeError("Cannot add a branch to a closed if/elif/else chain")
         cond_expr = as_expr(condition)
         _validate_bool(cond_expr, context=context)
-        gated = cond_expr & ~self.covered
+        gated = _claim_or_gate(self.tracker, cond_expr, self.covered)
         self.covered = self.covered | gated
         return gated
 
@@ -214,6 +259,8 @@ class _SwitchState:
         self._selector = as_expr(selector)
         self._covered = _bool_const(False)
         self._closed = False
+        # shared incremental disjointness proof (same class if_ chains use)
+        self._tracker = DisjointnessTracker()
 
     def _claim_cases(self, cases: Iterable[ExprLike]) -> Expr:
         if self._closed:
@@ -235,7 +282,7 @@ class _SwitchState:
         if merged is None:
             raise ValueError("case_() requires at least one value")
 
-        cond = merged & ~self._covered
+        cond = _claim_or_gate(self._tracker, merged, self._covered)
         self._covered = self._covered | cond
         return cond
 
@@ -251,12 +298,16 @@ class _SwitchState:
         return cond
 
     def reset(self) -> None:
-        self._covered = _bool_const(False)
-        self._closed = False
+        self.__init__(self._selector)
 
 
 class switch_:
-    """Context manager modeling a Verilog-style `switch_`/`case_` statement."""
+    """Context manager modeling a Verilog-style `switch_`/`case_` statement.
+
+    To emit the resulting selection cascades in a log-depth form (one-hot
+    AND-OR, bit-tree, tournament) wrap the switch in a
+    ``with selection_topology("<mode>"):`` region — see spire.selection_emission.
+    """
 
     def __init__(self, selector: ExprLike):
         self._state = _SwitchState(selector)
@@ -355,7 +406,13 @@ def _patch_signal_assignments() -> None:
         if isinstance(rhs, BitSerializable) and not isinstance(rhs, Expr):
             rhs = rhs.to_bits()  # pack composites before gating, as the unconditional path does
         wrapped_rhs = _apply_active_conditions_to_expr(self, rhs)
-        return original_assign(self, wrapped_rhs)
+        result = original_assign(self, wrapped_rhs)
+        # Region capture for selection_topology: every assigned signal (conditional or
+        # plain — hand-built cascades count too) is registered with the innermost
+        # active region, which rewrites the final cascades on region exit.
+        if _ConditionState.selection_topology_stack:
+            _ConditionState.selection_topology_stack[-1]._register(self)
+        return result
 
     Signal.assign = conditional_assign  # type: ignore[assignment]
 

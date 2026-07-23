@@ -1,6 +1,6 @@
 # Circuit Optimization Decorators
 
-Spire provides two decorators that optimize combinational logic at the AIG level.  Decorate any Python function that builds logic from `Expr` arguments, and the framework automatically converts it to a circuit, runs the chosen optimizer, caches the result, and splices the optimized logic back into your design.
+Spire provides decorators that optimize combinational logic.  Decorate any Python function that builds logic from `Expr` arguments, and the framework automatically converts it to a circuit, runs the chosen optimizer, caches the result, and splices the optimized logic back into your design.
 
 ## `@abc_optimized` -- ABC via Yosys
 
@@ -146,47 +146,9 @@ def my_mult(a, b):
 
 ---
 
-## `@flowy_optimized` Decorator
-
-Uses the Flowy with MockTurtle. Supports multi-run optimization and Pareto-front design selection.
-
-```python
-from spire.optimize import flowy_optimized
-
-@flowy_optimized(direct=True, iterations=1, mockturtle_chains=1,
-                 mockturtle_chain_len=2, mockturtle_chain_workers=1)
-def optimized_mult(a, b):
-    return a * b
-```
-
-### Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `nb_runs` | `1` | Number of parallel optimization runs |
-| `nb_workers` | `10` | Parallel workers for multi-run |
-| `iterations` | `1` | MockTurtle iterations per run |
-| `mockturtle_chains` | `10` | Number of MockTurtle chains (effective default from `_DEFAULT_OPTIMIZE_KWARGS`, overridable via `flowy_config.json`) |
-| `mockturtle_chain_len` | `10` | Chain length |
-| `mockturtle_chain_workers` | `10` | Parallel workers per chain (effective default from `_DEFAULT_OPTIMIZE_KWARGS`) |
-| `direct` | `True` | `True` = local execution, `False` = Docker (effective default from `_DEFAULT_OPTIMIZE_KWARGS`) |
-| `pareto_point` | `None` | Select a specific Pareto-front design (0 = best area) |
-| `cache_read` | `"both"` | Which caches to consult: `"none"` / `"mem"` / `"disk"` / `"both"` |
-| `cache_write` | `"both"` | Which caches to populate: same values |
-
-### Lower-level function
-
-```python
-from spire.optimize import flowy_optimize
-
-optimized_module = flowy_optimize(my_module, nb_runs=10, direct=True)
-```
-
----
-
 ## Caching
 
-Both decorators above share the same two-level cache:
+`@abc_optimized` uses a two-level cache:
 
 1. **In-memory** -- keyed by a SHA-256 hash of the Verilog content + non-logic arguments + optimizer parameters.  Instant on repeated calls within the same process.
 2. **Disk** -- stored in `.spire_cache/v1/` as JSON files containing the optimized AAG lines and port spec.  Survives across runs.

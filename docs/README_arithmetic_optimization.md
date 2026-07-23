@@ -1,6 +1,6 @@
 # Automatic arithmetic optimization
 
-Spire ships a library of configurable arithmetic building blocks: prefix adders (Kogge-Stone, Brent-Kung, Sklansky, ...), multipliers (stage-based with PPG/PPA/FSA selection), and subtractors.  Rather than requiring the user to pick the right topology, `replace_arithmetic_ops` can **automatically select the best configuration** for every `+`, `-`, and `*` operator in a design, guided by a pre-computed evaluation database.
+Spire ships a library of configurable arithmetic building blocks: prefix adders (Kogge-Stone, Brent-Kung, Sklansky, ...), multipliers (stage-based with PPG/PPA/FSA selection), and subtractors.  Rather than requiring the user to pick the right topology, `replace_arithmetic_ops` can **automatically select the best configuration** for every `+`, `-`, and `*` operator in a design, guided by a pre-computed evaluation database. Note that `replace_arithmetic_ops` is called by the `@arithmetic_optimized` decorator internally.
 
 Three optimization objectives are available:
 
@@ -125,6 +125,27 @@ For the `@arithmetic_optimized` decorator (same one-liner ergonomics but using s
 Each `+`, `-`, and `*` in the expression graph is independently replaced with the empirically best prefix-adder or stage-based multiplier configuration for its specific bit-width and signedness.  For widths not in the evaluation database, the nearest data point is selected using logarithmic interpolation.
 
 The optimizer also detects **multiply-accumulate (MAC) patterns** (`a * b + c`) and fuses them into a single hardware unit, absorbing the accumulate operand directly into the multiplier's column reduction and eliminating a full adder stage.
+
+**Fusion in `replace_arithmetic_ops` / `@arithmetic_optimized` is purely syntactic: the `*` must be a
+direct operand of the `+`.** Any node between them — `fit_type`/`reinterpret`
+(explicit width/sign adjustment), a slice (fixed-point rescale), or a `mux` —
+hides the pattern and the ops are replaced individually instead of fused
+(individually replaced `*` still get an optimized implementation, but the shared
+column-reduction of the fused unit is lost):
+
+```python
+y <<= c + a * b                          # fuses (mixed widths are fine — the fused core widens internally)
+y <<= c + fit_type(a * b, SInt(32))      # does NOT fuse (Resize in between)
+y <<= c + mux(en, a * b, zero)           # does NOT fuse (mux in between)
+y <<= mux(en, c + a * b, c)              # fuses — place the selection AFTER the operation
+
+y <<= c + (a * b)[4:16]                  # does NOT fuse (Slice between * and +)
+y <<= (c + a * b)[4:20]                  # fuses — slice AFTER the full operation
+```
+
+Rule of thumb: For fusing, write the arithmetic bare (`c + a*b`, letting Spire's implicit
+widening handle widths) and put muxes/slices/width adjustments *after* the full
+operation.
 
 It also detects **multi-input add chains** (`a + b + c + d + ...`, 3+ operands) and replaces them with a carry-save reduction tree plus a single final 2-input adder (mirroring what yosys's `alumacc` does internally). The chain's `(ppa, fsa, optim_type)` is picked from a dedicated `miaN` DB sweep. Example:
 

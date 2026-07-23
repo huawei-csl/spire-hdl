@@ -43,11 +43,14 @@ from spire.visitor import ExprVisitor
 _SYMMETRIC_OPS = frozenset({"&", "|", "^", "==", "!=", "nand"})
 
 
-class _CseWalker(ExprVisitor[tuple]):
+class _CseWalker(ExprVisitor[int]):
     """Single-pass walker that computes canonical keys and gathers every op.
 
     * ``self.all_ops`` — every non-leaf Expr visited, in DFS order.
-    * ``self._cache`` (inherited) — id(Expr) -> canonical key.
+    * ``self._cache`` (inherited) — id(Expr) -> canonical key (an interned int).
+
+    Keys are hash-consed: each key tuple is interned to a class-id and parent keys embed child
+    ids, so every key is O(1) to hash/compare (nested-tuple keys made the pass O(n * depth)).
 
     Leaves (Const / Signal) are NOT recursed through: a wire-Signal's driver is owned by the Signal,
     not re-canonicalised here. This keeps wire identities stable (no renaming of user-visible named
@@ -57,45 +60,55 @@ class _CseWalker(ExprVisitor[tuple]):
     def __init__(self) -> None:
         super().__init__()
         self.all_ops: List[Expr] = []
+        self._intern_tab: dict = {}
+        self.key_of: dict = {}  # id(Expr) -> interned class-id, for non-leaf ops
 
-    def visit_const(self, e: Const) -> tuple:
-        return ("const", e.value, e.typ.width, e.typ.signed)
+    def _intern(self, key: tuple) -> int:
+        cid = self._intern_tab.get(key)
+        if cid is None:
+            cid = len(self._intern_tab)
+            self._intern_tab[key] = cid
+        return cid
 
-    def visit_signal(self, e: Signal) -> tuple:
-        return ("sig", id(e))
-
-    def visit_op1(self, e: Op1) -> tuple:
+    def _op(self, e: Expr, key: tuple) -> int:
         self.all_ops.append(e)
-        return ("op1", e.op, self.visit(e.a), e.typ.width, e.typ.signed)
+        cid = self._intern(key)
+        self.key_of[id(e)] = cid
+        return cid
 
-    def visit_op2(self, e: Op2) -> tuple:
-        self.all_ops.append(e)
+    def visit_const(self, e: Const) -> int:
+        return self._intern(("const", e.value, e.typ.width, e.typ.signed))
+
+    def visit_signal(self, e: Signal) -> int:
+        return self._intern(("sig", id(e)))
+
+    def visit_op1(self, e: Op1) -> int:
+        return self._op(e, ("op1", e.op, self.visit(e.a), e.typ.width, e.typ.signed))
+
+    def visit_op2(self, e: Op2) -> int:
         ka, kb = self.visit(e.a), self.visit(e.b)
         if e.op in _SYMMETRIC_OPS and ka > kb:
             ka, kb = kb, ka
-        return ("op2", e.op, ka, kb, e.typ.width, e.typ.signed)
+        return self._op(e, ("op2", e.op, ka, kb, e.typ.width, e.typ.signed))
 
-    def visit_ternary(self, e: Ternary) -> tuple:
-        self.all_ops.append(e)
-        return ("tern", self.visit(e.sel), self.visit(e.a), self.visit(e.b), e.typ.width, e.typ.signed)
+    def visit_ternary(self, e: Ternary) -> int:
+        return self._op(e, ("tern", self.visit(e.sel), self.visit(e.a), self.visit(e.b),
+                            e.typ.width, e.typ.signed))
 
-    def visit_concat(self, e: Concat) -> tuple:
-        self.all_ops.append(e)
-        return ("cat", tuple(self.visit(p) for p in e.parts))
+    def visit_concat(self, e: Concat) -> int:
+        return self._op(e, ("cat", tuple(self.visit(p) for p in e.parts)))
 
-    def visit_slice(self, e: Slice) -> tuple:
-        self.all_ops.append(e)
-        return ("slice", self.visit(e.a), e.start, e.msb)
+    def visit_slice(self, e: Slice) -> int:
+        return self._op(e, ("slice", self.visit(e.a), e.start, e.msb))
 
-    def visit_resize(self, e: Resize) -> tuple:
-        self.all_ops.append(e)
-        return ("resize", self.visit(e.a), e.to_width, e.typ.signed)
+    def visit_resize(self, e: Resize) -> int:
+        return self._op(e, ("resize", self.visit(e.a), e.to_width, e.typ.signed))
 
-    def visit_array_index(self, e: _ArrayIndex) -> tuple:
+    def visit_array_index(self, e: _ArrayIndex) -> int:
         # Leaf — address signal is reached via Memory's port traversal, not through
         # this Expr's fields. Canonical key uses id(mem) + id(addr_wire) since both
         # are user-named Signals; we never merge across distinct Memory instances.
-        return ("array_index", id(e.mem), id(e.addr_wire), e.typ.width, e.typ.signed)
+        return self._intern(("array_index", id(e.mem), id(e.addr_wire), e.typ.width, e.typ.signed))
 
 
 def _children_of(e: Expr) -> Tuple[Expr, ...]:
@@ -171,7 +184,7 @@ def apply_structural_cse(module) -> int:
     #      >= 2 members (covers criterion 1).
     key_to_instances: dict = defaultdict(list)
     for e in walker.all_ops:
-        key_to_instances[walker._cache[id(e)][1]].append(e)  # cache holds (node, key) — node pinned
+        key_to_instances[walker.key_of[id(e)]].append(e)  # interned class-id (see _CseWalker)
 
     # 4. For each class that qualifies (multi-member OR high fan-out on any member), create one
     #    shared wire. First instance in the class is the driver; every other instance in the class

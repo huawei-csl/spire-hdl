@@ -6,6 +6,16 @@ from spire.component import Netlist
 from spire.simulator import Simulator, _sid
 
 
+@pytest.fixture(autouse=True)
+def _clear_pending_if_chain():
+    """Some tests end if_/elif_ chains without else_; clear the module-global
+    pending-chain state so it can't leak into other test files (e.g. the
+    scoping suite's no-pending-chain assertions)."""
+    yield
+    from spire.control_structures import _set_pending_chain
+    _set_pending_chain(None)
+
+
 def simulate_outputs(module: Netlist, vectors: list[tuple[dict[str, int], dict[str, int]]]) -> None:
     sim = Simulator(module)
     for inputs, expected in vectors:

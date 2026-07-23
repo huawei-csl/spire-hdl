@@ -1,0 +1,562 @@
+"""Tests for spire.selection_emission — the `selection_topology` scope object
+(region context-manager + decorator), the shape-based cascade rewrites
+(chain / tournament / onehot / bittree), the redundant-gating skip in
+_claim_or_gate, and the opt-in whole-design auto pass."""
+
+import contextlib
+import random
+
+import pytest
+
+from spire import Simulator, SelectionEmissionConfig, selection_topology
+from spire.component import Netlist
+from spire.control_structures import case_, default, elif_, else_, if_, switch_
+from spire.expr import Const, Ternary, UInt, mux
+from spire.selection_analysis import collect_chain
+from spire.selection_emission import apply_selection_emission
+from spire.simulator import _sid
+
+
+@pytest.fixture(autouse=True)
+def _clear_pending_if_chain():
+    """Several tests here deliberately end if_/elif_ chains without else_;
+    clear the module-global pending-chain state so it can't leak into other
+    test files (e.g. the scoping suite's no-pending-chain assertions)."""
+    yield
+    from spire.control_structures import _set_pending_chain
+    _set_pending_chain(None)
+
+
+def _region(mode):
+    return selection_topology(mode) if mode else contextlib.nullcontext()
+
+
+def _equiv(m_ref: Netlist, m_new: Netlist, input_gen, n=300, outs=("y",)):
+    sr, sn = Simulator(m_ref), Simulator(m_new)
+    rng = random.Random(1234)
+    for _ in range(n):
+        ins = input_gen(rng)
+        for k, v in ins.items():
+            sr.set(k, v)
+            sn.set(k, v)
+        sr.eval()
+        sn.eval()
+        for o in outs:
+            assert sr.get(o) == sn.get(o), (ins, o, sr.get(o), sn.get(o))
+
+
+# ---------------------------------------------------------------------------
+# priority chains: decorator + region over hand-built chains
+# ---------------------------------------------------------------------------
+
+def _ff1_chain(x, n):
+    chain = Const(0, UInt(5))
+    for k in reversed(range(n)):
+        chain = mux(x[k], Const(k, UInt(5)), chain)
+    return chain
+
+
+def _build_ff1(mode, via="region"):
+    m = Netlist("FF1", with_clock=False, with_reset=False)
+    x = m.input(UInt(16), "x")
+    y = m.output(UInt(5), "y")
+    if mode is None:
+        y <<= _ff1_chain(x, 16)
+    elif via == "region":
+        with selection_topology(mode):
+            y <<= _ff1_chain(x, 16)      # hand-built chain captured by region
+    else:  # decorator
+        deco = selection_topology(mode)(lambda bits: _ff1_chain(bits, 16))
+        y <<= deco(x)
+    return m
+
+
+def test_tournament_region_hand_chain():
+    m = _build_ff1("tournament", via="region")
+    # eager: the graph itself is restructured, before any emission backend
+    pairs, _ = collect_chain(m._signals_by_name()["y"]._driver) if hasattr(m, "_signals_by_name") else collect_chain(
+        next(s for s in m._ports if s.name == "y")._driver)
+    assert len(pairs) == 1  # tournament root, not a 16-deep chain
+    _equiv(_build_ff1(None), m, lambda r: {"x": r.getrandbits(16)}, n=500)
+
+
+def test_tournament_decorator():
+    m = _build_ff1("tournament", via="decorator")
+    _equiv(_build_ff1(None), m, lambda r: {"x": r.getrandbits(16)}, n=300)
+
+
+def test_tournament_exhaustive_small():
+    m_ref, m_t = _build_ff1(None), _build_ff1("tournament")
+    sr, st = Simulator(m_ref), Simulator(m_t)
+    for v in range(1 << 16):  # exhaustive over overlap patterns, sampled past low range
+        if v % 37 and v > 4096:
+            continue
+        sr.set("x", v)
+        st.set("x", v)
+        sr.eval()
+        st.eval()
+        assert sr.get("y") == st.get("y"), v
+
+
+def _build_if_chain(mode, conds="bits"):
+    m = Netlist("IfC", with_clock=False, with_reset=False)
+    y = m.output(UInt(8), "y")
+    if conds == "bits":
+        c = [m.input(UInt(1), f"c{i}") for i in range(18)]
+        conds_exprs = c
+    else:  # eq-const conditions on a shared selector
+        s = m.input(UInt(5), "s")
+        conds_exprs = [s == i for i in range(18)]
+    y <<= 0xEE
+    with _region(mode):
+        with if_(conds_exprs[0]):
+            y <<= 1
+        for i in range(1, 18):
+            with elif_(conds_exprs[i]):
+                y <<= i + 1
+        with else_():
+            y <<= 0xAA
+    return m
+
+
+def test_if_chain_tournament_equivalence():
+    _equiv(_build_if_chain(None), _build_if_chain("tournament"),
+           lambda r: {f"c{i}": r.getrandbits(1) for i in range(18)}, n=600)
+
+
+def test_if_chain_onehot_when_eq_const():
+    # the gating (`cond & ~covered`) is provably redundant for eq-const chains;
+    # the classifier sees through it and onehot applies to an if_ chain.
+    ref = _build_if_chain(None, conds="eq")
+    ao = _build_if_chain("onehot", conds="eq")
+    assert ao.to_verilog().count("?") == 0
+    sr, sa = Simulator(ref), Simulator(ao)
+    for v in range(32):
+        sr.set("s", v)
+        sa.set("s", v)
+        sr.eval()
+        sa.eval()
+        assert sr.get("y") == sa.get("y"), v
+
+
+def test_if_chain_eq_const_has_no_gating():
+    # the unified DisjointnessTracker: eq-const if_/elif_ arms skip the
+    # `& ~covered` gating exactly like disjoint switch cases (no else_ here,
+    # so `covered` is never consumed and must vanish entirely)
+    m = Netlist("IfClean", with_clock=False, with_reset=False)
+    s = m.input(UInt(4), "s")
+    y = m.output(UInt(8), "y")
+    y <<= 0
+    with if_(s == 1):
+        y <<= 0x11
+    with elif_(s == 2):
+        y <<= 0x22
+    with elif_(s == 9):
+        y <<= 0x33
+    vl = m.to_verilog()
+    assert "_covered" not in vl and "gated" not in vl
+
+
+def test_if_chain_duplicate_condition_keeps_priority():
+    # colliding eq-const arm gets gated (first match wins); later fresh arm
+    # is provable again — mirrored from the switch behavior
+    m = Netlist("IfDup", with_clock=False, with_reset=False)
+    s = m.input(UInt(4), "s")
+    y = m.output(UInt(8), "y")
+    y <<= 0
+    with if_(s == 1):
+        y <<= 0x11
+    with elif_(s == 1):   # duplicate: unreachable, must not shadow the first
+        y <<= 0x99
+    with elif_(s == 2):
+        y <<= 0x22
+    sim = Simulator(m)
+    for v, expect in [(0, 0), (1, 0x11), (2, 0x22), (3, 0)]:
+        sim.set("s", v)
+        sim.eval()
+        assert sim.get("y") == expect, v
+
+
+def test_if_chain_onehot_opaque_raises():
+    m = Netlist("Bad", with_clock=False, with_reset=False)
+    a = m.input(UInt(8), "a")
+    y = m.output(UInt(4), "y")
+    y <<= 0
+    with pytest.raises(ValueError, match="disjoint"):
+        with selection_topology("onehot"):
+            with if_(a < 10):
+                y <<= 1
+            with else_():
+                y <<= 2
+
+
+# ---------------------------------------------------------------------------
+# switch_ under regions: all modes, defaults, partial assignment, registers
+# ---------------------------------------------------------------------------
+
+def _build_switch(mode, with_default=True, sparse=False, n_cases=16, selw=4):
+    m = Netlist("Sw", with_clock=False, with_reset=False)
+    s = m.input(UInt(selw), "s")
+    vs = [m.input(UInt(8), f"v{i}") for i in range(n_cases)]
+    y = m.output(UInt(8), "y")
+    y <<= 0x5C  # pre-assignment: the fallthrough value when no arm matches
+    labels = [i * 3 if sparse else i for i in range(n_cases)]
+    with _region(mode):
+        with switch_(s):
+            for i in range(n_cases):
+                with case_(labels[i]):
+                    y <<= vs[i]
+            if with_default:
+                with default():
+                    y <<= 0xD0
+    return m
+
+
+@pytest.mark.parametrize("mode", ["onehot", "bittree", "tournament", "auto", "chain"])
+@pytest.mark.parametrize("with_default", [True, False])
+def test_switch_modes_equivalence(mode, with_default):
+    ref = _build_switch(None, with_default)
+    new = _build_switch(mode, with_default)
+    _equiv(ref, new,
+           lambda r: {"s": r.getrandbits(4),
+                      **{f"v{i}": r.getrandbits(8) for i in range(16)}},
+           n=400)
+
+
+def test_switch_onehot_sparse_labels_with_default():
+    ref = _build_switch(None, True, sparse=True, n_cases=8, selw=5)
+    new = _build_switch("onehot", True, sparse=True, n_cases=8, selw=5)
+    _equiv(ref, new,
+           lambda r: {"s": r.getrandbits(5),
+                      **{f"v{i}": r.getrandbits(8) for i in range(8)}},
+           n=500)
+
+
+def test_switch_onehot_emits_no_ternary_and_no_covered():
+    vl = _build_switch("onehot", True).to_verilog()
+    assert vl.count("?") == 0
+    assert "_covered" not in vl
+
+
+def test_disjoint_switch_has_no_gating_even_unhinted():
+    # the _claim_cases fix: distinct constant labels -> no `& ~covered` chains
+    vl = _build_switch(None, False).to_verilog()
+    assert "_covered" not in vl
+
+
+def test_overlapping_switch_keeps_priority():
+    def build(mode):
+        m = Netlist("Ov", with_clock=False, with_reset=False)
+        s = m.input(UInt(2), "s")
+        y = m.output(UInt(4), "y")
+        y <<= 0
+        with _region(mode):
+            with switch_(s):
+                with case_(1):
+                    y <<= 1
+                with case_(1, 2):  # overlaps: first match must win for s==1
+                    y <<= 2
+        return m
+
+    for mode in (None, "tournament", "auto"):
+        m = build(mode)
+        sim = Simulator(m)
+        for s_val, expect in [(0, 0), (1, 1), (2, 2), (3, 0)]:
+            sim.set("s", s_val)
+            sim.eval()
+            assert sim.get("y") == expect, (mode, s_val)
+
+
+def test_switch_register_hold_with_onehot():
+    m = Netlist("RegSw", with_clock=True, with_reset=False)
+    s = m.input(UInt(4), "s")
+    v = m.input(UInt(8), "v")
+    reg = m.reg(UInt(8), "r")
+    reg.set_init(0)
+    with selection_topology("onehot"):
+        with switch_(s):
+            for i in range(16):
+                if i == 5:
+                    continue  # s==5: no assignment -> register must hold
+                with case_(i):
+                    reg <<= (v + i)[0:8] if i else v
+
+    sim = Simulator(m)
+    sim.eval()
+    sim.set("r", 0x77)
+    sim.set("s", 5)
+    sim.set("v", 0x11)
+    assert sim._compute_next_state()[_sid(reg)] == 0x77  # hold
+    sim.set("s", 3)
+    assert sim._compute_next_state()[_sid(reg)] == 0x14  # 0x11 + 3
+
+
+def test_nested_regions_inner_wins():
+    def build(nested):
+        m = Netlist("Nest", with_clock=False, with_reset=False)
+        s = m.input(UInt(4), "s")
+        vs = [m.input(UInt(8), f"v{i}") for i in range(16)]
+        y = m.output(UInt(8), "y")
+        y <<= 0
+        outer = selection_topology("tournament") if nested else contextlib.nullcontext()
+        with outer:
+            with _region("onehot" if nested else None):
+                with switch_(s):
+                    for i in range(16):
+                        with case_(i):
+                            y <<= vs[i]
+        return m
+
+    ref, new = build(False), build(True)
+    assert new.to_verilog().count("?") == 0  # inner onehot applied
+    _equiv(ref, new,
+           lambda r: {"s": r.getrandbits(4),
+                      **{f"v{i}": r.getrandbits(8) for i in range(16)}},
+           n=300)
+
+
+def test_chain_may_not_straddle_region_boundary():
+    m = Netlist("Straddle", with_clock=False, with_reset=False)
+    c0 = m.input(UInt(1), "c0")
+    c1 = m.input(UInt(1), "c1")
+    y = m.output(UInt(4), "y")
+    y <<= 0
+    with selection_topology("tournament"):
+        with if_(c0):
+            y <<= 1
+    with pytest.raises(RuntimeError, match="scope"):
+        with elif_(c1):  # chain started inside the region, continued outside
+            y <<= 2
+
+
+# ---------------------------------------------------------------------------
+# validation (shape-based, at region exit — the error names the signal)
+# ---------------------------------------------------------------------------
+
+def test_onehot_duplicate_label_raises():
+    m = Netlist("Dup", with_clock=False, with_reset=False)
+    s = m.input(UInt(2), "s")
+    y = m.output(UInt(4), "y")
+    y <<= 0
+    with pytest.raises(ValueError, match="signal 'y'.*distinct"):
+        with selection_topology("onehot"):
+            with switch_(s):
+                with case_(1):
+                    y <<= 1
+                with case_(1):
+                    y <<= 2
+
+
+def test_onehot_nonconst_label_raises():
+    m = Netlist("NC", with_clock=False, with_reset=False)
+    s = m.input(UInt(2), "s")
+    t = m.input(UInt(2), "t")
+    y = m.output(UInt(4), "y")
+    y <<= 0
+    with pytest.raises(ValueError, match="constant"):
+        with selection_topology("onehot"):
+            with switch_(s):
+                with case_(t):
+                    y <<= 1
+                with case_(0):
+                    y <<= 2
+
+
+def test_bittree_partial_coverage_fills_from_fallback():
+    # missing labels are legal: build_bittree fills absent leaves from the
+    # signal's fallback driver (a partial switch has defined semantics)
+    def build(mode):
+        m = Netlist("BT", with_clock=False, with_reset=False)
+        s = m.input(UInt(3), "s")
+        y = m.output(UInt(4), "y")
+        y <<= 9
+        with _region(mode):
+            with switch_(s):
+                for i in range(5):  # 5 of 8 labels, no default
+                    with case_(i):
+                        y <<= i
+        return m
+
+    sr, sb = Simulator(build(None)), Simulator(build("bittree"))
+    for v in range(8):
+        sr.set("s", v)
+        sb.set("s", v)
+        sr.eval()
+        sb.eval()
+        assert sr.get("y") == sb.get("y") == (v if v < 5 else 9), v
+
+
+def test_unknown_mode_raises():
+    with pytest.raises(ValueError, match="mode"):
+        selection_topology("magic")
+
+
+def test_region_skips_plain_assignments():
+    # signals without a cascade are silently skipped, even under explicit modes
+    m = Netlist("Plain", with_clock=False, with_reset=False)
+    a = m.input(UInt(8), "a")
+    y = m.output(UInt(8), "y")
+    with selection_topology("onehot"):
+        y <<= a + 1  # no cascade — must not raise
+    sim = Simulator(m)
+    sim.set("a", 41)
+    sim.eval()
+    assert sim.get("y") == 42
+
+
+# ---------------------------------------------------------------------------
+# reductions (self-referential chains) are not selections
+# ---------------------------------------------------------------------------
+
+def _build_max_chain(mode=None, n=20):
+    """Running max — shape-wise a mux cascade, semantically a reduction:
+    every arm's select references the chain below it."""
+    m = Netlist("MaxChain", with_clock=False, with_reset=False)
+    xs = [m.input(UInt(8), f"x{i}") for i in range(n)]
+    y = m.output(UInt(8), "y")
+    acc = xs[0]
+    for i in range(1, n):
+        acc = mux(xs[i] > acc, xs[i], acc)
+    with _region(mode):
+        y <<= acc
+    return m
+
+
+def test_reduction_chain_region_skipped():
+    # a tournament region leaves the reduction untouched (rewriting keeps the
+    # original chain alive via the selects: pure area/depth loss)
+    m = _build_max_chain("tournament")
+    drv = next(s for s in m._ports if s.name == "y")._driver
+    pairs, _ = collect_chain(drv)
+    assert len(pairs) == 19  # still the plain chain, not a tournament root
+    _equiv(_build_max_chain(None), m,
+           lambda r: {f"x{i}": r.getrandbits(8) for i in range(20)}, n=200)
+
+
+def test_reduction_chain_explicit_rewrite_raises():
+    from spire.selection_emission import rewrite
+    m = _build_max_chain(None)
+    drv = next(s for s in m._ports if s.name == "y")._driver
+    with pytest.raises(ValueError, match="reduction"):
+        rewrite(drv, "tournament")
+
+
+def test_pass_skips_reduction_chain():
+    # regression: the auto pass used to rewrite the overlapping sub-chains
+    # inside the selects and corrupt the graph (simulator crash)
+    m = _build_max_chain(None)
+    m.collect_signals()
+    assert apply_selection_emission(m, SelectionEmissionConfig(enabled=True)) == 0
+    sim = Simulator(m)
+    rng = random.Random(3)
+    for _ in range(100):
+        vals = {f"x{i}": rng.getrandbits(8) for i in range(20)}
+        for k, v in vals.items():
+            sim.set(k, v)
+        sim.eval()
+        assert sim.get("y") == max(vals.values())
+
+
+def test_tail_reference_is_not_a_reduction():
+    # arms referencing the chain TAIL (register hold/modify) are normal
+    # selections — the reduction guard must not block them
+    def build(mode):
+        m = Netlist("Cnt", with_clock=True, with_reset=False)
+        s = m.input(UInt(4), "s")
+        reg = m.reg(UInt(8), "r")
+        reg.set_init(0)
+        with _region(mode):
+            with switch_(s):
+                for i in range(16):
+                    with case_(i):
+                        reg <<= (reg + i)[0:8]  # value references reg (the tail)
+        return m, reg
+
+    m_t, reg_t = build("tournament")
+    pairs, _ = collect_chain(reg_t._driver)
+    assert len(pairs) == 1  # tournament root: the rewrite DID happen
+
+    m_ref, reg_ref = build(None)
+    sr, st = Simulator(m_ref), Simulator(m_t)
+    for sim in (sr, st):
+        sim.eval()
+        sim.set("r", 7)
+    for v in (0, 3, 15):
+        sr.set("s", v)
+        st.set("s", v)
+        assert (sr._compute_next_state()[_sid(reg_ref)]
+                == st._compute_next_state()[_sid(reg_t)]
+                == (7 + v) & 0xFF)
+
+
+# ---------------------------------------------------------------------------
+# emission pass: whole-design auto-detection (opt-in)
+# ---------------------------------------------------------------------------
+
+def _hand_eq_chain_module():
+    m = Netlist("Hand", with_clock=False, with_reset=False)
+    s = m.input(UInt(4), "s")
+    vs = [m.input(UInt(8), f"v{i}") for i in range(16)]
+    y = m.output(UInt(8), "y")
+    chain = Const(0, UInt(8))
+    for i in reversed(range(16)):
+        chain = mux(s == Const(i, UInt(4)), vs[i], chain)
+    y <<= chain
+    return m
+
+
+def test_pass_auto_detects_hand_chain():
+    m = _hand_eq_chain_module()
+    m.collect_signals()
+    n = apply_selection_emission(m, SelectionEmissionConfig(enabled=True))
+    assert n == 1
+    vl = m.to_verilog()
+    assert vl.count("?") == 0  # disjoint eq-chain -> onehot
+    _equiv(_hand_eq_chain_module(), m,
+           lambda r: {"s": r.getrandbits(4),
+                      **{f"v{i}": r.getrandbits(8) for i in range(16)}},
+           n=300)
+
+
+def _nested_bare_ternary_module():
+    """Outer cascade on `s` whose arm 2 is itself a cascade on `t`, both built
+    from bare Ternary nodes (no _maybe_share wrappers)."""
+    m = Netlist("Nested", with_clock=False, with_reset=False)
+    s = m.input(UInt(4), "s")
+    t = m.input(UInt(4), "t")
+    xs = [m.input(UInt(8), f"x{i}") for i in range(5)]
+    y = m.output(UInt(8), "y")
+    inner = Const(0, UInt(8))
+    for i in range(5):
+        inner = Ternary(t == Const(i, UInt(4)), xs[i], inner)
+    outer = Const(0, UInt(8))
+    for i in range(5):
+        outer = Ternary(s == Const(i, UInt(4)), inner if i == 2 else xs[i], outer)
+    y <<= outer
+    return m
+
+
+def test_pass_rewrites_nested_bare_ternary_arm():
+    # regression: the pass walk discarded nested-arm rewrite results — the
+    # inner rewrite was built and counted but never spliced into the outer arm
+    m = _nested_bare_ternary_module()
+    m.collect_signals()
+    cfg = SelectionEmissionConfig(enabled=True, onehot_min_n=2, tournament_min_n=2)
+    assert apply_selection_emission(m, cfg) == 2  # outer AND inner
+    assert m.to_verilog().count("?") == 0  # both landed as onehot: no muxes left
+    _equiv(_nested_bare_ternary_module(), m,
+           lambda r: {"s": r.getrandbits(4), "t": r.getrandbits(4),
+                      **{f"x{i}": r.getrandbits(8) for i in range(5)}},
+           n=300)
+
+
+def test_pass_disabled_is_noop():
+    m = _hand_eq_chain_module()
+    m.collect_signals()
+    assert apply_selection_emission(m, SelectionEmissionConfig(enabled=False)) == 0
+
+
+def test_selection_emission_kwarg_on_to_verilog():
+    m = _hand_eq_chain_module()
+    vl = m.to_verilog(selection_emission=True)
+    assert vl.count("?") == 0
