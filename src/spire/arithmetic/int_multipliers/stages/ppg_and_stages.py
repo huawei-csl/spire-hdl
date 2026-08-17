@@ -71,7 +71,7 @@ def main() -> None:
         fsa_cls=RippleCarryFinalAdder,
     )
 
-    module = mult.to_module(f"Mul{n_bits}")
+    module = mult.to_netlist(f"Mul{n_bits}")
     
     transistor_count = get_yosys_transistor_count(module, n_iter_optimizations=10)
     print(f"Yosys-reported transistor count: {transistor_count}")

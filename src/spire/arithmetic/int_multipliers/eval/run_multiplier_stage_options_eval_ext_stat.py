@@ -60,7 +60,7 @@ def run_configuration(
         optim_type="area",
     )
 
-    module = multiplier.to_module(f"mult_{ppg_opt.name.lower()}_{encodings.a.name.lower()}_{encodings.b.name.lower()}_{fsa_opt.name.lower()}")
+    module = multiplier.to_netlist(f"mult_{ppg_opt.name.lower()}_{encodings.a.name.lower()}_{encodings.b.name.lower()}_{fsa_opt.name.lower()}")
     print(f"Built module '{module.name}' using PPG={ppg_opt.name}, PPA={ppa_opt.name}, FSA={fsa_opt.name}")
 
     vecs = MultiplierTestVectors(

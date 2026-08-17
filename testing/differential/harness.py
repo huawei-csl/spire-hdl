@@ -83,7 +83,7 @@ def aiger_roundtrip(m: Netlist) -> Netlist:
         aag = aag[:-2] + _get_aag_sym(aag)
     except Exception:
         pass
-    m2 = AigerImporter(aag).get_spire_module()
+    m2 = AigerImporter(aag).get_spire_netlist()
     group_spec = OrderedDict(
         (p.name, UInt(1 if p.typ.is_bool else p.typ.width)) for p in m._ports if p.name not in ("clk", "rst")
     )

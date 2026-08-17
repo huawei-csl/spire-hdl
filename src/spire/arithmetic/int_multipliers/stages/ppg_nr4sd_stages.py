@@ -127,7 +127,7 @@ def main() -> None:
         a_w=n, b_w=n, signed_a=True, signed_b=True, optim_type="area",
         ppg_cls=NR4SDPartialProductGenerator, ppa_cls=CompressorTreeAccumulator, fsa_cls=RippleCarryFinalAdder,
     )
-    module = mult.to_module(f"NR4SDMul{n}")
+    module = mult.to_netlist(f"NR4SDMul{n}")
     vecs = MultiplierTestVectors(a_w=n, b_w=n, y_w=2 * n, num_vectors=64, tb_sigma=None,
                                  a_encoding=to_encoding(True), b_encoding=to_encoding(True),
                                  y_encoding=to_encoding(True)).generate()

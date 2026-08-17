@@ -124,7 +124,7 @@ def run_random(FW=10, trials=2000, seed=1):
     aig = conv_aag_into_aig(aag)
 
     aag_sym = _get_aag_sym(aag)
-    m2 = AigerImporter(aag[:-2]+aag_sym).get_spire_module()
+    m2 = AigerImporter(aag[:-2]+aag_sym).get_spire_netlist()
 
     collector = IOCollector()
     collector.group(m2, {

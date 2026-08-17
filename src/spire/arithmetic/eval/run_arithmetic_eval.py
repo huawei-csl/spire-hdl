@@ -155,7 +155,7 @@ def eval_adder(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool,
         a_w=a_w, b_w=b_w, signed_a=signed, signed_b=signed,
         optim_type=optim_type, fsa_cls=fsa_opt.value, full_output_bit=True,
     )
-    module = adder.to_module(f"adder_{fsa_opt.name}_{a_w}x{b_w}_{optim_type}")
+    module = adder.to_netlist(f"adder_{fsa_opt.name}_{a_w}x{b_w}_{optim_type}")
     ym = _yosys_metrics(module)
     aig = get_aig_stats(module)
     return {
@@ -174,7 +174,7 @@ def eval_subtractor(fsa_opt: FSAOption, a_w: int, b_w: int, signed: bool,
         a_w=a_w, b_w=b_w, signed_a=signed, signed_b=signed,
         optim_type=optim_type, fsa_cls=fsa_opt.value, full_output_bit=True,
     )
-    module = sub.to_module(f"sub_{fsa_opt.name}_{a_w}x{b_w}_{optim_type}")
+    module = sub.to_netlist(f"sub_{fsa_opt.name}_{a_w}x{b_w}_{optim_type}")
     ym = _yosys_metrics(module)
     aig = get_aig_stats(module)
     return {
@@ -196,7 +196,7 @@ def eval_multiplier(
         ppg_cls=ppg_opt.value, ppa_cls=ppa_opt.value,
         fsa_cls=fsa_opt.value, optim_type=optim_type,
     )
-    module = multiplier.to_module(
+    module = multiplier.to_netlist(
         f"mul_{ppg_opt.name}_{ppa_opt.name}_{fsa_opt.name}_{a_w}x{b_w}_{encoding.name}_{optim_type}"
     )
     ym = _yosys_metrics(module)
@@ -284,7 +284,7 @@ def eval_mac(
         ppg_opt=ppg_opt, ppa_opt=ppa_opt, fsa_opt=fsa_opt,
         encoding=encoding, optim_type=optim_type, use_operator=False,
     ))
-    module = fused.to_module(
+    module = fused.to_netlist(
         f"mac_{ppg_opt.name}_{ppa_opt.name}_{fsa_opt.name}_{n_bits}b_c{c_bits}_{encoding.name}_{optim_type}"
     )
     ym = _yosys_metrics(module)
@@ -446,14 +446,19 @@ def eval_inner_product(
 
 
 def sweep_inner_products(bitwidths: list[int], max_workers: int = 16) -> list[dict]:
-    """Sweep fused inner product configs for 2-term and 4-term dot products."""
+    """Sweep fused inner product configs for 2-, 4-, 8- and 16-term dot products.
+
+    16 covers the common lane counts real dot-product/MAC arrays hit;
+    ``lookup_best_dot_config`` snaps intermediate counts to the nearest swept N.
+    """
     ppg_options = [p for p in PPGOption if p not in _PPG_SKIP]
     ppa_options = [p for p in PPAOption if p not in _PPA_SKIP]
     fsa_options = [f for f in FSAOption if f not in _FSA_SKIP]
 
     tasks = []
     for n_terms, n_bits, ppg, ppa, fsa, optim_type in product(
-        [2, 4], bitwidths, ppg_options, ppa_options, fsa_options, ["area", "speed"]
+        [2, 4, 8, 16], bitwidths, ppg_options, ppa_options, fsa_options,
+        ["area", "speed"]
     ):
         if n_bits < 2:
             continue
@@ -552,7 +557,7 @@ def main(
     all_rows.extend(sweep_multipliers(bitwidths, max_workers=max_workers))
     all_rows.extend(sweep_macs(bitwidths, max_workers=max_workers))
     # Multi-input adders for the common chain lengths real designs hit; `build_multi_input_add` snaps to the nearest N.
-    all_rows.extend(sweep_mia(bitwidths, n_inputs_list=[3, 4, 5, 8],
+    all_rows.extend(sweep_mia(bitwidths, n_inputs_list=[3, 4, 5, 8, 16],
                                max_workers=max_workers))
     all_rows.extend(sweep_inner_products(bitwidths, max_workers=max_workers))
 

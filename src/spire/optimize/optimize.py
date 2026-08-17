@@ -189,10 +189,18 @@ def _write_cache_entry(
     if metadata:
         entry["metadata"] = metadata
     target = versioned / f"{cache_key_hex}.json"
-    tmp_path = target.with_suffix(".tmp")
-    with open(tmp_path, "w") as f:
-        json.dump(entry, f, indent=2)
-    tmp_path.rename(target)
+    # Per-writer temp name: a shared one raced (loser's rename hit
+    # FileNotFoundError) when two processes computed the same entry.
+    tmp_path = target.with_suffix(f".{os.getpid()}.tmp")
+    try:
+        with open(tmp_path, "w") as f:
+            json.dump(entry, f, indent=2)
+        os.replace(tmp_path, target)
+    except OSError:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
 
 
 def _read_cache_entry(
@@ -255,7 +263,7 @@ def flowy_optimize(m: Netlist | Component,
         selection_metric = SelectionMetric(selection_metric)
 
     if isinstance(m, Component):
-        m = m.to_module("mydesign_comb")
+        m = m.to_netlist("mydesign_comb")
     name_initial: str = m.name
     m.name = "mydesign_comb"
     verilog_code: str = m.to_verilog()
@@ -398,7 +406,7 @@ def flowy_optimize(m: Netlist | Component,
     c_out: Component = Component.from_netlist(m).from_aig_file(
         aig_file_path, aiger_map_file_path
     )
-    module: Netlist = c_out.to_module("optimized_design")
+    module: Netlist = c_out.to_netlist("optimized_design")
 
     if isinstance(m, Netlist):
         return module
@@ -622,7 +630,7 @@ def _optimize_and_cache(
     from spire.aiger import AigerExporter
 
     comp, output_names = _build_component(fn, logic_args, other_args)
-    module: Netlist = comp.to_module("mydesign_comb")
+    module: Netlist = comp.to_netlist("mydesign_comb")
 
     merged_kwargs = {**_DEFAULT_OPTIMIZE_KWARGS, **optimize_kwargs}
     # nb_workers is pure parallelism — doesn't affect the result, exclude from cache key
@@ -662,7 +670,7 @@ def _optimize_and_cache(
     # Get AAG from the optimized module
     optimized_module: Netlist
     if isinstance(optimized, Component):
-        optimized_module = optimized.to_module("optimized_comb")
+        optimized_module = optimized.to_netlist("optimized_comb")
     else:
         optimized_module = optimized
 
@@ -837,13 +845,16 @@ def flowy_optimized(_fn: Callable[..., Any] | None = None, **kw: Any) -> Callabl
 # ``@abc_optimized(abc_script=ABC_RECIPES["area"])``. Each runs AFTER the prep leg
 # (``techmap; opt; abc -fast; opt``) has lowered coarse cells ($mul/$add/…) to
 # gates, so the script actually optimizes (see this module's investigation doc).
+# All three are sized to ~120 s of ABC time: each ends in a &deepsyn search
+# with a time budget, differing in the prep that precedes it. Requires
+# SPIREHDL_TIMEOUT well above the 60 s default (the suites set 600).
 ABC_RECIPES: Dict[str, str] = {
-    # smallest AIG; trades depth for gates. Good when gate-count-bound with slack.
-    "area": "strash; &get -n; &deepsyn -T 10; &put",
-    # strict Pareto wins (gates+depth+transistors) on multiplier-class circuits, ~40ms.
-    "balanced": "strash; dch -f; balance",
-    # gentler structure than dch; wins depth where dch over-restructures (e.g. mult16).
-    "depth": "strash; balance; rewrite; balance; refactor; balance",
+    # smallest AIG; trades depth for gates. Bare deepsyn, no structural prep.
+    "area": "strash; &get -n; &deepsyn -T 120; &put",
+    # dch restructure + resyn2, then search: best all-rounder on depth and area.
+    "balanced": "strash; dch -f; balance; balance; rewrite; refactor; balance; rewrite; rewrite -z; balance; refactor -z; rewrite -z; balance; &get -n; &deepsyn -T 110; &put",
+    # gentler prep than dch (which over-restructures e.g. mult16), then search.
+    "depth": "strash; balance; rewrite; refactor; balance; rewrite; rewrite -z; balance; refactor -z; rewrite -z; balance; balance; rewrite; refactor; balance; rewrite; rewrite -z; balance; refactor -z; rewrite -z; balance; &get -n; &deepsyn -T 110; &put",
 }
 
 _DEFAULT_ABC_SCRIPT: str = ABC_RECIPES["balanced"]
@@ -960,7 +971,7 @@ def abc_optimize(
     from spire.helpers import _suppress_output
 
     if isinstance(m, Component):
-        m = m.to_module("mydesign_comb")
+        m = m.to_netlist("mydesign_comb")
 
     verilog_content: str = m.to_verilog()
 
@@ -1108,7 +1119,7 @@ def abc_optimized(
 
             # Build component and module
             comp, output_names = _build_component(fn, logic_args, other_args)
-            module: Netlist = comp.to_module("mydesign_comb")
+            module: Netlist = comp.to_netlist("mydesign_comb")
             original_spec: Dict[str, HDLType] = module.get_spec()
 
             read_mem, read_disk, write_mem, write_disk = _resolve_rw_flags(
@@ -1140,7 +1151,7 @@ def abc_optimized(
             )
 
             # Regroup bit-blasted ports to match original widths
-            opt_module: Netlist = AigerImporter(raw_aag).get_spire_module()
+            opt_module: Netlist = AigerImporter(raw_aag).get_spire_netlist()
             IOCollector().group(opt_module, original_spec)
             aag_lines: List[str] = AigerExporter(opt_module).get_aag()
             spec: Dict[str, HDLType] = opt_module.get_spec()

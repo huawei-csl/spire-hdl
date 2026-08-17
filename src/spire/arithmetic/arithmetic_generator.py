@@ -443,7 +443,7 @@ def generate_multiplier(
         raise TypeError(f"Expected StageBasedMultiplierBase, got {type(component)}")
 
     module_name = cfg.module_name or f"mul_{cfg.n_bits}_{cfg.multiplier_opt.name.lower()}"
-    module = component.to_module(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
+    module = component.to_netlist(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
 
     vectors = MultiplierTestVectors(
         a_w=cfg.n_bits,
@@ -490,7 +490,7 @@ def generate_adder(
     )
 
     module_name = cfg.module_name or f"add_{cfg.n_bits}_{cfg.fsa_opt.name.lower()}"
-    module = component.to_module(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
+    module = component.to_netlist(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
 
     vectors = AdderTestVectors(
         a_w=cfg.n_bits,
@@ -542,7 +542,7 @@ def generate_mac(
     )
 
     module_name = cfg.module_name or f"mac_{cfg.n_bits}_{resolved_c_bits}_{cfg.ppg_opt.name.lower()}"
-    module = component.to_module(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
+    module = component.to_netlist(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
 
     vectors = MacTestVectors(
         a_w=cfg.n_bits,
@@ -612,7 +612,7 @@ def generate_matmul_accumulate(
     signed_io_type = True if cfg.use_operator else False
     component = MatmulAccumulateComponent(core_cfg, signed_io_type=signed_io_type)
     module_name = cfg.module_name or f"matmul_{cfg.dim_m}x{cfg.dim_n}x{cfg.dim_k}_{cfg.a_width}b"
-    module = component.to_module(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
+    module = component.to_netlist(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
 
     vectors = generate_matmul_vectors(
         component, encoding=cfg.input_encoding, num_vectors=actions.num_vectors, sigma=actions.tb_sigma,
@@ -659,7 +659,7 @@ def generate_matmul_accumulate_fused(
 
     component = MatmulAccumulateFusedComponent(core_cfg)
     module_name = cfg.module_name or f"matmul_fused_{cfg.dim_m}x{cfg.dim_n}x{cfg.dim_k}_{cfg.a_width}b"
-    module = component.to_module(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
+    module = component.to_netlist(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
 
     vectors = generate_matmul_vectors(
         component, encoding=cfg.input_encoding, num_vectors=actions.num_vectors, sigma=actions.tb_sigma,
@@ -691,7 +691,7 @@ def generate_fp_multiplier(
         mult_cfg=cfg.mult_cfg,
     )
     module_name = cfg.module_name or f"fp_mul_e{cfg.exponent_width}f{cfg.fraction_width}"
-    module = component.to_module(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
+    module = component.to_netlist(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
 
     vectors = None
     if actions.simulate or actions.testbench_out is not None:
@@ -729,7 +729,7 @@ def generate_fp_adder(
         subnormals=cfg.subnormals,
     )
     module_name = cfg.module_name or f"fp_add_e{cfg.exponent_width}f{cfg.fraction_width}"
-    module = component.to_module(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
+    module = component.to_netlist(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
 
     vectors = None
     if actions.simulate or actions.testbench_out is not None:
@@ -806,7 +806,7 @@ def generate_fp_matmul_accumulate(
 
     component = FpMatmulAccumulateComponent(core_cfg)
     module_name = cfg.module_name or f"fp_matmul_{cfg.dim_m}x{cfg.dim_n}x{cfg.dim_k}_e{cfg.exponent_width}f{cfg.fraction_width}"
-    module = component.to_module(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
+    module = component.to_netlist(module_name, with_clock=cfg.with_clock, with_reset=cfg.with_reset)
 
     vectors = None
     if actions.simulate or actions.testbench_out is not None:

@@ -170,7 +170,7 @@ def build_matmul_accumulate(
 ) -> MatmulAccumulateBuildOut:
         
     component = MatmulAccumulateComponent(cfg, signed_io_type=signed_io_type)
-    component_module = component.to_module("matmul_accumulate_core")
+    component_module = component.to_netlist("matmul_accumulate_core")
     A, B, C, Y = component.io.A, component.io.B, component.io.C, component.io.Y
 
     return MatmulAccumulateBuildOut(

@@ -133,13 +133,13 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         module.collect_signals()
         return module 
 
-    def from_module(self, module: 'Netlist', group=False) -> Self:
+    def load_netlist(self, net: 'Netlist', group=False) -> Self:
         if group:
-            IOCollector().group(module, self.get_spec())
+            IOCollector().group(net, self.get_spec())
 
-        # Map the module's ports onto this component's IO fields, from _ports (final grouped names
+        # Map the netlist's ports onto this component's IO fields, from _ports (final grouped names
         # after group()), not _signals (which may contain renamed duplicates).
-        for sig in module._ports:
+        for sig in net._ports:
             # Component IO reserves these names (to_netlist injects them); an rst data input is usually a folded reset.
             if sig.name in ("clk", "rst"):
                 raise ValueError(
@@ -154,7 +154,7 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
         if type(self).elaborate is ImportedComponent.elaborate:
             self.elaborate()
         else:
-            warnings.warn("from_module: skipping elaborate() — the imported module already drives the IO",
+            warnings.warn("load_netlist: skipping elaborate() — the imported netlist already drives the IO",
                           RuntimeWarning, stacklevel=2)
         self._finalize()
         # No inlining step: if this imported component is later embedded in a parent, the parent's
@@ -194,8 +194,8 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
     def from_aag_lines(self, aag_lines: List[str], group=True) -> Self:
         from spire.aiger import AigerImporter
 
-        m = AigerImporter(aag_lines).get_spire_module()
-        return self.from_module(m, group=group)
+        m = AigerImporter(aag_lines).get_spire_netlist()
+        return self.load_netlist(m, group=group)
 
     @classmethod
     def from_netlist(cls, net: "Netlist") -> "Component":
@@ -230,14 +230,15 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
     def get_spec(self) -> Dict[str, HDLType]:
         return {s.name: s.typ for s in self.get_ios().to_list()}
 
-    # Deprecated method aliases (renamed for clarity; kept for one release).
-    to_module = to_netlist     # `to_module` was renamed to `to_netlist`
+    # Renamed for clarity; aliases kept for one release.
+    to_module = to_netlist       # deprecated
+    from_module = load_netlist   # deprecated
 
 
 class ImportedComponent(Component):
     """A Component whose logic arrives via import (``from_netlist`` / ``from_aag_lines`` /
     ``from_verilog``) rather than ``elaborate()``. Satisfies the (now abstract) ``elaborate()``
-    with a no-op — its logic is reinjected by ``from_module`` at import time, not built here."""
+    with a no-op — its logic is reinjected by ``load_netlist`` at import time, not built here."""
 
     def __init__(self, io: "CompositeRecord | Any") -> None:
         self.io = io
