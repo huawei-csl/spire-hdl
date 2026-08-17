@@ -153,7 +153,7 @@ def smoke_test():
 
 
     # create module
-    print(adder.to_module(f"PrefixAdder{n_bits}").to_verilog())
+    print(adder.to_netlist(f"PrefixAdder{n_bits}").to_verilog())
 
     sub = StageBasedSubtractor(
         a_w=n_bits,
@@ -161,7 +161,7 @@ def smoke_test():
         optim_type="area",
         fsa_cls=RippleCarryFinalAdder,
     )
-    print(sub.to_module(f"Subtractor{n_bits}").to_verilog())
+    print(sub.to_netlist(f"Subtractor{n_bits}").to_verilog())
 
 if __name__ == "__main__":
     smoke_test()

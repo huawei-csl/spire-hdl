@@ -342,7 +342,7 @@ def build_hif8_mul_via_fp8_module(name: str = "HiF8MulViaFP8") -> Netlist:
     """Return a Netlist wrapper around :class:`HiF8MulViaFP8`."""
 
     comp = HiF8MulViaFP8()
-    return comp.to_module(name)
+    return comp.to_netlist(name)
 
 
 def build_hif8_mul_via_fp8_component() -> HiF8MulViaFP8:

@@ -331,7 +331,7 @@ def test_multiplier() -> None:
         optim_type="area",
     )
 
-    module = c.to_module("multiplier_ext_optimized")
+    module = c.to_netlist("multiplier_ext_optimized")
 
     transistor_count = get_yosys_transistor_count(module, n_iter_optimizations=10)
     yosys_metrics = get_yosys_metrics(module)

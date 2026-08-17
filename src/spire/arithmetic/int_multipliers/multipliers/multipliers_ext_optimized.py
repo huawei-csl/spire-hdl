@@ -431,7 +431,7 @@ def test_multiplier_ext_optimized() -> None:
         fsa_cls=None,
         optim_type="area",
     )
-    mod = c.to_module("multiplier_ext_optimized")
+    mod = c.to_netlist("multiplier_ext_optimized")
     print(mod)
 
     module = mod
@@ -472,7 +472,7 @@ def test_multiplier_ext_optimized() -> None:
         ppa_cls=None,
         fsa_cls=None,
     )
-    mod = c.to_module("multiplier_ext_optimized_sign_magnitude")
+    mod = c.to_netlist("multiplier_ext_optimized_sign_magnitude")
     print(mod)
     module = mod
     transistor_count = get_yosys_transistor_count(module, n_iter_optimizations=10)
@@ -508,7 +508,7 @@ def test_multiplier_ext_optimized() -> None:
         ppa_cls=None,
         fsa_cls=None,
     )
-    mod = c.to_module("multiplier_ext_optimized_8x8_from_4x4")
+    mod = c.to_netlist("multiplier_ext_optimized_8x8_from_4x4")
     print(mod)
     module = mod
     transistor_count = get_yosys_transistor_count(module, n_iter_optimizations=10)
@@ -546,7 +546,7 @@ def test_multiplier_ext_optimized() -> None:
         optim_type="area",
     )
 
-    mod = c.to_module("multiplier_ext_optimized")
+    mod = c.to_netlist("multiplier_ext_optimized")
     print(mod)
 
     module = mod
@@ -583,7 +583,7 @@ def test_multiplier_ext_optimized() -> None:
         optim_type="area",
     )
     
-    mod = c.to_module("multiplier_ext_optimized")
+    mod = c.to_netlist("multiplier_ext_optimized")
     print(mod)
     
     module = mod

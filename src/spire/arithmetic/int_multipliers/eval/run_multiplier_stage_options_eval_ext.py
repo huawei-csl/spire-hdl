@@ -38,7 +38,7 @@ def run_stage_multiplier_ext_demo() -> None:  # pragma: no cover - demonstration
                 optim_type="area",
             )
 
-            module = multiplier.to_module(f"demo_{config_item.ppg_opt.name.lower()}_{config_item.encodings.a.name.lower()}_{config_item.encodings.b.name.lower()}_{config_item.fsa_opt.name.lower()}")
+            module = multiplier.to_netlist(f"demo_{config_item.ppg_opt.name.lower()}_{config_item.encodings.a.name.lower()}_{config_item.encodings.b.name.lower()}_{config_item.fsa_opt.name.lower()}")
             print(f"Built module '{module.name}' using PPG={config_item.ppg_opt.name}, PPA={config_item.ppa_opt.name}, FSA={config_item.fsa_opt.name}")
 
             vecs = MultiplierTestVectors(

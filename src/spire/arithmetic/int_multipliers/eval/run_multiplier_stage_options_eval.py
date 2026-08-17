@@ -44,7 +44,7 @@ def run_stage_multiplier_demo() -> None:  # pragma: no cover - demonstration onl
                     optim_type="area",
                 )
                 
-                module = multiplier.to_module(
+                module = multiplier.to_netlist(
                     f"demo_{ppg_opt.name.lower()}_{signed_a}_{signed_b}_{fsa_opt.name.lower()}"
                 )
                 print(
