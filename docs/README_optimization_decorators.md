@@ -35,9 +35,9 @@ def small_mult(a, b):
 
 | Recipe | Script | Strength | Wall-clock |
 |--------|--------|----------|-----------|
-| `"area"` | `strash; &get -n; &deepsyn -T 10; &put` | smallest transistor/gate count; trades depth for area | ~5–10 s |
-| **`"balanced"`** (default) | `strash; dch -f; balance` | best all-rounder — strong on depth and area together | ~40 ms |
-| `"depth"` | `strash; balance; rewrite; balance; refactor; balance` | gentle structure; favours depth where `dch` over-restructures | ~0.1 s |
+| `"area"` | `strash; &get -n; &deepsyn -T 120; &put` | smallest transistor/gate count; trades depth for area | ~120 s |
+| **`"balanced"`** (default) | `strash; dch -f; balance; <resyn2>; &get -n; &deepsyn -T 110; &put` | best all-rounder — strong on depth and area together | ~115 s |
+| `"depth"` | `strash; <resyn2>; <resyn2>; &get -n; &deepsyn -T 110; &put` | gentle structure; favours depth where `dch` over-restructures | ~115 s |
 
 ### Raw ABC script examples
 
@@ -100,7 +100,7 @@ multiplier and the adder).
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `abc_script` | `ABC_RECIPES["balanced"]` (`"strash; dch -f; balance"`) | ABC commands to run on the gate-level AIG. Raw string or an `ABC_RECIPES` entry |
+| `abc_script` | `ABC_RECIPES["balanced"]` (dch + resyn2 + `&deepsyn -T 110`) | ABC commands to run on the gate-level AIG. Raw string or an `ABC_RECIPES` entry |
 | `prep_script` | `"techmap; opt; abc -fast; opt"` | Yosys passes that lower coarse cells to gates before ABC. Rarely changed |
 | `timeout` | `None` (wait indefinitely) | Wall-clock seconds for the ABC subprocess. Set a number to bound long scripts (e.g. `&deepsyn`/`&transtoch` with big budgets) |
 | `cache_read` | `"both"` | Which caches to consult: `"none"` / `"mem"` / `"disk"` / `"both"` |
@@ -123,6 +123,13 @@ from spire.optimize import abc_optimize, ABC_RECIPES
 
 aag_lines = abc_optimize(my_component, abc_script=ABC_RECIPES["area"])
 ```
+
+> **Prefer `@abc_optimized` when the design must keep its interface.** AAG is bit-blasted,
+> so re-importing these lines (`AigerImporter(aag).get_spire_module()`) yields a netlist
+> with *scalar* ports (`a_0_`, `a_1_`, …) instead of the original buses — emitting that
+> gives a module a bus-port testbench cannot bind to. The decorator re-attaches the
+> optimized logic to the component's own IO, preserving `(a, b, y)`. Use the low-level
+> function when you want the AAG itself, not a drop-in replacement module.
 
 ### Iterative optimization (nested + cached)
 
