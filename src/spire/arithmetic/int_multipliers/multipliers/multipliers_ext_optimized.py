@@ -157,12 +157,12 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
 
     def elaborate(self) -> None:
 
-        m = AigerImporter(self.f_aag_lines(self.aw, self.bw, self.a_encoding, self.b_encoding)).get_spire_module()
+        m = AigerImporter(self.f_aag_lines(self.aw, self.bw, self.a_encoding, self.b_encoding)).get_spire_netlist()
 
         this_class = self
 
         class LoadedMultiplier(ImportedComponent):
-            # Import shell: logic is reinjected via from_module(); no elaborate().
+            # Import shell: logic is reinjected via load_netlist(); no elaborate().
             def __init__(self):
                 self.io = IORecord(
                     operand_a_i=Input(UInt(this_class.aw)),
@@ -171,7 +171,7 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
                 )
 
         self.mult = LoadedMultiplier()
-        self.mult.from_module(m, group=True)
+        self.mult.load_netlist(m, group=True)
 
         # todo: test from_verlog and from_aig_file
 

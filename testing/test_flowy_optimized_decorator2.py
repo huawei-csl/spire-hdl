@@ -63,7 +63,7 @@ pct = delta / gates_orig * 100 if gates_orig else 0
 print(f"Reduction: {delta} gates ({pct:.1f}%)")
 
 
-# ── Multi-input with 1-bit signal (regression test for from_module fix) ──────
+# ── Multi-input with 1-bit signal (regression test for load_netlist fix) ──────
 
 PROD_W = 22
 FW = 10

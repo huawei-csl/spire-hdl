@@ -125,7 +125,7 @@ aag_lines = abc_optimize(my_component, abc_script=ABC_RECIPES["area"])
 ```
 
 > **Prefer `@abc_optimized` when the design must keep its interface.** AAG is bit-blasted,
-> so re-importing these lines (`AigerImporter(aag).get_spire_module()`) yields a netlist
+> so re-importing these lines (`AigerImporter(aag).get_spire_netlist()`) yields a netlist
 > with *scalar* ports (`a_0_`, `a_1_`, …) instead of the original buses — emitting that
 > gives a module a bus-port testbench cannot bind to. The decorator re-attaches the
 > optimized logic to the component's own IO, preserving `(a, b, y)`. Use the low-level

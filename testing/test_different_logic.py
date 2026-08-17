@@ -56,7 +56,7 @@ def roundtrip_aiger_back_to_spire(aag_lines: List[str], *, name="Imported") -> N
     # Keep symbol table (last lines); leave as-is if already present
     aag_sym = _get_aag_sym(aag_lines)
     aag_for_import = aag_lines[:-2] + aag_sym if aag_sym else aag_lines
-    return AigerImporter(aag_for_import).get_spire_module(name)
+    return AigerImporter(aag_for_import).get_spire_netlist(name)
 
 
 # -----------------------------
@@ -287,7 +287,7 @@ def run_test_one_module(m: Netlist, spec: Dict[str, UInt], vectors, *, decoder=N
 
     # after you produced aag_path with yosys:
     aag_back_lines = file_to_lines(aag_path)
-    m_back_raw = AigerImporter(aag_back_lines).get_spire_module("BackRaw")
+    m_back_raw = AigerImporter(aag_back_lines).get_spire_netlist("BackRaw")
     # exporter AIG from the raw imported module (no IOCollector yet)
     aag_from_raw, aig_from_raw = spire_to_aig_via_exporter(m_back_raw)
     # yosys AIG
@@ -313,7 +313,7 @@ def run_test_one_module(m: Netlist, spec: Dict[str, UInt], vectors, *, decoder=N
 
     # 5) AAG (with symbols) → Spire
     aag_back = file_to_lines(aag_path)
-    m_back = AigerImporter(aag_back).get_spire_module(m.name + "_back")
+    m_back = AigerImporter(aag_back).get_spire_netlist(m.name + "_back")
     # m_back = roundtrip_aiger_back_to_spire(aag_back, name=m.name + "_back")
 
     # 6) Regroup I/Os to match original port widths

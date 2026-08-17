@@ -1151,7 +1151,7 @@ def abc_optimized(
             )
 
             # Regroup bit-blasted ports to match original widths
-            opt_module: Netlist = AigerImporter(raw_aag).get_spire_module()
+            opt_module: Netlist = AigerImporter(raw_aag).get_spire_netlist()
             IOCollector().group(opt_module, original_spec)
             aag_lines: List[str] = AigerExporter(opt_module).get_aag()
             spec: Dict[str, HDLType] = opt_module.get_spec()
