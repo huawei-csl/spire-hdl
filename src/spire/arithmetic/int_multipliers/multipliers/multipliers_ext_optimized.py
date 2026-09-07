@@ -157,12 +157,12 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
 
     def elaborate(self) -> None:
 
-        m = AigerImporter(self.f_aag_lines(self.aw, self.bw, self.a_encoding, self.b_encoding)).get_spire_module()
+        m = AigerImporter(self.f_aag_lines(self.aw, self.bw, self.a_encoding, self.b_encoding)).get_spire_netlist()
 
         this_class = self
 
         class LoadedMultiplier(ImportedComponent):
-            # Import shell: logic is reinjected via from_module(); no elaborate().
+            # Import shell: logic is reinjected via load_netlist(); no elaborate().
             def __init__(self):
                 self.io = IORecord(
                     operand_a_i=Input(UInt(this_class.aw)),
@@ -171,7 +171,7 @@ class OptimizedMultiplier(StageBasedMultiplierBase):
                 )
 
         self.mult = LoadedMultiplier()
-        self.mult.from_module(m, group=True)
+        self.mult.load_netlist(m, group=True)
 
         # todo: test from_verlog and from_aig_file
 
@@ -431,7 +431,7 @@ def test_multiplier_ext_optimized() -> None:
         fsa_cls=None,
         optim_type="area",
     )
-    mod = c.to_module("multiplier_ext_optimized")
+    mod = c.to_netlist("multiplier_ext_optimized")
     print(mod)
 
     module = mod
@@ -472,7 +472,7 @@ def test_multiplier_ext_optimized() -> None:
         ppa_cls=None,
         fsa_cls=None,
     )
-    mod = c.to_module("multiplier_ext_optimized_sign_magnitude")
+    mod = c.to_netlist("multiplier_ext_optimized_sign_magnitude")
     print(mod)
     module = mod
     transistor_count = get_yosys_transistor_count(module, n_iter_optimizations=10)
@@ -508,7 +508,7 @@ def test_multiplier_ext_optimized() -> None:
         ppa_cls=None,
         fsa_cls=None,
     )
-    mod = c.to_module("multiplier_ext_optimized_8x8_from_4x4")
+    mod = c.to_netlist("multiplier_ext_optimized_8x8_from_4x4")
     print(mod)
     module = mod
     transistor_count = get_yosys_transistor_count(module, n_iter_optimizations=10)
@@ -546,7 +546,7 @@ def test_multiplier_ext_optimized() -> None:
         optim_type="area",
     )
 
-    mod = c.to_module("multiplier_ext_optimized")
+    mod = c.to_netlist("multiplier_ext_optimized")
     print(mod)
 
     module = mod
@@ -583,7 +583,7 @@ def test_multiplier_ext_optimized() -> None:
         optim_type="area",
     )
     
-    mod = c.to_module("multiplier_ext_optimized")
+    mod = c.to_netlist("multiplier_ext_optimized")
     print(mod)
     
     module = mod

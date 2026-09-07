@@ -369,7 +369,7 @@ def replace_arithmetic_ops(component, config: ArithmeticConfig | ArithmeticAutoC
 
     Supports operands with different bit-widths.
 
-    Modifies the expression graph in-place. Call before to_module().
+    Modifies the expression graph in-place. Call before to_netlist().
     """
     from spire.component import iter_values
 

@@ -250,7 +250,7 @@ class FpMul(Component):
 
 def build_fp_mul(name: str, EW: int, FW: int) -> Netlist:
     comp = FpMul(EW, FW)
-    return comp.to_module(name, with_clock=False, with_reset=False)
+    return comp.to_netlist(name, with_clock=False, with_reset=False)
 
 
 def build_f16_mul(name: str = "F16Mul") -> Netlist:

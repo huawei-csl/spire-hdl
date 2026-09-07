@@ -271,10 +271,18 @@ def lookup_best_dot_config(
     objective: Objective = "area",
     metric: Metric = DEFAULT_LOOKUP_METRIC,
 ) -> dict | None:
-    """Look up the best fused inner product config for y = sum(ai*bi)."""
+    """Look up the best fused inner product config for y = sum(ai*bi).
+
+    Snaps both ``n_terms`` (to the nearest available term count in the DB) and
+    ``n_bits`` (to the nearest available width)
+    """
     db = _load_db()
     sign_key = "signed" if signed else "unsigned"
-    op_key = f"dot{n_terms}"
+    available_n = sorted({int(k[0][3:]) for k in db
+                          if k[0].startswith("dot") and k[0][3:].isdigit()})
+    if not available_n:
+        return None
+    op_key = f"dot{_nearest_width_log(n_terms, available_n)}"
     available = sorted({int(k[1]) for k in db if k[0] == op_key} or {n_bits})
     snapped = _nearest_width_log(n_bits, available)
     rows = db.get((op_key, str(snapped), str(snapped), sign_key), [])

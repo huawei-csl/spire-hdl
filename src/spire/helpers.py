@@ -128,7 +128,7 @@ def refactor_module_to_aig(module: Netlist, optimize=True, n_iter_optimizations:
     aag = AigerExporter(module).get_aag()
     if optimize:
         aag = optimize_aag(aag, n_iter_optimizations=n_iter_optimizations)
-    m_aig = AigerImporter(aag).get_spire_module()
+    m_aig = AigerImporter(aag).get_spire_netlist()
     try:
         spec = module.component.get_spec()
     except (AttributeError, TypeError):

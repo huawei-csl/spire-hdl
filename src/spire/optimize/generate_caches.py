@@ -81,7 +81,7 @@ def _aig_to_aag_via_module(
 
     comp = _Comp(io)
     comp.from_aig_file(aig_path, map_path)
-    module = comp.to_module("optimized_design")
+    module = comp.to_netlist("optimized_design")
 
     aag_lines = AigerExporter(module).get_aag()
     out_spec = module.get_spec()

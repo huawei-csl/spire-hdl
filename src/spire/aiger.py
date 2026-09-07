@@ -823,7 +823,7 @@ class AigerImporter:
     def __init__(self, lines: List[str]):
         self.lines = lines 
 
-    def get_spire_module(self, name: str | None = None) -> Netlist:
+    def get_spire_netlist(self, name: str | None = None) -> Netlist:
         if name is None:
             name = "ImportedModule"
         m = conv_aag_into_graph(self.lines,
@@ -833,6 +833,8 @@ class AigerImporter:
         for p in m._ports:
             p.name = p.name.replace("[", "_").replace("]", "_")
         return m
+
+    get_spire_module = get_spire_netlist  # deprecated; kept for one release
 
 
 def main_small_tst():
@@ -853,7 +855,7 @@ def main_small_tst():
 
     # import back to Spire Netlist
     importer = AigerImporter(aag_lines)
-    spire_module = importer.get_spire_module()
+    spire_module = importer.get_spire_netlist()
 
     # print hdl
     print("Original Netlist Verilog:")

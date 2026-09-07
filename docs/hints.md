@@ -125,7 +125,8 @@ for i in range(M):
 
 ## Synthesis-quality notes
 
-- **Optimize the structure first, then reach for the optimizer tools.** Width narrowing,
+- **Optimize the structure first (sharing / common subexpression / associativity /
+  reuse / width narrowing / redundant work), then reach for the optimizer tools.** Width narrowing,
   restructuring, and removing redundant work usually pay far more than any automatic pass — and a
   blanket arithmetic/optimizer pass applied to an unoptimized datapath often makes it WORSE
   (bigger operators replaced one-for-one). Apply tool passes late, to an already-lean design, and

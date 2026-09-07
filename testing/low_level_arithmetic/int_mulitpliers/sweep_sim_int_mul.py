@@ -228,7 +228,7 @@ def main():
             aag = AigerExporter(m).get_aag()
             if optim:
                 aag = optimize_aag(aag, n_iter_optimizations=10)
-            m_aig = AigerImporter(aag).get_spire_module()
+            m_aig = AigerImporter(aag).get_spire_netlist()
             IOCollector().group(m_aig, spec) # regroup I/Os to match original port widths
 
             # AIG network test sim
