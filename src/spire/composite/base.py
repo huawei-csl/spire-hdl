@@ -4,9 +4,10 @@
 from __future__ import annotations
 import warnings
 from abc import abstractmethod
-from typing import List, Tuple, Type, TypeVar, Union
+from dataclasses import fields, is_dataclass
+from typing import Any, List, Tuple, Type, TypeVar, Union
 
-from spire.expr import Expr, Signal, as_expr, fit_width
+from spire.expr import Expr, Signal, Wire, as_expr, fit_width
 from spire.hdl_traits import BitSerializable, Assignable, BitSerializableLike
 
 
@@ -24,9 +25,8 @@ class HDLComposite(BitSerializable, Assignable):
     write side (``<<=``) from :class:`Assignable`; subclasses supply only the *structure*
     via ``to_list_first_level`` and the *drive* via ``assign``.
 
-    Requirements for subclasses:
-      - to_list_first_level(self) -> List[BitSerializable]
-      - wire_like(cls, *shape_args, **shape_kwargs) -> instance
+    Subclasses supply ``to_list_first_level(self) -> List[BitSerializable]``; everything else,
+    including shape cloning (``get_wire_clone``), has a working default here.
     """
 
     @abstractmethod
@@ -47,6 +47,45 @@ class HDLComposite(BitSerializable, Assignable):
         return flat_list
 
     # width / to_bits are inherited from BitSerializable.
+
+    # -------- Shape cloning --------
+
+    def get_wire_clone(self: SelfComp) -> SelfComp:
+        """Return a new composite with the same shape as this one, but with fresh wires.
+
+        Each leaf becomes a new ``Wire`` of the same type. Nested composites are cloned the same
+        way. Everything else (widths, a ``FixedPointType``, an adder config) is shared with the
+        original, since it describes the shape rather than being part of it.
+
+        ``__init__`` is not called. The shape usually depends on constructor arguments that the
+        object does not keep (``Packet(n=4)``), so the attributes are copied directly instead.
+
+        Override this when a plain copy is wrong for your class: for example when the clone is
+        built from a type (``FixedPoint``), when the shape is fixed by the class
+        (``TemplateRecord``), when cloning makes no sense (``CompositeRegister``), or when the
+        object carries state such as a view flag that a fresh copy must not inherit.
+        """
+        clone = object.__new__(type(self))
+        for key, val in self._clone_attrs():
+            setattr(clone, key, _clone_shape(val))
+        return clone
+
+    def _clone_attrs(self) -> List[Tuple[str, Any]]:
+        """(attribute, value) pairs for ``get_wire_clone`` to carry over: dataclass fields first,
+        in declaration order (leaf order follows it), then any other instance attribute."""
+        declared: List[Tuple[str, Any]] = []
+        if is_dataclass(self):
+            declared = [(f.name, getattr(self, f.name)) for f in fields(self)]
+        seen = {key for key, _ in declared}
+        return declared + [(k, v) for k, v in vars(self).items() if k not in seen]
+
+    @classmethod
+    def wire_like(cls: Type[SelfComp], template: SelfComp) -> SelfComp:
+        """Shim for :meth:`get_wire_clone` — prefer ``template.get_wire_clone()``.
+
+        Kept as the older spelling, and because it reads better where the shape comes from a
+        *type* instead of a value: ``FixedPoint.wire_like(q8_8)``."""
+        return template.get_wire_clone()
 
     def _named_children(self) -> List[Tuple[str, BitSerializable]]:
         """(local_key, child) pairs for one structural level. Default keys are positional
@@ -196,6 +235,28 @@ class HDLComposite(BitSerializable, Assignable):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(width={self.width})"
+
+
+def _clone_shape(val: Any) -> Any:
+    """Clone one attribute value for :meth:`HDLComposite.get_wire_clone`.
+
+    Leaves become fresh wires and composites are cloned recursively. Lists, tuples and dicts are
+    rebuilt element by element, so children stored in a list (``Array._elems``) are cloned too.
+    Anything else describes the shape and is returned as is.
+    """
+    if isinstance(val, HDLComposite):
+        return val.get_wire_clone()
+    if isinstance(val, Expr):
+        # Keep the leaf's name if it has one. A view leaf such as `FixedPoint(bits=a + b)` has
+        # none, so it gets the usual placeholder name (made unique per netlist at emission).
+        return Wire(val.typ, name=getattr(val, "name", None) or "sig")
+    if isinstance(val, list):
+        return [_clone_shape(v) for v in val]
+    if isinstance(val, tuple):
+        return tuple(_clone_shape(v) for v in val)
+    if isinstance(val, dict):
+        return {k: _clone_shape(v) for k, v in val.items()}
+    return val
 
 
 # A "Connectable" is anything that can report (leaf, direction) pairs: an HDLComposite or a

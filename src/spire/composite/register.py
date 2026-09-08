@@ -57,9 +57,14 @@ class CompositeRegister(HDLComposite, Generic[T_Comp]):
         """Expose the underlying register as the sole leaf."""
         return [self._reg]
 
-    @classmethod
-    def wire_like(cls, *args, **kwargs):
-        raise TypeError("CompositeRegister.wire_like() is not meaningful")
+    def get_wire_clone(self):
+        """Refused: a register *is* storage, so a wire-backed copy of it is not a thing. Clone (or
+        pipeline) its structured ``.value`` view instead. Also covers ``wire_like()``, which
+        delegates here."""
+        raise TypeError(
+            "CompositeRegister.get_wire_clone() is not meaningful — a register is storage, not a "
+            "shape. Use `.value` for a structured view of its contents and clone that."
+        )
 
     # ---- Convenience views ----
 

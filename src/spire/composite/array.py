@@ -3,8 +3,6 @@ from typing import Iterable, List, Sequence, Union, Tuple
 from spire.composite.base import HDLComposite
 from spire.expr import (
     Expr,
-    Signal,
-    Wire,
     as_expr,
 )
 from spire.hdl_traits import BitSerializable, BitSerializableLike
@@ -154,32 +152,8 @@ class Array(HDLComposite):
                 raise TypeError(f"Unsupported element type in width(): {type(elem)}")
         return total
 
-    @classmethod
-    def wire_like(cls, template: "Array") -> "Array":
-        """
-        Create a 'wire-filled' Array with the same recursive shape as 'template'.
-
-        Convention:
-          - Expr leaves        → new Wire(typ)
-          - HDLComposite leaves → type(elem).wire_like(elem)
-
-        So any composite type you put inside Array (Bundle, FixedPoint, nested Array, ...)
-        should implement `@classmethod wire_like(template_instance)`.
-        """
-        new_elems: List[ArrayElem] = []
-
-        for elem in template._elems:
-            if isinstance(elem, Expr):
-                if isinstance(elem, Signal):
-                    new_elems.append(Wire(elem.typ, name=elem.name))
-                else:
-                    new_elems.append(Wire(elem.typ))
-            elif isinstance(elem, HDLComposite):
-                new_elems.append(type(elem).wire_like(elem))
-            else:
-                raise TypeError(f"Unsupported element type in Array.wire_like: {type(elem)}")
-
-        return cls(new_elems)
+    # get_wire_clone() / wire_like() need no override: the generic clone in HDLComposite rebuilds
+    # `_elems` element-wise (leaves as fresh wires, nested composites recursively).
 
     def to_list_first_level(self) -> List[BitSerializable]:
         list_first_level: List[BitSerializable] = []

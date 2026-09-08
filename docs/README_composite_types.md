@@ -26,7 +26,14 @@ Every composite exposes:
 - `width` — total bit width.
 - `assign(rhs)` / `<<= rhs` — *packed* assignment: pack rhs to bits, slice across leaves.
 - `@= rhs` — *element-wise* assignment: drive each leaf from the matching rhs leaf.
-- `wire_like(template)` — classmethod returning a fresh, wire-backed instance with the same shape.
+- `get_wire_clone()` — a fresh, wire-backed value with the same *shape* and no wiring. Generic:
+  implemented once on `HDLComposite`, so a new composite type gets it for free. Leaves become new
+  `Wire`s and nested composites clone recursively; descriptions (widths, a `FixedPointType`, an
+  adder config) are shared with the template. Override only where construction genuinely differs —
+  a type-driven factory (`FixedPoint`), a class-fixed shape (`TemplateRecord`), or a value that
+  must not be cloned (`CompositeRegister` — clone its `.value` instead).
+- `wire_like(template)` — classmethod shim onto `get_wire_clone()`. `FixedPoint` / `FloatingPoint`
+  also accept their *type* (`FixedPoint.wire_like(q8_8)`), which needs no template value.
 
 ---
 

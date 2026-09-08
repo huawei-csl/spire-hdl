@@ -109,8 +109,8 @@ def _clone_template(tmpl: BitSerializable, key: str) -> BitSerializable:
     """Clone a class-level field template so each instance gets its own leaves.
 
     A ``Signal`` is rebuilt fresh, preserving ``kind`` (wire/input/output/reg) and any reg
-    ``init`` and taking ``key`` as its port name; a nested composite clones via its
-    ``wire_like`` factory (``Array`` / fixed / float / nested record).
+    ``init`` and taking ``key`` as its port name; a nested composite clones its own shape
+    (``Array`` / fixed / float / nested record).
     """
     if isinstance(tmpl, Signal):
         clone = Signal(typ=tmpl.typ, kind=tmpl.kind, name=key)
@@ -118,7 +118,7 @@ def _clone_template(tmpl: BitSerializable, key: str) -> BitSerializable:
             clone._init = tmpl._init
         return clone
     if isinstance(tmpl, HDLComposite):
-        return type(tmpl).wire_like(tmpl)
+        return tmpl.get_wire_clone()
     raise TypeError(f"Unsupported record field template for {key!r}: {type(tmpl)}")
 
 
