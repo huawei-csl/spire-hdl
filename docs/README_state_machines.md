@@ -61,7 +61,7 @@ class Traffic(Component):
             with default():
                 state_reg <<= TrafficFSM.RED
 
-print(Traffic().to_verilog(name="traffic", with_clock=True, with_reset=False))
+print(Traffic().to_verilog(name="traffic", with_reset=False))
 ```
 
 The emitted Verilog selects the next state on each branch from the 2-bit
@@ -114,7 +114,7 @@ with switch_(state_reg):
 ## Reset / initial value
 
 `Register(typ, init=expr, name=...)` declares the register's reset value.
-Emitting with `with_reset=True` (e.g. `to_verilog(..., with_reset=True)`) wires
+Emitting with `with_reset=True` (the default whenever the design has registers) wires
 the implicit `rst` input to an async reset; with `with_reset=False`, the `init=`
 value is just the initial state at $t=0$ in simulation (synth tools may treat it
 as a power-on default).

@@ -57,7 +57,7 @@ class Scratch(Component):
         mem.io.read_addr    <<= self.io.ar
         self.io.dout        <<= mem.io.read_data
 
-module = Scratch().to_netlist(name="scratch", with_clock=True, with_reset=True)
+module = Scratch().to_netlist(name="scratch")
 ```
 
 ### Constructor

@@ -46,7 +46,7 @@ class MacDemo(Component):
 want the framework clock and reset:
 
 ```python
-net = MacDemo().to_netlist("mac", with_clock=True, with_reset=True)
+net = MacDemo().to_netlist("mac")
 sim = Simulator(net)
 
 sim.reset()                    # assert rst: registers take their init values
@@ -104,7 +104,7 @@ tools are involved:
 ```python
 from spire.various.vcd_writer import write_vcd
 
-net = MacDemo().to_netlist("mac", with_clock=True, with_reset=True)
+net = MacDemo().to_netlist("mac")
 sim = Simulator(net)
 sim.trace_enabled = True       # snapshot all traced expressions at every eval()/step()
 
@@ -140,7 +140,7 @@ compares each output against what the Spire simulator produced:
 ```python
 from spire.verilog_testbench import TestbenchGenSimulator
 
-net = MacDemo().to_netlist("mac", with_clock=True, with_reset=True)
+net = MacDemo().to_netlist("mac")
 tb = TestbenchGenSimulator(net)
 
 tb.reset()

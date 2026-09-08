@@ -45,10 +45,10 @@ class _RomTop(Component):
         self.io.dout <<= rom.io.read_data
 
 
-def test_fifo_default_emit_raises_instead_of_clockless_rtl():
+def test_fifo_explicit_clockless_emit_raises_instead_of_clockless_rtl():
     reset_shared_cache()
     with pytest.raises(ValueError, match="with_clock=True"):
-        _FifoTop().to_verilog("fifo_top")  # default: with_clock=False
+        _FifoTop().to_verilog("fifo_top", with_clock=False)  # default (None) would auto-add the clock
 
 
 def test_fifo_with_clock_emits_clocked_rtl():
@@ -67,7 +67,7 @@ def test_async_rom_emits_clockless():
 def test_registered_rom_requires_clock():
     reset_shared_cache()
     with pytest.raises(ValueError, match="with_clock=True"):
-        _RomTop(registered=True).to_verilog("rom_top")
+        _RomTop(registered=True).to_verilog("rom_top", with_clock=False)
     v = _RomTop(registered=True).to_verilog("rom_top", with_clock=True, with_reset=True)
     assert "posedge clk" in v
 
