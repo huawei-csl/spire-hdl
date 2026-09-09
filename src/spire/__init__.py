@@ -22,11 +22,12 @@ from spire.simulator import Simulator  # noqa: E402
 from spire.selection_emission import (  # noqa: E402
     SelectionEmissionConfig, selection_topology)
 from spire import reduce  # noqa: E402  # submodule: spire.reduce.max_(...) etc.
+from spire.pipeline import pipeline  # noqa: E402
 
 __all__ = [
     "Component", "CustomVerilogComponent", "ImportedComponent",
     "IORecord", "Input", "Output", "Flipped", "connect",
-    "Signal", "Wire", "Register",
+    "Signal", "Wire", "Register", "pipeline",
     "Bool", "UInt", "SInt",
     "Simulator",
     "SelectionEmissionConfig", "selection_topology",

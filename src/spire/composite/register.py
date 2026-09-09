@@ -1,28 +1,25 @@
-from typing import Generic, List, Optional
-from typing import Type, TypeVar, Union
+from typing import Generic, List, Optional, Type, Union
+
 from spire.composite.base import HDLComposite, T_Comp
-from spire.expr import Expr, ExprLike, Signal, as_expr, fit_width
+from spire.expr import Expr, ExprLike, Signal
 from spire.hdl_traits import BitSerializable
 
 
 class CompositeRegister(HDLComposite, Generic[T_Comp]):
-    """
-    Generic register that stores a packed HDLComposite value.
+    """A register that stores a packed composite value.
 
-    Usage:
-        # Register that holds a FixedPoint(16, frac=8)
-        acc = CompositeRegister(FixedPoint, total_width=16, frac_width=8, signed=True, name="acc_reg")
+    Build it from a type and its constructor arguments, or from a value you already have::
 
-        # Read as a FixedPoint:
-        acc_val = acc.value
+        acc = CompositeRegister(FixedPoint, q8_8, name="acc")   # class + constructor args
+        acc = CompositeRegister.like(a, name="acc")             # same shape as the value `a`
 
-        # Assign packed:
-        acc <<= acc_val  # or acc <<= some_other_fixed
+        acc <<= a + b       # next-state assignment (packed)
+        y = acc.value       # structured view of the contents, here a FixedPoint
 
-    Internally:
-      - A single Signal(kind='reg') bitvector is allocated.
-      - value/Q provide a structured HDLComposite view via agg_cls.from_bits(...).
-      - <<= drives the register's next-state (reg driver).
+    One ``Signal(kind="reg")`` named ``name`` holds the bits. ``.value`` builds a fresh view every
+    time it is read, so bind it once. The view's leaves are named after the register:
+    ``<name>_<field path>`` when there are several (``acc_valid``, ``vec_0``), ``<name>_q`` when
+    there is one.
     """
 
     def __init__(
@@ -33,19 +30,30 @@ class CompositeRegister(HDLComposite, Generic[T_Comp]):
         init: Optional[Union[T_Comp, ExprLike]] = None,
         **agg_kwargs,
     ):
-        # Store metadata so we can rebuild a structured view later
-        self._agg_cls: Type[T_Comp] = agg_cls
-        self._agg_args = agg_args
-        self._agg_kwargs = dict(agg_kwargs)
+        self._setup(agg_cls.wire_like(agg_cls(*agg_args, **agg_kwargs)), name, init)
 
-        # Use a wire-like instance to infer shape/width
-        proto: T_Comp = agg_cls.wire_like(agg_cls(*agg_args, **agg_kwargs))
-        bits_typ = proto.to_bits().typ
+    @classmethod
+    def like(
+        cls,
+        template: T_Comp,
+        name: Optional[str] = None,
+        init: Optional[ExprLike] = None,
+    ) -> "CompositeRegister[T_Comp]":
+        """A register with the same shape as ``template``.
 
-        reg_name = name or f"reg_{agg_cls.__name__}_{id(self)}"
-        self._reg = Signal(typ=bits_typ, kind="reg", name=reg_name)
+        Use this when you hold a value rather than a type. The shape comes from
+        ``template.get_wire_clone()``, so records and arrays work without restating their
+        constructor arguments. The template itself is left untouched.
+        """
+        reg = object.__new__(cls)
+        reg._setup(template.get_wire_clone(), name, init)
+        return reg
 
-        # Optional init value: a constant packed integer (composite leaves are wires, never constants).
+    def _setup(self, proto: T_Comp, name: Optional[str], init) -> None:
+        self._proto = proto  # wire-backed shape; every `.value` read clones it
+        self.name = name or f"reg_{type(proto).__name__}_{id(self)}"
+        self._reg = Signal(typ=proto.to_bits().typ, kind="reg", name=self.name)
+        # Composite leaves are wires, never constants, so init must be a packed constant.
         if init is not None:
             if isinstance(init, HDLComposite):
                 raise ValueError("CompositeRegister init must be a constant packed value (int), not a composite instance")
@@ -58,7 +66,7 @@ class CompositeRegister(HDLComposite, Generic[T_Comp]):
         return [self._reg]
 
     def get_wire_clone(self):
-        """Refused: a register *is* storage, so a wire-backed copy of it is not a thing. Clone (or
+        """Refused: a register is storage, so a wire-backed copy of it is not a thing. Clone (or
         pipeline) its structured ``.value`` view instead. Also covers ``wire_like()``, which
         delegates here."""
         raise TypeError(
@@ -70,12 +78,27 @@ class CompositeRegister(HDLComposite, Generic[T_Comp]):
 
     @property
     def value(self) -> T_Comp:
-        """Structured view of the register contents."""
-        value = self._agg_cls(*self._agg_args, **self._agg_kwargs)
-        value <<= self._reg
-        return value
+        """A structured view of the register contents (a new view on every read)."""
+        view = self._proto.get_wire_clone()
+        _name_view_leaves(view, self.name)
+        view <<= self._reg
+        return view
 
     @property
     def bits(self) -> Expr:
         """Raw register bits as Expr."""
         return self._reg
+
+
+def _name_view_leaves(view: HDLComposite, prefix: str) -> None:
+    """Name a view's leaves after its register: ``<prefix>_<field path>``, or ``<prefix>_q`` for a
+    single leaf. Names the clone inherited from its template are dropped first, since they were
+    chosen for the template, not for this view."""
+    leaves = view.to_list()
+    for leaf in leaves:
+        if isinstance(leaf, Signal):
+            leaf._given_name = None
+    if len(leaves) == 1 and isinstance(leaves[0], Signal):
+        leaves[0].name = f"{prefix}_q"
+    else:
+        view._assign_port_names(prefix)
