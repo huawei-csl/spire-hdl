@@ -97,13 +97,17 @@ class FloatingPoint(HDLComposite):
         arg: Union["FloatingPoint", FloatingPointType],
         name: Optional[str] = None,
     ) -> "FloatingPoint":
+        """Wire-backed FloatingPoint from a template instance *or* from a bare
+        ``FloatingPointType`` — the type form is why this override exists (see
+        :meth:`FixedPoint.wire_like`). Cloning a value delegates to ``get_wire_clone()``, which
+        also carries the template's ``adder_cfg`` / ``mult_cfg`` over.
+        """
         if isinstance(arg, FloatingPoint):
-            ftype = arg.ftype
-        elif isinstance(arg, FloatingPointType):
-            ftype = arg
-        else:
-            raise TypeError("FloatingPoint.wire_like expects FloatingPoint or FloatingPointType, " f"got {type(arg)}")
-        return cls(ftype, name=name, bits=None)
+            return arg.get_wire_clone() if name is None else cls(
+                arg.ftype, name=name, adder_cfg=arg.adder_cfg, mult_cfg=arg.mult_cfg)
+        if isinstance(arg, FloatingPointType):
+            return cls(arg, name=name, bits=None)
+        raise TypeError("FloatingPoint.wire_like expects FloatingPoint or FloatingPointType, " f"got {type(arg)}")
 
     # ---------------------------------
     # Floating-point add helper

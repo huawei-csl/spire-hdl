@@ -43,6 +43,8 @@ Mult8().to_verilog_file("design.v", name="mult8")
 - `Const(value, type)` — constant literal, e.g. `Const(0, UInt(1))`, `Const(3, SInt(8))` (from `spire.expr`).
 - `Wire(UInt(N))` / `Register(UInt(N), init=0)` — internal wire / clocked register (from `spire`).
   **No need to name them** — names are auto-inferred from the Python variable.
+- `pipeline(sig, cycles=1)` — delay a signal (or any composite) by N registers, same type back
+  (from `spire`). See [Sequential logic](#sequential-logic-clock--reset).
 - Operators: `+ - * & | ^ ~ << >> == != < <= > >=`
 - `mux(sel, a, b)` — ternary `sel ? a : b` (from `spire.expr`).
 - `cat(a, b, ...)` — concatenation, **LSB first** (`cat(a, b)` puts `a` in the lower bits) (from `spire.expr`).
@@ -74,6 +76,21 @@ class Mac(Component):
 
 Mac().to_verilog_file("design.v", name="mac")
 ```
+
+To *delay* a value rather than hold state, use `pipeline` instead of declaring the registers —
+it returns the same type as its input, so aggregates come back as aggregates:
+
+```python
+from spire import pipeline
+
+y  = pipeline(x)                        # 1 cycle (default), stages named x_d1 …
+y  = pipeline(x, 3)                     # 3 chained registers
+y  = pipeline(x, 2, enable=fire)        # holds while `enable` is low
+vd = pipeline(vec, 2)                   # Array/record/FixedPoint → same shape, delayed
+```
+
+Each call builds its own delay line (registers are state, so nothing is shared between calls);
+pass `init=` for a reset value on every stage, or `name=` to choose the stage prefix.
 
 ## Hierarchical designs
 

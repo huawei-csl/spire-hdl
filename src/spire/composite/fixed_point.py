@@ -135,18 +135,17 @@ class FixedPoint(HDLComposite):
         arg: Union["FixedPoint", FixedPointType],
         name: Optional[str] = None,
     ) -> "FixedPoint":
-        """
-        Create a wire-backed FixedPoint with the same type as:
-          - a template FixedPoint instance, or
-          - an explicit FixedPointType.
+        """Wire-backed FixedPoint from a template instance *or* from a bare ``FixedPointType``.
+
+        The type form is why this override exists: a fixed-point shape is fully described by its
+        ``FixedPointType``, so it can be built without a value to copy. Cloning a value is
+        :meth:`~spire.composite.base.HDLComposite.get_wire_clone`, which this delegates to.
         """
         if isinstance(arg, FixedPoint):
-            ftype = arg.ftype
-        elif isinstance(arg, FixedPointType):
-            ftype = arg
-        else:
-            raise TypeError(f"FixedPoint.wire_like expects FixedPoint or FixedPointType, got {type(arg)}")
-        return cls(ftype, name=name, bits=None)
+            return arg.get_wire_clone() if name is None else cls(arg.ftype, name=name)
+        if isinstance(arg, FixedPointType):
+            return cls(arg, name=name, bits=None)
+        raise TypeError(f"FixedPoint.wire_like expects FixedPoint or FixedPointType, got {type(arg)}")
 
     # ---------------------------------
     # Internal helpers for arithmetic

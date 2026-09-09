@@ -74,7 +74,14 @@ def _claim_or_gate(tracker: DisjointnessTracker, cond: Expr, covered: Expr) -> E
     both forms compute identical values and the bare condition is emitted.
     Arms that overlap an earlier arm (or don't classify as ``sel == const``
     labels at all) fail the claim and keep the gate."""
-    return cond if tracker.claim(cond) else cond & ~covered
+    claimed = tracker.claim(cond)  # always run: it records this arm's labels for later arms
+    if claimed or _is_false_const(covered):
+        return cond  # nothing earlier to be stolen from: the first arm never needs a gate
+    return cond & ~covered
+
+
+def _is_false_const(e: Expr) -> bool:
+    return isinstance(e, Const) and e.value == 0
 
 
 @contextlib.contextmanager
@@ -157,7 +164,7 @@ class _IfChain:
         cond_expr = as_expr(condition)
         _validate_bool(cond_expr, context=context)
         gated = _claim_or_gate(self.tracker, cond_expr, self.covered)
-        self.covered = self.covered | gated
+        self.covered = gated if _is_false_const(self.covered) else self.covered | gated
         return gated
 
     def default(self) -> Expr:

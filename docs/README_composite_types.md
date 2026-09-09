@@ -26,7 +26,15 @@ Every composite exposes:
 - `width` — total bit width.
 - `assign(rhs)` / `<<= rhs` — *packed* assignment: pack rhs to bits, slice across leaves.
 - `@= rhs` — *element-wise* assignment: drive each leaf from the matching rhs leaf.
-- `wire_like(template)` — classmethod returning a fresh, wire-backed instance with the same shape.
+- `get_wire_clone()` — a fresh, wire-backed value with the same *shape* and no wiring. Generic:
+  implemented once on `HDLComposite`, so a new composite type gets it for free. Leaves become new
+  `Wire`s and nested composites clone recursively; descriptions (widths, a `FixedPointType`, an
+  adder config) are shared with the template. Override only where construction genuinely differs —
+  a type-driven factory (`FixedPoint`), a class-fixed shape (`TemplateRecord`), or a value that
+  must not be cloned (`CompositeRegister` — clone its `.value` instead).
+- `wire_like(template)` — classmethod shim onto `get_wire_clone()`. `FixedPoint` / `FloatingPoint`
+  also accept their *type* (`FixedPoint.wire_like(q8_8)`), which needs no template value.
+- `pipeline(value, cycles)` — see [Delaying a composite](#delaying-a-composite).
 
 ---
 
@@ -189,6 +197,20 @@ Wraps any composite type in a single register: one packed `Signal(kind="reg")` u
 structured `.value` view on top.  Use it when you want a register whose contents you read and
 write as a structured composite, not raw bits.
 
+Build it from a class plus its constructor arguments, or from a value you already have with
+`CompositeRegister.like(value)` — the latter needs no arguments restated, so it works for
+records and arrays too:
+
+```python
+pipr = CompositeRegister.like(a, name="a_reg")   # same shape as `a`, whatever its type
+pipr <<= a                                        # one pipeline stage, by hand
+b = pipr.value                                    # a's type, one cycle later
+```
+
+The register is named `name`; the view's leaves are named after it — `a_reg_valid`, `a_reg_data`
+for a record, `a_reg_0`, `a_reg_1` for an array, `a_reg_q` for a single-leaf composite. `.value`
+builds a new view on every read, so bind it once.
+
 ```python
 from spire import Component, IORecord, Input, Output, UInt
 from spire.composite.register import CompositeRegister
@@ -210,6 +232,31 @@ class AccDemo(Component):
         acc <<= acc_val.add(x_q, out_type=q8_8)   # next-state assignment
         self.io.y <<= acc.bits        # driving an output collects the register automatically
 ```
+
+---
+
+## Delaying a composite
+
+`CompositeRegister` is for state you read and write. To simply *delay* a composite — retiming a
+datapath, matching latency across two paths — use `pipeline`: it returns a new instance of the
+same composite type, so field access, indexing and arithmetic keep working on the delayed value.
+
+```python
+from spire import pipeline
+
+vec_d  = pipeline(vec, 2)                  # Array  -> Array,  2 cycles later
+pkt_d  = pipeline(pkt)                      # record -> record, 1 cycle (default)
+acc_d  = pipeline(acc, 2)                   # CompositeRegister -> its .value type, delayed
+fp_d   = pipeline(fp, 2, enable=fire)       # stalls while `enable` is low
+```
+
+Each stage is a `CompositeRegister.like(value)` named `<name>_d1`, `<name>_d2`, …, and the result
+is the last stage's `.value` (leaves `pkt_d2_valid`, `vec_d2_0`, or `fp_d2_q` for one leaf) — so
+`pipeline(a)` is exactly the by-hand stage shown above. Any composite works, custom ones included.
+A `CompositeRegister` input is delayed via its `.value`.
+See [`testing/test_pipeline.py`](../testing/test_pipeline.py).
+
+---
 
 Working tests demonstrate the full simulation flow:
 [`testing/test_fixed_point.py`](../testing/test_fixed_point.py),
