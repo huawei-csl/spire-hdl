@@ -88,40 +88,43 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
 
     # convenience helpers -------------------------------------------------------
 
-    def to_verilog(self, name: Optional[str] = None, *, with_clock: bool = False,
-                   with_reset: bool = False, **emit_opts) -> str:
+    def to_verilog(self, name: Optional[str] = None, *, with_clock: Optional[bool] = None,
+                   with_reset: Optional[bool] = None, **emit_opts) -> str:
         """Lower to the netlist IR and emit Verilog. Users never touch the IR directly."""
         return self.to_netlist(name, with_clock=with_clock, with_reset=with_reset).to_verilog(**emit_opts)
 
-    def to_verilog_file(self, filepath: str, name: Optional[str] = None, *, with_clock: bool = False,
-                        with_reset: bool = False, **emit_opts) -> None:
+    def to_verilog_file(self, filepath: str, name: Optional[str] = None, *, with_clock: Optional[bool] = None,
+                        with_reset: Optional[bool] = None, **emit_opts) -> None:
         self.to_netlist(name, with_clock=with_clock, with_reset=with_reset).to_verilog_file(filepath, **emit_opts)
 
-    def to_aag(self, name: Optional[str] = None, *, with_clock: bool = False,
-               with_reset: bool = False) -> List[str]:
+    def to_aag(self, name: Optional[str] = None, *, with_clock: Optional[bool] = None,
+               with_reset: Optional[bool] = None) -> List[str]:
         """Lower to the netlist IR and export AIGER (AAG) lines."""
         from spire.aiger import AigerExporter
         return AigerExporter(self.to_netlist(name, with_clock=with_clock, with_reset=with_reset)).get_aag()
 
-    def analyze(self, name: Optional[str] = None, *, with_clock: bool = False,
-                with_reset: bool = False, **opts) -> GraphReport:
+    def analyze(self, name: Optional[str] = None, *, with_clock: Optional[bool] = None,
+                with_reset: Optional[bool] = None, **opts) -> GraphReport:
         """Lower to the netlist IR and run combinational-cone analysis."""
         return self.to_netlist(name, with_clock=with_clock, with_reset=with_reset).analyze(**opts)
 
-    def to_netlist(self, name: Optional[str] = None, with_clock: bool = False, with_reset: bool = False) -> 'Netlist':
-        module = Netlist(
-            name or self.name,  # deterministic default: the component's class name
-            with_clock=with_clock,
-            with_reset=with_reset,
-        )
+    def to_netlist(self, name: Optional[str] = None, with_clock: Optional[bool] = None,
+                   with_reset: Optional[bool] = None) -> 'Netlist':
+        """Lower to the netlist IR. A flag left at ``None`` (the default) follows the design: ``clk``/``rst`` are
+        added iff it holds registers or clocked memories. Explicit True/False always wins."""
+        # Deterministic default name: the component's class name. Clock/reset are attached after signal
+        # collection, once the auto mode can see the registers.
+        module = Netlist(name or self.name, with_clock=False, with_reset=False)
 
         for sig in self.get_ios().to_list():
             sig: Signal
 
-            # Clock and reset are framework-provided, never IO leaves: request them via with_clock/with_reset.
+            # Clock and reset are framework-provided, never IO leaves: added automatically for registered designs,
+            # or requested via with_clock/with_reset.
             if sig.name in ("clk", "rst"):
                 raise ValueError(f"IO leaf '{sig.name}': clock/reset are not declared in a component's IO — "
-                                 f"pass with_clock=True / with_reset=True to to_netlist()/to_verilog() instead")
+                                 f"they are added automatically when the design has registers (or pass "
+                                 f"with_clock=True / with_reset=True to to_netlist()/to_verilog())")
 
             if sig.kind == "input":
                 module.add_input(sig)
@@ -131,7 +134,8 @@ class Component(abc.ABC, metaclass=_ComponentMeta):
                 raise ValueError(f"Signal {sig.name} has unsupported kind '{sig.kind}'")
         module.component = self # can be used for debugging
         module.collect_signals()
-        return module 
+        module._attach_clock_reset(with_clock, with_reset)   # None resolves against the collected design
+        return module
 
     def load_netlist(self, net: 'Netlist', group=False) -> Self:
         if group:

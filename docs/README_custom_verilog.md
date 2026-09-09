@@ -95,7 +95,8 @@ from spire import Component, CustomVerilogComponent, IORecord, Input, Output, Bo
 class VendorRAM(CustomVerilogComponent):
     def __init__(self):
         # `clk` is not an IO field — it's the implicit clock added by `with_clock=True`
-        # at emit time, which the Verilog body below references directly.
+        # at emit time, which the Verilog body below references directly. The automatic
+        # clock detection only sees Register/Memory signals, so a custom body must ask for it.
         self.io = IORecord(
             addr     = Input(UInt(10)),
             data_in  = Input(UInt(32)),

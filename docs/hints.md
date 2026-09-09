@@ -54,8 +54,9 @@ Mult8().to_verilog_file("design.v", name="mult8")
 
 ## Sequential logic (clock / reset)
 
-Use `Register` for state and drive it with `<<=`. Pass `with_clock=True` (and `with_reset=True`
-when a register has a reset value) to `to_verilog_file`:
+Use `Register` for state and drive it with `<<=`. Emission (`to_verilog`, `to_verilog_file`, `to_netlist`,
+...) adds the `clk`/`rst` inputs by itself whenever the design contains registers or clocked memories.
+Override with `with_clock=`/`with_reset=` only when needed, e.g. `with_reset=False` for no async reset:
 
 ```python
 from spire import Component, IORecord, Input, Output, UInt
@@ -71,7 +72,7 @@ class Mac(Component):
         acc <<= acc + self.io.a * self.io.b
         self.io.acc_out <<= acc
 
-Mac().to_verilog_file("design.v", name="mac", with_clock=True, with_reset=True)
+Mac().to_verilog_file("design.v", name="mac")
 ```
 
 ## Hierarchical designs

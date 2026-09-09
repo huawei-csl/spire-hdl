@@ -16,6 +16,10 @@ Topologies (``topology=`` on each helper):
   * ``"matrix"``    — max/min/argmax/argmin only: all N(N-1)/2 comparisons in
                       parallel, one-hot winner select. Shallowest, O(N^2) area.
 
+``compare=`` on max/min/argmax/argmin picks the comparator inside the fold:
+``"ripple"`` (default, plain ``>=``) or ``"prefix"`` — a log-depth (greater,
+equal) reduction, worth it when the compare, not the topology, sets the depth.
+
 ``prefix_scan`` returns all N running prefixes at O(log N) depth
 (``"sklansky"`` / ``"brentkung"`` / ``"koggestone"``) — use it when partial
 results are tapped, instead of duplicating a chain.
@@ -57,18 +61,22 @@ def reduce_tree(fn: Callable[[Expr, Expr], Expr], items: Sequence[ExprLike],
     return layer[0]
 
 
-def max_(items: Sequence[ExprLike], topology: str = "tree") -> Expr:
+def max_(items: Sequence[ExprLike], topology: str = "tree",
+         compare: str = "ripple") -> Expr:
     """Max of ``items``."""
+    ge, _ = _cmp_fns(compare)
     if topology == "matrix":
-        return _matrix_select(items, _ge)[0]
-    return reduce_tree(lambda a, b: mux(a >= b, a, b), items, topology)
+        return _matrix_select(items, ge)[0]
+    return reduce_tree(lambda a, b: mux(ge(a, b), a, b), items, topology)
 
 
-def min_(items: Sequence[ExprLike], topology: str = "tree") -> Expr:
+def min_(items: Sequence[ExprLike], topology: str = "tree",
+         compare: str = "ripple") -> Expr:
     """Min of ``items``."""
+    _, le = _cmp_fns(compare)
     if topology == "matrix":
-        return _matrix_select(items, _le)[0]
-    return reduce_tree(lambda a, b: mux(a <= b, a, b), items, topology)
+        return _matrix_select(items, le)[0]
+    return reduce_tree(lambda a, b: mux(le(a, b), a, b), items, topology)
 
 
 def sum_(items: Sequence[ExprLike], topology: str = "tree") -> Expr:
@@ -88,14 +96,16 @@ def clamp_(x: ExprLike, lo: ExprLike, hi: ExprLike) -> Expr:
     return mux(m <= as_expr(hi), m, hi)
 
 
-def argmax_(items: Sequence[ExprLike], topology: str = "tree") -> Tuple[Expr, Expr]:
+def argmax_(items: Sequence[ExprLike], topology: str = "tree",
+            compare: str = "ripple") -> Tuple[Expr, Expr]:
     """(value, index) of the max; leftmost of equal values wins."""
-    return _arg_reduce(items, _ge, topology)
+    return _arg_reduce(items, _cmp_fns(compare)[0], topology)
 
 
-def argmin_(items: Sequence[ExprLike], topology: str = "tree") -> Tuple[Expr, Expr]:
+def argmin_(items: Sequence[ExprLike], topology: str = "tree",
+            compare: str = "ripple") -> Tuple[Expr, Expr]:
     """(value, index) of the min; leftmost of equal values wins."""
-    return _arg_reduce(items, _le, topology)
+    return _arg_reduce(items, _cmp_fns(compare)[1], topology)
 
 
 def prefix_scan(fn: Callable[[Expr, Expr], Expr], items: Sequence[ExprLike],
@@ -147,6 +157,61 @@ def _ge(a: Expr, b: Expr) -> Expr:
 
 def _le(a: Expr, b: Expr) -> Expr:
     return a <= b
+
+
+def _cmp_bits(x: Expr, w: int, signed: bool) -> List[Expr]:
+    """LSB-first bit list of ``x`` widened to ``w`` (sign- or zero-extended)."""
+    xw = x.typ.width
+    top = x[xw - 1] if signed else as_expr(Const(0, UInt(1)))
+    return [x[i] if i < xw else top for i in range(w)]
+
+
+def _prefix_ge(a: ExprLike, b: ExprLike) -> Expr:
+    """``a >= b`` as a log-depth (greater, equal) prefix reduction.
+
+    The default ``>=`` lowers to a ripple borrow chain (O(W) deep). Magnitude
+    compare is a prefix problem: per bit emit g=a&~b ("a wins here") and
+    e=~(a^b) ("tie here"), then combine MSB-first with the associative rule
+    (g,e) = (g_hi | e_hi & g_lo, e_hi & e_lo); ``a >= b`` is g | e.
+    """
+    a, b = as_expr(a), as_expr(b)
+    signed = getattr(a.typ, "signed", False) or getattr(b.typ, "signed", False)
+    w = max(a.typ.width, b.typ.width)
+    abits, bbits = _cmp_bits(a, w, signed), _cmp_bits(b, w, signed)
+    if signed:
+        # Flipping the sign bit makes two's-complement order match unsigned order.
+        abits[w - 1], bbits[w - 1] = ~abits[w - 1], ~bbits[w - 1]
+    pairs = [(ai & ~bi, ~(ai ^ bi)) for ai, bi in zip(abits, bbits)][::-1]
+    g, e = _fold_pairs(pairs)
+    return g | e
+
+
+def _fold_pairs(pairs: List[Tuple[Expr, Expr]]) -> Tuple[Expr, Expr]:
+    """Order-preserving balanced fold of the (greater, equal) combine rule."""
+    layer = pairs
+    while len(layer) > 1:
+        nxt = []
+        for i in range(0, len(layer), 2):
+            if i + 1 >= len(layer):
+                nxt.append(layer[i])
+                continue
+            (gh, eh), (gl, el) = layer[i], layer[i + 1]
+            nxt.append((gh | (eh & gl), eh & el))
+        layer = nxt
+    return layer[0]
+
+
+def _prefix_le(a: ExprLike, b: ExprLike) -> Expr:
+    return _prefix_ge(b, a)
+
+
+_COMPARES = {"ripple": (_ge, _le), "prefix": (_prefix_ge, _prefix_le)}
+
+
+def _cmp_fns(compare: str) -> Tuple[Callable, Callable]:
+    if compare not in _COMPARES:
+        raise ValueError(f"unknown compare {compare!r}; expected one of {tuple(_COMPARES)}")
+    return _COMPARES[compare]
 
 
 def _huffman(fn, layer: List[Expr]) -> Expr:

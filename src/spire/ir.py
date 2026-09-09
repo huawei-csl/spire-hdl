@@ -31,16 +31,41 @@ class Netlist:
         self.with_reset = with_reset
         self._signals: List[Signal] = []
         self._ports: List[Signal] = []
-        # default clock/reset inputs
-        if with_clock:
-            self.clk = self.input(Bool(), "clk")
-        else:
-            self.clk = None
-        if with_reset:
-            self.rst = self.input(Bool(), "rst")
-        else:
-            self.rst = None
+        self.clk: Optional[Signal] = None
+        self.rst: Optional[Signal] = None
+        self._attach_clock_reset(with_clock, with_reset)   # default clock/reset inputs
         self.component : Optional["Component"] = None
+
+    def _attach_clock_reset(self, with_clock: Optional[bool], with_reset: Optional[bool]) -> None:
+        """Create the framework ``clk``/``rst`` inputs ahead of the data ports. ``None`` follows the collected
+        design: clock iff registers/clocked memories (or a reset was asked for), reset iff registers and a clock."""
+        if with_clock is None:
+            with_clock = bool(with_reset) or self.needs_clock()
+        if with_reset is None:
+            with_reset = with_clock and self.needs_clock()
+
+        def framework_input(name: str, pos: int) -> Signal:
+            self._check_port_name(name)
+            s = Signal(typ=Bool(), kind="input", name=name)
+            self._signals.insert(pos, s)
+            self._ports.insert(pos, s)
+            return s
+
+        if with_clock and self.clk is None:
+            self.clk = framework_input("clk", 0)
+        if with_reset and self.rst is None:
+            self.rst = framework_input("rst", 1 if self.clk is not None else 0)
+        self.with_clock = self.clk is not None
+        self.with_reset = self.rst is not None
+
+    def _clocked_internals(self) -> List[Signal]:
+        """Internals needing the global clock: every register, plus memories with a write port or reset arm
+        (async ROMs are clockless). Single definition shared by the emitter guard and the auto clock/reset."""
+        return [*self._internals_of(("reg",)), *[m for m in self._internals_of(("mem",)) if m.needs_clock()]]
+
+    def needs_clock(self) -> bool:
+        """True iff the collected design holds registers or clocked memories (call after ``collect_signals``)."""
+        return bool(self._clocked_internals())
 
     # Signal constructors
     def _check_port_name(self, name: str) -> None:
@@ -240,7 +265,7 @@ class Netlist:
 
         # Anything sequential needs a clock — also `_no_emit_drive` registers (their always block
         # lives in a primitive's custom Verilog). Async ROMs are clockless (needs_clock is False).
-        clocked = [*regs_all, *[m for m in self._internals_of(("mem",)) if m.needs_clock()]]
+        clocked = self._clocked_internals()
         if clocked and not self.with_clock:
             raise ValueError(f"Registers/memories present (e.g. '{clocked[0].name}') but the module has "
                              f"no clock input; emit with with_clock=True")
