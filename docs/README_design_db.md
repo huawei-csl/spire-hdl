@@ -72,6 +72,62 @@ designs in a slot are judged by the same yardstick.
 Combinational slots get Tier-0 CEC by default at registration. Sequential slots register
 successfully but stay unverified until a simulation tier is frozen.
 
+### Lean tier (proof-gated admission)
+
+Step-by-step flow with commands, generated files and checks: `README_lean_gate.md`.
+
+A slot can be gated by a machine-checked Lean 4 proof instead of CEC or simulation. The slot's
+canonical spec is generated at freeze and never changes:
+
+```lean
+def Spec.Correct (eval : Inputs → Outputs) : Prop := ∀ i, eval i = GoldenCircuit.eval i
+```
+
+`GoldenCircuit.eval` is the golden's netlist translated to Lean (captured at registration into
+`golden_lean.json`). A candidate is admitted when its submitted proof of
+`implements : Spec.Correct D<hash>_Circuit.eval` checks, where `D<hash>_Circuit.lean` is generated from
+the candidate's netlist by the gate. **The package never writes a proof**; agents or humans do.
+
+Nicer, proven-equivalent formulations are added as **spec layers**, append-only:
+
+```bash
+spire db set-verification --slot mmac --lean                       # freeze: no author, no proof needed
+spire db seed --slot mmac                                          # golden: Spec is its own definition
+spire db add-spec --slot mmac Mmac Mmac.lean MmacProof.lean --author agent:lean-spec-author
+#   Mmac.lean: def Mmac.Correct e := ∀ i, (e i).y.toInt = c + Σ a·b  (integers)
+#   MmacProof.lean: theorem Mmac.equiv : ∀ e, Mmac.Correct e ↔ Spec.Correct e
+spire db verify --slot mmac cand.py --workspace ws                 # no proof yet: writes ws/ (frozen files, layers,
+                                                                   #   admitted designs, D<hash>_Circuit.lean) and says which file to write
+spire db verify --slot mmac cand.py --proof ws/D<hash>_Proof.lean
+spire db insert --slot mmac cand.py --proof ws/D<hash>_Proof.lean --source agent:rtl-lean-proof
+```
+
+A proof may import any layer and any admitted design, so it can be short:
+
+```lean
+-- through a layer: prove the integer statement, convert
+theorem implements : Spec.Correct Da_Circuit.eval := (Mmac.equiv _).mp (by intro i; and_intros <;> (simp [Da_Circuit.eval]; ac_rfl))
+-- delta against an admitted design b that differs by one local rewrite
+theorem step (i : Inputs) : Da_Circuit.eval i = Db_Circuit.eval i := by simp only [Da_Circuit.eval, Db_Circuit.eval, mulSS, BitVec.mul_comm]
+theorem implements : Spec.Correct Da_Circuit.eval := fun i => (step i).trans (Db_Proof.implements i)
+```
+
+Either way the gate checks the same statement and audits the axioms transitively (judged by type, not
+name), so a proof through three layers and two earlier designs is exactly as trustworthy as the pieces
+it imports. Adding a layer never invalidates stored proofs because `Spec.Correct` never changes.
+
+Rejections: `ProofFailed` (does not build; Lean log attached), `ProofRejected` (builds but weakens the
+statement, uses `sorry`, or a disallowed axiom), `SpecRejected` (a layer's `equiv` fails),
+`VerificationFailed` (not spire-native, no proof, custom Verilog, untranslatable construct). Admitted
+designs keep `lean/D<hash>_Circuit.lean`, `lean/D<hash>_Proof.lean`, `lean/axioms.json`, the build log,
+and `depends_on` (the proof's imports) in provenance. `lake` must be installed; its absence is an error,
+never a silent pass. Combinational, spire-native candidates only.
+
+Sim and Lean tiers follow the same shape — freeze an oracle, seed, verify, insert — and differ by design in
+three places: the Lean oracle needs no authored input at all; Lean candidates must be spire-native and carry
+a `--proof`; and specs can be refined afterwards with `add-spec`. `metadocs/LEAN_GATE_TEST_REPORT.md` §3a has
+the stage-by-stage table.
+
 ### Selection
 
 Selection is a pure query over admitted designs and their stored metric blocks. It does not generate
@@ -404,6 +460,7 @@ leave no admitted implementation behind.
 | 0 | CEC against `golden.v` using yosys and `yosys-abc cec` | combinational only | implemented |
 | 1 | Auto simulation harness: corners plus seeded random stimulus (exhaustive for tiny input spaces), golden-simulated outputs, frozen `tb.sv` and `vectors.dat` | sequential, or combinational by choice | implemented |
 | 2 | Authored Python stimulus generator: `generate(ports, n_vectors, seed)` | protocol-heavy sequential designs | implemented |
+| 3 | Lean proof: candidate netlist → Lean model, kernel-checked `implements : Spec.Correct D<hash>_Circuit.eval`; `Spec.Correct` = equivalence to the golden; proven-equivalent spec layers via `add-spec`; proofs may import admitted designs (delta proofs) | combinational, spire-native candidates | implemented (see *Lean tier* above) |
 
 ### CEC
 
@@ -423,7 +480,7 @@ Freezing a sim verification:
 2. stores the input and expected-output trace as `vectors.dat`;
 3. stores the replay testbench as `tb.sv`;
 4. marks both files read-only;
-5. writes `verification.json`, recording tier, method, vector count, and `stimulus_author`
+5. writes `verification.json`, recording tier, method, vector count, `author` and `frozen`
    (Tier-1 records `auto`; authored freezes record `--author`, or null when omitted).
 
 After that, every candidate is checked against exactly that trace. The frozen `tb.sv` follows the
@@ -461,6 +518,9 @@ design_db/v1/<spec_key>/        # spec_key = sha256(structural AAG + port spec)
     starting_point.py           # captured decorated function source, when available
     verification.json           # configured/frozen verification; absent means inserts are refused
     tb.sv, vectors.dat          # sim tiers only; read-only after freeze
+    golden_lean.json            # golden's Lean circuit model + shapes, when translatable (Lean tier input)
+    lean/                       # Lean tier only, write-once: SpireSemantics, Interface, GoldenCircuit, Spec (.lean)
+    lean/specs/                 # admitted spec layers, append-only: <Name>.lean, <Name>Proof.lean, <Name>.json
     designs/<source>:<hash>/    # one admitted implementation
         design.v                # canonical IR
         design.aag              # precomputed splice input
@@ -468,6 +528,7 @@ design_db/v1/<spec_key>/        # spec_key = sha256(structural AAG + port spec)
         source/<rel>.py         # vendored project-local imports for .py inserts
         metrics.json            # measurement blocks
         provenance.json         # source, created time, verification verdict, Python provenance
+        lean/                   # Lean tier: D<hash>_Circuit.lean, D<hash>_Proof.lean, axioms.json, build.log
     index.json                  # derived cache; designs/ is the source of truth
 design_db/v1/manifest.json      # name -> {spec_key, class}
 ```
@@ -499,8 +560,8 @@ supported. For efficiency, run one filler per slot at a time when possible.
 |---|---|
 | `@from_design_db(objective=, metric=, pin=, fill=, name=, db=)` | Register, select, and splice. Misses use the original logic. |
 | `register_slot(module_or_component, db=None, *, name=None) -> spec_key` | Register a slot idempotently. |
-| `insert_design(spec_key, design, *, source, db=None, budget_s=None, python_copy=None, provenance=None)` | Verify, dedup, stamp metrics, record provenance, and admit atomically. |
-| `check_design(spec_key, design, *, db=None, budget_s=None) -> dict` | Advisory verification with no admission. |
+| `insert_design(spec_key, design, *, source, db=None, budget_s=None, python_copy=None, provenance=None, proof=None)` | Verify, dedup, stamp metrics, record provenance, and admit atomically. `proof`: Lean tier. |
+| `check_design(spec_key, design, *, db=None, budget_s=None, proof=None, workdir=None) -> dict` | Advisory verification with no admission. Lean tier: `workdir` keeps the project; without `proof` it writes the workspace and raises, naming the proof file. |
 | `seed_original(spec_key, *, db=None, budget_s=None)` | Admit the golden as `source="original"`. |
 | `annotate(spec_key, design_ref, *, tech, values, raw=None, force=False, db=None)` | Attach a technology metric block to a stored design. |
 | `pick_design(spec_key, *, objective=, metric=, pin=, sources=, db=)` | Deterministic pure selection query. |
@@ -513,8 +574,11 @@ supported. For efficiency, run one filler per slot at a time when possible.
 | `freeze_sim_verification(spec_key, *, stimulus_file=None, n_vectors=, seed=, sim_budget_s=, stimulus_author=None, db=None)` | Freeze Tier-1 or Tier-2 simulation verification. |
 | `check_stimulus(spec_key, *, stimulus_file, n_vectors=, seed=, db=)` | Dry-run an authored stimulus generator against the slot interface; writes nothing (`set-verification --check`). |
 | `run_frozen_tb(spec_key, candidate_v, workdir, *, db=None, budget_s=None)` | Run the frozen simulation oracle. |
+| `freeze_lean_verification(spec_key, *, author=None, lake_budget_s=600, dry_run=False, keep_dir=None, db=None)` | Freeze the Lean oracle: Spec = golden equivalence (`set-verification --lean`). |
+| `add_spec(spec_key, name, spec_lean, proof_lean, *, author=None, lake_budget_s=600, dry_run=False, keep_dir=None, db=None)` | Admit a spec layer with its `equiv` proof (`add-spec`). |
+| `run_lean_gate(spec_key, netlist, proof, workdir, *, hash10, budget_s, db=None)` | Run the Lean oracle on one candidate netlist; returns circuit, proof, axioms, log, imports. |
 | `detect_class(module)` | Return `"combinational"` or `"sequential"`. |
-| Exceptions | `VerificationFailed`, `CECTimeout`, `SimTimeout`, `CECInapplicable`, `SlotUnverified`, `VerificationError`, `DesignDBError`. |
+| Exceptions | `VerificationFailed`, `CECTimeout`, `SimTimeout`, `CECInapplicable`, `SlotUnverified`, `VerificationError`, `DesignDBError`; Lean tier: `ProofFailed`, `ProofRejected` (both `VerificationFailed`), `SpecRejected` (`VerificationError`). |
 
 `import spire.design_db` is dependency-light. Heavy modules such as pyosys and aigverse are imported
 only when insertion, verification, or splicing needs them.
@@ -539,7 +603,7 @@ spire db seed --slot adder8
 
 spire db annotate --slot adder8 --design 9f3c1a2b7d --tech asap7 area=118.3 delay=94.6
 
-spire db set-verification --slot mypipe --auto --vectors 256 --seed 0 --sim-budget 300
+spire db set-verification --slot mypipe --auto --vectors 256 --seed 0 --budget 300
 spire db set-verification --slot mypipe --stimulus stim.py --check
 spire db set-verification --slot mypipe --stimulus stim.py
 spire db set-verification --slot mypipe --stimulus stim.py --author agent:rtl-dv-prep
@@ -550,11 +614,13 @@ The verification-related commands have distinct jobs:
 
 | Command | Scope | Writes? | Purpose |
 |---|---:|---:|---|
-| `set-verification` | slot | yes | Choose the oracle used by later checks. Sim tiers freeze a trace. |
-| `verify <design>` | candidate | no | Run the slot oracle and report `PASS` or `FAIL`. |
+| `set-verification` | slot | yes | Choose the oracle used by later checks. Sim tiers freeze a trace; `--lean` freezes golden equivalence as the spec. `--check` dry-runs either. |
+| `add-spec NAME SPEC PROOF` | slot | yes | Lean tier: admit a proven-equivalent spec layer (append-only). |
+| `verify <design>` | candidate | no | Run the slot oracle and report `PASS` or `FAIL`. Lean tier: `--proof FILE`; `--workspace DIR` keeps the Lean project (without `--proof`: writes the workspace and names the proof file to write). |
 | `insert <design>` | candidate | yes, on pass | Run the same check, then admit the candidate. |
 
-`insert` and `verify` accept `.py`, `.v`, and `.sv` inputs. A `.py` design file must define
+`insert` and `verify` accept `.py`, `.v`, and `.sv` inputs (Lean-gated slots: `.py` only, and `insert`
+needs `--proof`). A `.py` design file must define
 `build() -> Component/Netlist`; the gate elaborates it and stores the generated Verilog as
 `design.v`, which is the DB's canonical intermediate representation. Project-local Python imports
 are vendored under the design's `source/` directory and listed in provenance. External Verilog
@@ -580,7 +646,11 @@ Most operations exist on both sides; the gaps are deliberate:
 | `spire db verify` | `check_design()` | |
 | `spire db annotate` | `annotate()` | |
 | `spire db set-verification --auto / --stimulus` | `freeze_sim_verification()` | |
-| `spire db set-verification --check` | `check_stimulus()` | |
+| `spire db set-verification --check` | `check_stimulus()` / `freeze_lean_verification(dry_run=True)` | |
+| `spire db set-verification --lean` | `freeze_lean_verification()` | `--workspace DIR` ↔ `keep_dir=` |
+| `spire db add-spec` | `add_spec()` | |
+| `spire db verify --proof / --workspace` | `check_design(proof=, workdir=)` | |
+| `spire db insert --proof` | `insert_design(proof=)` | |
 | `spire db set-verification --cec` | — | CLI-only; combinational slots already get CEC by default at registration. |
 | — | `register_slot()` / `@from_design_db` | Registration needs a live `Component`/`Netlist`, so it is Python-only. |
 | — | `pick_design()` + combinators | Selection is Python-only; from the shell, parse `show` JSON. |

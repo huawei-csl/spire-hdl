@@ -33,3 +33,6 @@ metadocs/*
 !metadocs/REFIX_PLAN.md
 !metadocs/REFIX_STATUS.md
 *.bak
+.lake/
+lake-manifest.json
+examples/

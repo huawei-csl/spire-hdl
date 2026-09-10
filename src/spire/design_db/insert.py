@@ -129,20 +129,27 @@ def _elaborate_python(py: Path, tdir: Path) -> tuple:
     finally:
         sys.path.remove(entry_dir)
     from spire.design_db.keys import normalize
-    text = normalize(module).to_verilog()
+    net = normalize(module)
+    text = net.to_verilog()
     target = tdir / "candidate.v"
     target.write_text(text if text.endswith("\n") else text + "\n")
-    info = {"entry": py, "closure": _local_import_closure(py)}
+    info = {"entry": py, "closure": _local_import_closure(py), "netlist": net}
     return target, info
 
 
 def _materialize_any(design: Any, tdir: Path) -> tuple:
     """``_materialize`` + the python-design dispatch: a ``.py`` path is elaborated (build() →
-    Verilog) and its source travels with the result. Returns ``(verilog_path, python_src|None)``."""
+    Verilog) and its source travels with the result. Returns ``(verilog_path, python_src|None,
+    netlist|None)`` — the netlist is kept for spire-native inputs (the Lean tier needs it)."""
     if isinstance(design, (str, Path)) and "\n" not in str(design) \
             and str(design).endswith(".py"):
-        return _elaborate_python(Path(design), tdir)
-    return _materialize(design, tdir), None
+        target, info = _elaborate_python(Path(design), tdir)
+        return target, info, info.pop("netlist")
+    net = None
+    if hasattr(design, "_ports") or hasattr(design, "to_netlist"):
+        from spire.design_db.keys import normalize
+        net = normalize(design)
+    return _materialize(design, tdir), None, net
 
 
 def _candidate_aag(design_v: Path, workdir: Path) -> List[str]:
@@ -231,9 +238,9 @@ def _resolve_verification(d: DesignDB, spec_key: str, spec: Dict[str, Any],
     if verification is None:
         raise SlotUnverified(
             "slot has no verification set — choose one first: "
-            "spire db set-verification --slot <key> [--cec | --auto | --stimulus <file>]")
+            "spire db set-verification --slot <key> [--cec | --auto | --stimulus <file> | --lean-spec <file>]")
     method = verification.get("method")
-    if method not in ("cec", "sim"):
+    if method not in ("cec", "sim", "lean"):
         raise DesignDBError(f"verification method {method!r} is not supported")
     if method == "cec" and spec.get("class") == "sequential":
         raise CECInapplicable("CEC is inapplicable to sequential slots (no register mapping)")
@@ -241,19 +248,38 @@ def _resolve_verification(d: DesignDB, spec_key: str, spec: Dict[str, Any],
         budget = float(budget_s)
     elif method == "cec":
         budget = float(verification.get("budget_s", 120.0))
+    elif method == "lean":
+        budget = float(verification.get("lake_budget_s", 600.0))
     else:
         budget = float(verification.get("sim_budget_s", 300.0))
     return verification, method, budget
 
 
 def _run_gate(d: DesignDB, spec_key: str, method: str, design_v: Path, tdir: Path,
-              budget: float, db: Optional[str | Path]) -> None:
-    """Run the frozen oracle against one candidate (raises on anything but PASS)."""
+              budget: float, db: Optional[str | Path], *, netlist: Any = None,
+              proof: Any = None, lean_workdir: Optional[Path] = None,
+              hash10: str = "") -> Optional[Dict[str, Any]]:
+    """Run the frozen oracle against one candidate (raises on anything but PASS). The Lean tier
+    returns its evidence (circuit, proof, axioms, log, imports) for storage with the design; the
+    Lean project lives in `lean_workdir` (kept) or a temp dir."""
     if method == "cec":
         cec_check(design_v, d.slot_dir(spec_key) / "golden.v", tdir / "cec", budget_s=budget)
+    elif method == "lean":
+        from spire.design_db.verify_lean import golden_evidence, run_lean_gate
+        if netlist is None and design_v.read_text() == (d.slot_dir(spec_key) / "golden.v").read_text():
+            return golden_evidence()                     # Spec is the golden's own definition
+        if netlist is None:
+            raise VerificationFailed("Lean-gated slots accept spire-native designs only "
+                                     "(.py defining build(), Component or Netlist)")
+        if proof is None and lean_workdir is None:
+            raise VerificationFailed("Lean-gated slot: a proof is required (insert --proof <file>; "
+                                     "`verify --workspace <dir>` writes the workspace to start from)")
+        return run_lean_gate(spec_key, netlist, proof, lean_workdir or tdir / "lean", hash10=hash10,
+                             budget_s=budget, db=db)
     else:
         from spire.design_db.verify_sim import run_frozen_tb
         run_frozen_tb(spec_key, design_v, tdir / "sim", db=db, budget_s=budget)
+    return None
 
 
 def _bump_rediscovery(d: DesignDB, slot: Path, design_id: str) -> None:
@@ -274,11 +300,15 @@ def _bump_rediscovery(d: DesignDB, slot: Path, design_id: str) -> None:
 
 
 def check_design(spec_key: str, design: Any, *, db: Optional[str | Path] = None,
-                 budget_s: Optional[float] = None) -> Dict[str, Any]:
+                 budget_s: Optional[float] = None, proof: Any = None,
+                 workdir: Optional[str | Path] = None) -> Dict[str, Any]:
     """Advisory verification: run the slot's frozen oracle against ``design`` **without admitting
     or writing anything** — the same check ``insert_design`` gates on. Returns
     ``{"verdict": "PASS", "method": …}``; raises the same ``VerificationError`` subclasses (and a
-    port/`SlotUnverified` error) on failure. This is the read-only sibling of ``insert_design``."""
+    port/`SlotUnverified` error) on failure. This is the read-only sibling of ``insert_design``.
+
+    Lean slots: ``workdir`` keeps the Lean project there (pass or fail) — the agent's workspace; without
+    ``proof`` the workspace is written and a VerificationFailed names the proof file to write."""
     d = DesignDB.open(db)
     spec = d.read_json(d.slot_dir(spec_key) / "spec.json", None)
     if spec is None:
@@ -286,17 +316,24 @@ def check_design(spec_key: str, design: Any, *, db: Optional[str | Path] = None,
     _verification, method, budget = _resolve_verification(d, spec_key, spec, budget_s)
     with tempfile.TemporaryDirectory(prefix="spire_ddb_chk_") as td:
         tdir = Path(td)
-        design_v, _python_src = _materialize_any(design, tdir)
+        design_v, _python_src, netlist = _materialize_any(design, tdir)
         aag_lines = _candidate_aag(design_v, tdir)
         _check_ports(aag_lines, spec.get("ports", []))
-        _run_gate(d, spec_key, method, design_v, tdir, budget, db)
-    return {"verdict": "PASS", "method": method}
+        hash10 = hashlib.sha256("\n".join(aag_lines).encode("utf-8")).hexdigest()[:10]
+        evidence = _run_gate(d, spec_key, method, design_v, tdir, budget, db, netlist=netlist, proof=proof,
+                             lean_workdir=Path(workdir) if workdir is not None else None, hash10=hash10)
+    result = {"verdict": "PASS", "method": method}
+    if evidence:
+        result["axioms"] = evidence["axioms"]
+    if workdir is not None:
+        result["workspace"] = str(workdir)
+    return result
 
 
 def insert_design(spec_key: str, design: Any, *, source: str,
                   db: Optional[str | Path] = None, budget_s: Optional[float] = None,
                   python_copy: Optional[str | Path] = None,
-                  provenance: Optional[Dict[str, Any]] = None) -> InsertResult:
+                  provenance: Optional[Dict[str, Any]] = None, proof: Any = None) -> InsertResult:
     """Verify ``design`` against the slot's frozen verification and, if correct, admit it.
 
     ``design`` may be a **python design file** (``*.py`` defining ``build() -> Component/Netlist``
@@ -309,6 +346,8 @@ def insert_design(spec_key: str, design: Any, *, source: str,
 
     ``python_copy`` attaches a .py as *provenance only* (tagged ``kind: copied``, not validated) —
     used by ``seed_original`` to carry the slot's starting point; prefer inserting a ``.py``.
+
+    ``proof`` (Lean-gated slots only): the candidate's ``CandidateProof.lean`` as a path or text.
 
     Raises ``SlotUnverified`` (no frozen verification), ``VerificationFailed`` (rejected),
     ``CECTimeout`` (budget exceeded — options message included), ``CECInapplicable`` /
@@ -325,7 +364,7 @@ def insert_design(spec_key: str, design: Any, *, source: str,
 
     with tempfile.TemporaryDirectory(prefix="spire_ddb_") as td:
         tdir = Path(td)
-        design_v, python_src = _materialize_any(design, tdir)
+        design_v, python_src, netlist = _materialize_any(design, tdir)
 
         # Structural dedup key (also feeds the intrinsic metrics + the port check).
         aag_lines = _candidate_aag(design_v, tdir)
@@ -339,7 +378,8 @@ def insert_design(spec_key: str, design: Any, *, source: str,
                 return InsertResult(design_id, True, entry.get("metrics", {}))
 
         # The gate: run the frozen verification (raises on anything but PASS).
-        _run_gate(d, spec_key, method, design_v, tdir, budget, db)
+        evidence = _run_gate(d, spec_key, method, design_v, tdir, budget, db, netlist=netlist, proof=proof,
+                             hash10=struct_hash[:10])
 
         # Self-describing measurement systems: each block carries raw `metrics` + an `objectives`
         # map (objective → own field, or a `sibling.field` borrow). The transistor system borrows
@@ -381,6 +421,15 @@ def insert_design(spec_key: str, design: Any, *, source: str,
             if py.exists():
                 shutil.copyfile(py, tmp_dir / "design.py")
                 prov["python_source"] = {"kind": "copied", "entry": "design.py"}
+        if evidence is not None:              # Lean tier: keep the proof and what it depends on
+            (tmp_dir / "lean").mkdir()
+            for name, text in evidence["files"].items():
+                (tmp_dir / "lean" / name).write_text(text)
+            (tmp_dir / "lean" / "axioms.json").write_text(_json(evidence["axioms"]))
+            (tmp_dir / "lean" / "build.log").write_text(evidence["log"])
+            prov["verification"]["depends_on"] = evidence["depends_on"]
+            proofs = [n for n in evidence["files"] if n.endswith("Proof.lean")]
+            prov["verification"]["proof"] = f"lean/{proofs[0]}" if proofs else "golden (Spec is its definition)"
         if provenance:
             prov.update(provenance)
         (tmp_dir / "metrics.json").write_text(_json(metrics))

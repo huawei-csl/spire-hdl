@@ -113,8 +113,28 @@ def _cmd_insert(args: argparse.Namespace) -> int:
     from spire.design_db.insert import insert_design
     d = _open(args.db, create=True)
     key = _resolve_slot(d, args.slot)
-    return _gated_insert(lambda: insert_design(key, Path(args.design), source=args.source,
-                                               db=args.db, budget_s=args.budget))
+    return _gated_insert(lambda: insert_design(key, Path(args.design), source=args.source, db=args.db,
+                                               budget_s=args.budget, proof=_opt_path(args.proof)))
+
+
+def _opt_path(value: Optional[str]) -> Optional[Path]:
+    return Path(value) if value else None
+
+
+def _cmd_add_spec(args: argparse.Namespace) -> int:
+    from spire.design_db.verify import VerificationError
+    from spire.design_db.verify_lean import DEFAULT_LAKE_BUDGET_S, add_spec
+    d = _open(args.db, create=False)
+    key = _resolve_slot(d, args.slot)
+    try:
+        record = add_spec(key, args.name, Path(args.spec), Path(args.proof), author=args.author, db=args.db,
+                          dry_run=args.check, keep_dir=_opt_path(args.workspace),
+                          lake_budget_s=args.budget if args.budget is not None else DEFAULT_LAKE_BUDGET_S)
+    except VerificationError as exc:
+        print(f"REJECTED ({type(exc).__name__}): {str(exc)[:1500]}", file=sys.stderr)
+        return 2
+    print(json.dumps({k: v for k, v in record.items() if k != "log"}, indent=2, sort_keys=True))
+    return 0
 
 
 def _cmd_seed(args: argparse.Namespace) -> int:
@@ -155,13 +175,18 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     from spire.design_db.verify import CECInapplicable, SlotUnverified, VerificationError
     d = _open(args.db, create=False)
     key = _resolve_slot(d, args.slot)
+    workdir = args.workspace
     try:
-        result = check_design(key, Path(args.design), db=args.db, budget_s=args.budget)
+        result = check_design(key, Path(args.design), db=args.db, budget_s=args.budget,
+                              proof=_opt_path(args.proof), workdir=workdir)
     except (SlotUnverified, CECInapplicable) as exc:
         raise DesignDBError(str(exc))                    # a setup problem, not a candidate verdict
     except VerificationError as exc:
-        print(json.dumps({"verdict": "FAIL", "type": type(exc).__name__,
-                          "reason": str(exc).splitlines()[0][:300]}, indent=2, sort_keys=True))
+        fail = {"verdict": "FAIL", "type": type(exc).__name__, "reason": str(exc).splitlines()[0][:300]}
+        if workdir:
+            fail["workspace"] = workdir
+            fail["next"] = f"write/repair the D<hash>_Proof.lean in {workdir}, `lake build` there, then insert --proof"
+        print(json.dumps(fail, indent=2, sort_keys=True))
         return 2
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
@@ -171,8 +196,10 @@ def _cmd_set_verification(args: argparse.Namespace) -> int:
     """Configure (and, for sim tiers, freeze) a slot's verification oracle — the method every
     later insert/verify for this slot is judged by. Fail-and-choose, never an auto-fallback."""
     from spire.design_db.verify import DEFAULT_CEC_BUDGET_S, VERIFICATION_SCHEMA
-    if args.check and args.stimulus is None:
-        raise DesignDBError("--check requires --stimulus <file> (it dry-runs the generator)")
+    if args.check and args.stimulus is None and not args.lean:
+        raise DesignDBError("--check requires --stimulus <file> or --lean (dry run, nothing frozen)")
+    if args.workspace is not None and not args.lean:
+        raise DesignDBError("--workspace only applies to --lean (keeps the Lean freeze project)")
     d = _open(args.db, create=True)
     key = _resolve_slot(d, args.slot)
     slot = d.slot_dir(key)
@@ -180,9 +207,9 @@ def _cmd_set_verification(args: argparse.Namespace) -> int:
     if spec is None:
         raise DesignDBError(f"unknown slot {args.slot!r}")
     chosen = [m for m, on in (("cec", args.cec), ("auto", args.auto),
-                              ("stimulus", args.stimulus is not None)) if on]
+                              ("stimulus", args.stimulus is not None), ("lean", args.lean)) if on]
     if len(chosen) > 1:
-        raise DesignDBError("choose exactly one of --cec | --auto | --stimulus")
+        raise DesignDBError("choose exactly one of --cec | --auto | --stimulus | --lean")
     if not chosen:
         if spec.get("class") == "combinational":
             chosen = ["cec"]                                # the default-picker (class check)
@@ -191,22 +218,30 @@ def _cmd_set_verification(args: argparse.Namespace) -> int:
                                 "--auto (Tier-1 sim harness) | --stimulus <file> (authored); "
                                 "CEC is inapplicable")
     mode = chosen[0]
-    if args.check:
+    if args.check and mode == "stimulus":
         from spire.design_db.verify_sim import check_stimulus
         result = check_stimulus(key, stimulus_file=args.stimulus, n_vectors=args.vectors,
                                 seed=args.seed, db=args.db)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
-    if args.author is not None and mode != "stimulus":
-        raise DesignDBError("--author only applies to --stimulus (authored) freezes")
+    if args.author is not None and mode not in ("stimulus", "lean"):
+        raise DesignDBError("--author only applies to --stimulus and --lean freezes")
     existing = d.read_json(slot / "verification.json", None)
+    if mode == "lean":
+        if existing is not None and int(existing.get("tier", 0)) >= 1 and not args.check:
+            raise DesignDBError("slot already has a frozen verification (immutable); --check still dry-runs")
+        from spire.design_db.verify_lean import DEFAULT_LAKE_BUDGET_S, freeze_lean_verification
+        verification = freeze_lean_verification(
+            key, author=args.author, db=args.db, dry_run=args.check, keep_dir=_opt_path(args.workspace),
+            lake_budget_s=args.budget if args.budget is not None else DEFAULT_LAKE_BUDGET_S)
+        print(json.dumps(verification, indent=2, sort_keys=True))
+        return 0
     if mode == "cec":
         if spec.get("class") == "sequential":
             raise DesignDBError("CEC is inapplicable to sequential slots (no register mapping) — "
                                 "options: --auto | --stimulus <file>")
         if existing is not None and int(existing.get("tier", 0)) >= 1:
-            raise DesignDBError("slot has a frozen sim verification (immutable) — CEC cannot "
-                                "replace it")
+            raise DesignDBError("slot has a frozen verification (immutable) — CEC cannot replace it")
         verification = {"schema": VERIFICATION_SCHEMA, "tier": 0, "method": "cec",
                         "budget_s": args.budget if args.budget is not None
                         else DEFAULT_CEC_BUDGET_S}
@@ -215,7 +250,8 @@ def _cmd_set_verification(args: argparse.Namespace) -> int:
         from spire.design_db.verify_sim import freeze_sim_verification
         verification = freeze_sim_verification(
             key, stimulus_file=args.stimulus, n_vectors=args.vectors, seed=args.seed,
-            sim_budget_s=args.sim_budget, stimulus_author=args.author, db=args.db)
+            sim_budget_s=args.budget if args.budget is not None else 300.0,
+            stimulus_author=args.author, db=args.db)
     print(json.dumps(verification, indent=2, sort_keys=True))
     return 0
 
@@ -245,7 +281,9 @@ def main(argv: Optional[list] = None) -> int:
     _common(p); p.add_argument("design", help="candidate: .py (spire, elaborated here) or .v/.sv")
     p.add_argument("--slot", required=True, help="manifest name, spec_key, or unique key prefix")
     p.add_argument("--source", default="cli", help="provenance source tag (default: cli)")
-    p.add_argument("--budget", type=float, default=None, help="CEC budget in seconds")
+    p.add_argument("--budget", type=float, default=None, help="verification budget in seconds")
+    p.add_argument("--proof", default=None, metavar="FILE",
+                   help="Lean-gated slots: the candidate's D<hash>_Proof.lean")
     p.set_defaults(func=_cmd_insert)
 
     p = sub.add_parser("seed", help="insert the slot's own golden as the baseline candidate "
@@ -280,17 +318,22 @@ def main(argv: Optional[list] = None) -> int:
     p.add_argument("--auto", action="store_true", help="freeze the Tier-1 auto sim harness")
     p.add_argument("--stimulus", default=None, metavar="FILE",
                    help="freeze a Tier-2 sim verification from an authored stimulus generator")
-    p.add_argument("--budget", type=float, default=None, help="CEC budget in seconds (--cec)")
+    p.add_argument("--budget", type=float, default=None,
+                   help="verification budget in seconds (cec: yosys/abc, default 120; sim: verilator, default 300; "
+                        "lean: lake, default 600)")
+    p.add_argument("--lean", action="store_true",
+                   help="freeze the Lean oracle: Spec = equivalence to the golden (model captured at registration); "
+                        "add nicer, proven-equivalent specs later with `add-spec`")
     p.add_argument("--vectors", type=int, default=256, help="number of stimulus vectors (sim)")
     p.add_argument("--seed", type=int, default=0, help="stimulus RNG seed (sim, auto)")
-    p.add_argument("--sim-budget", type=float, default=300.0,
-                   help="verilator build/run budget in seconds (sim)")
     p.add_argument("--author", default=None,
-                   help="recorded stimulus author for --stimulus freezes (unset if omitted; "
-                        "agent layers pass e.g. agent:rtl-dv-prep)")
+                   help="recorded author for --stimulus / --lean-spec freezes (unset if omitted; "
+                        "agent layers pass e.g. agent:rtl-dv-prep, agent:lean-spec-author)")
     p.add_argument("--check", action="store_true",
-                   help="dry-run the --stimulus generator (load + produce vectors against the "
-                        "slot interface) without simulating, writing, or freezing anything")
+                   help="dry run, nothing frozen: --stimulus loads the generator and produces vectors; "
+                        "--lean-spec runs both freeze obligations")
+    p.add_argument("--workspace", default=None, metavar="DIR",
+                   help="--lean: keep the Lean freeze project in DIR")
     p.set_defaults(func=_cmd_set_verification)
 
     p = sub.add_parser("verify", help="advisory: run the slot's set oracle against a candidate "
@@ -298,7 +341,24 @@ def main(argv: Optional[list] = None) -> int:
     _common(p); p.add_argument("design", help="candidate: .py (spire, elaborated here) or .v/.sv")
     p.add_argument("--slot", required=True, help="manifest name, spec_key, or unique key prefix")
     p.add_argument("--budget", type=float, default=None, help="verification budget in seconds")
+    p.add_argument("--proof", default=None, metavar="FILE",
+                   help="Lean-gated slots: D<hash>_Proof.lean (omitted with --workspace: write the workspace only)")
+    p.add_argument("--workspace", default=None, metavar="DIR",
+                   help="Lean-gated slots: keep the Lean project in DIR (pass or fail) — the agent workspace "
+                        "(frozen files, spec layers, admitted designs, D<hash>_Circuit.lean)")
     p.set_defaults(func=_cmd_verify)
+
+    p = sub.add_parser("add-spec", help="Lean-gated slots: admit a spec layer NAME — NAME.lean defines NAME.Correct, "
+                                        "PROOF proves NAME.equiv : ∀ e, NAME.Correct e ↔ Spec.Correct e (append-only)")
+    _common(p); p.add_argument("name", help="layer name (capitalised identifier, e.g. Mmac)")
+    p.add_argument("spec", help="NAME.lean")
+    p.add_argument("proof", help="NAMEProof.lean")
+    p.add_argument("--slot", required=True, help="manifest name, spec_key, or unique key prefix")
+    p.add_argument("--author", default=None, help="recorded author, e.g. agent:lean-spec-author")
+    p.add_argument("--budget", type=float, default=None, help="lake build budget in seconds (default 600)")
+    p.add_argument("--check", action="store_true", help="dry run: build and audit, admit nothing")
+    p.add_argument("--workspace", default=None, metavar="DIR", help="keep the Lean project in DIR")
+    p.set_defaults(func=_cmd_add_spec)
 
     args = parser.parse_args(argv)
     try:

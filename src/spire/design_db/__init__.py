@@ -23,7 +23,9 @@ from spire.design_db.select import (SelectionResult, constrained, lexicographic,
 from spire.design_db.store import (DB_DIRNAME, DB_ENV, DesignDB, DesignDBError,  # noqa: F401
                                    register_slot, resolve_db_root)
 from spire.design_db.verify import (DEFAULT_CEC_BUDGET_S, CECInapplicable, CECTimeout,  # noqa: F401
-                                    SlotUnverified, VerificationError, VerificationFailed,
+                                    ProofFailed, ProofRejected, SlotUnverified, SpecRejected,
+                                    VerificationError, VerificationFailed,
                                     cec_check, default_verification, detect_class)
+from spire.design_db.verify_lean import add_spec, freeze_lean_verification, run_lean_gate  # noqa: F401
 from spire.design_db.verify_sim import (SimTimeout, check_stimulus,  # noqa: F401
                                         freeze_sim_verification, run_frozen_tb)

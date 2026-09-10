@@ -5,7 +5,11 @@ Layout (schema v1)::
     <db root>/v1/<spec_key>/
         spec.json           # {name, ports, class, golden_sha, created, registered_from:[...]}
         golden.v            # the golden reference candidates are verified against
+        golden_lean.json    # the golden's Lean circuit model + arithmetic shapes (if translatable)
         verification.json   # frozen verification (combinational default: Tier-0 CEC); absent = unverified
+        lean/               # Lean tier only, write-once: SpireSemantics (pinned), Interface, GoldenCircuit,
+                            #   Spec (= golden equivalence); specs/<Name>.lean + <Name>Proof.lean + <Name>.json
+                            #   are admitted spec layers (append-only)
         designs/<id>/       # verification-gated implementations (design.v, metrics.json, provenance.json)
         index.json          # roll-up {design_id -> {struct_hash, metrics, source, created, rediscoveries}}
     <db root>/v1/manifest.json   # reverse index {registered name -> {spec_key, class, selection}}
@@ -220,6 +224,11 @@ def register_slot(module_or_component: Any, db: Optional[str | Path] = None, *,
 
     if not (slot / "golden.v").exists():
         d.atomic_write_text(slot / "golden.v", verilog)
+    if not (slot / "golden_lean.json").exists():        # Lean tier input, best effort (text only)
+        from spire.design_db.verify_lean import golden_lean_capture
+        capture = golden_lean_capture(module, spec["ports"])
+        if capture is not None:
+            d.write_json(slot / "golden_lean.json", capture)
     if not (slot / "verification.json").exists():
         verification = default_verification(circuit_class)
         if verification is not None:

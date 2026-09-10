@@ -39,6 +39,18 @@ class SlotUnverified(VerificationError):
     """The slot has no frozen verification; inserts are refused until one is frozen."""
 
 
+class ProofFailed(VerificationFailed):
+    """Lean tier: the candidate's proof does not build (Lean log attached)."""
+
+
+class ProofRejected(VerificationFailed):
+    """Lean tier: the proof built but does not establish the spec, or uses disallowed axioms."""
+
+
+class SpecRejected(VerificationError):
+    """Lean tier: a spec layer's `equiv` proof does not build or does not establish equivalence to Spec."""
+
+
 def timeout_options_message(budget_s: float) -> str:
     return (f"CEC timed out after {budget_s:g} s. "
             f"Options: --budget <t> | --auto (Tier-1 sim harness, S3) | --stimulus <file> (S3)")

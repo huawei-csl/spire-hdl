@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from spire.design_db.store import DesignDB, DesignDBError
+from spire.design_db.store import DesignDB, DesignDBError, now_ts
 from spire.design_db.verify import VerificationError, VerificationFailed
 
 DEFAULT_N_VECTORS = 256
@@ -38,7 +38,7 @@ _VL_FLAGS = ["--sv", "-Wno-fatal", "-Wno-lint"]
 
 
 class SimTimeout(VerificationError):
-    """Verilator build/run blew past its budget. Raise ``--sim-budget`` or trim the stimulus."""
+    """Verilator build/run blew past its budget. Raise ``--budget`` or trim the stimulus."""
 
 
 # --- ports & stimulus -----------------------------------------------------------------------
@@ -225,7 +225,7 @@ def _sub(args: List[str], cwd: Path, budget_s: float, what: str) -> subprocess.C
                               timeout=budget_s)
     except subprocess.TimeoutExpired:
         raise SimTimeout(f"{what} timed out after {budget_s:g} s — raise the sim budget "
-                         f"(--sim-budget / verification.json sim_budget_s)") from None
+                         f"(--budget / verification.json sim_budget_s)") from None
 
 
 def _run_verilator(sources: List[Path], workdir: Path, dut_top: str, budget_s: float) -> str:
@@ -316,10 +316,9 @@ def freeze_sim_verification(spec_key: str, *, stimulus_file: Optional[str | Path
         f.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
 
     verification = {"schema": 1, "tier": 2 if authored else 1, "method": "sim",
-                    "stimulus_author": author, "n_vectors": len(vectors),
+                    "author": author, "n_vectors": len(vectors),
                     "seed": None if authored else seed, "sim_budget_s": sim_budget_s,
-                    "sequential": sequential,
-                    "frozen_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+                    "sequential": sequential, "frozen": now_ts()}
     d.write_json(slot / "verification.json", verification)
     return verification
 

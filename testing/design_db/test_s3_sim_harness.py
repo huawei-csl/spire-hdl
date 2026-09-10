@@ -61,7 +61,7 @@ def test_comb_switch_to_sim_and_gate(db):
     """Combinational slot: explicit CEC→sim switch; the gate then checks via the frozen trace."""
     key = register_slot(Adder(), name="adder8")
     ver = freeze_sim_verification(key, n_vectors=64, seed=1)
-    assert ver["tier"] == 1 and ver["method"] == "sim" and ver["stimulus_author"] == "auto"
+    assert ver["tier"] == 1 and ver["method"] == "sim" and ver["author"] == "auto"
     slot = _slot(db, key)
     assert (slot / "tb.sv").exists() and (slot / "vectors.dat").exists()
     res = insert_design(key, EQUIV_V, source="test")
@@ -102,7 +102,7 @@ def test_human_stimulus_is_tier_2(db, tmp_path):
         "    for i in range(n_vectors):\n"
         "        yield {p['name']: i * 3 + 1 for p in ports}\n")
     ver = freeze_sim_verification(key, stimulus_file=stim, n_vectors=40)
-    assert ver["tier"] == 2 and ver["stimulus_author"] is None and ver["n_vectors"] == 40
+    assert ver["tier"] == 2 and ver["author"] is None and ver["n_vectors"] == 40
     insert_design(key, CORRECT_SEQ_V, source="test")
 
 
@@ -120,7 +120,7 @@ def test_stimulus_author_attribution(db, tmp_path, capsys):
         freeze_sim_verification(key, n_vectors=32, stimulus_author="agent:rtl-dv-prep")
     ver = freeze_sim_verification(key, stimulus_file=stim, n_vectors=32,
                                   stimulus_author="agent:rtl-dv-prep")
-    assert ver["tier"] == 2 and ver["stimulus_author"] == "agent:rtl-dv-prep"
+    assert ver["tier"] == 2 and ver["author"] == "agent:rtl-dv-prep"
     assert ver["seed"] is None                          # authored freeze: seed not recorded
 
     # CLI: --author refused outside --stimulus (guard fires before any state change) …
@@ -130,7 +130,7 @@ def test_stimulus_author_attribution(db, tmp_path, capsys):
     key2 = register_slot(Adder(), name="adder_auth")
     assert cli_main(["db", "set-verification", "--slot", key2[:12], "--stimulus", str(stim),
                      "--vectors", "16", "--author", "agent:rtl-dv-prep"]) == 0
-    assert json.loads(capsys.readouterr().out)["stimulus_author"] == "agent:rtl-dv-prep"
+    assert json.loads(capsys.readouterr().out)["author"] == "agent:rtl-dv-prep"
 
 
 def test_stimulus_check_dry_run(db, tmp_path, capsys):
