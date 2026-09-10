@@ -71,7 +71,7 @@ key = register_slot(golden_component, name="mmac")        # Python only; the dec
 |---|---|
 | Who | Spire |
 | Generates | `spec.json` (ports, class, key), `golden.v`, default `verification.json` (cec), **`golden_lean.json`**: the golden's netlist translated to Lean plus its arithmetic shapes |
-| Checks | the golden is translatable: combinational; `+ - *` in any signedness mix, `& \| ^ ~ nand`, shifts, all six comparisons, mux, concat, slice, resize, constants; no registers, memories or `custom_verilog`. If not, `golden_lean.json` is absent and the slot cannot be Lean-gated — everything else still works |
+| Checks | the golden is translatable: `+ - *` in any signedness mix, `& \| ^ ~ nand`, shifts, all six comparisons, mux, concat, slice, resize, constants, registers (clocked, with reset); no memories or `custom_verilog`. If not, `golden_lean.json` is absent and the slot cannot be Lean-gated — everything else still works |
 | Cost | milliseconds, no Lean |
 
 ## Phase 2 — freeze the Lean oracle
@@ -215,7 +215,7 @@ slots/<key>/
 | gate | Verilator, exact trace match | `lake build` + statement + transitive axiom audit |
 
 Requirements: `lake` on PATH (`elan` with `leanprover/lean4:v4.33.1`); its absence is an error, never a
-silent pass. Combinational slots only.
+silent pass. Combinational and sequential (registers) slots; memories not yet.
 
 ## Supported operators and their Lean meaning
 
@@ -237,6 +237,53 @@ corner vectors.
 | resize | `resizeS` / `resizeU` | sign / zero extension, truncation when narrower |
 | constants | `BitVec.ofInt` / `ofNat` | |
 
-Not translated: registers, memories, `custom_verilog` (planned separately). The exact-width lemma family
-used by the layered proofs covers signed `+ - *`; other operators are proven with core `BitVec` simp
-lemmas or `bv_decide`.
+Not translated: memories, `custom_verilog`. The exact-width lemma family used by the layered proofs covers
+signed `+ - *`; other operators are proven with core `BitVec` simp lemmas or `bv_decide`. The tactic
+`spire_unfold` (defined in `SpireSemantics.lean`) unfolds every operator in the goal and hypotheses so
+`bv_decide` sees plain `BitVec` terms.
+
+## Sequential slots (registers)
+
+A netlist with registers is translated to a Mealy machine instead of `eval`:
+
+```lean
+@[ext] structure State where acc : BitVec 24                      -- one field per register
+def init : State := { acc := BitVec.ofInt 24 0 }                  -- register init values (reset state)
+def next (s : State) (i : Inputs) : State := { acc := … }         -- the register drivers; regs read as s.acc
+def out  (s : State) (i : Inputs) : Outputs := { y := s.acc }     -- output cone
+def machine : Machine Inputs Outputs State := ⟨init, next, out⟩
+```
+
+`clk` and `rst` are not inputs of the model: `init` is the state after reset. The canonical spec is
+trace equivalence, quantified over the candidate's own state type:
+
+```lean
+def Spec.Correct {σ} (m : Machine Inputs Outputs σ) : Prop := ∀ tr : List Inputs, m.trace tr = GoldenCircuit.machine.trace tr
+```
+
+`trace` is the standard Mealy convention: the output at cycle k is `out s_k i_k` (state before the
+edge, current input), then `s_{k+1} = next s_k i_k`. This is checked against `spire.simulator`
+(reset, then per cycle: set inputs, `eval`, read outputs, `step`) by `test_sequential_trace_matches_simulator`.
+
+**Proof recipe** — a simulation relation and three local lemmas, closed by the generic theorem
+`Machine.trace_eq_of_rel` from `SpireSemantics.lean`:
+
+```lean
+def R (t : D{hash}_Circuit.State) (s : GoldenCircuit.State) : Prop := t.hi ++ t.lo = s.acc   -- design-specific
+theorem h0    : R D.init GoldenCircuit.init := by simp only [R, D.init, GoldenCircuit.init]; all_goals bv_decide
+theorem hstep (t s i) (h : R t s) : R (D.next t i) (GoldenCircuit.next s i) := by
+  simp only [R, D.next, GoldenCircuit.next] at h ⊢; spire_unfold; bv_decide
+theorem hout  (t s i) (h : R t s) : D.out t i = GoldenCircuit.out s i := by
+  apply Outputs.ext <;> (simp only [R, D.out, GoldenCircuit.out] at h ⊢; spire_unfold; bv_decide)
+theorem implements : Spec.Correct D.machine := Machine.trace_eq_of_rel D.machine GoldenCircuit.machine R h0 hstep hout
+```
+
+Only `R` is design-specific: state equality for a rewrite that keeps the registers, `t.hi ++ t.lo = s.acc`
+for an accumulator split into halves. `bv_decide` handles one cycle's worth of logic (here an 8×8
+multiplier and a 25-bit adder) in seconds. A design with different latency (a retimed pipeline) is not
+trace-equivalent and cannot be proven — the recipe returns a counterexample — which matches the sim
+tier's cycle-accurate semantics. Spec layers for sequential slots quantify over machines:
+`NAME.equiv : ∀ {σ} (m : Machine Inputs Outputs σ), NAME.Correct m ↔ Spec.Correct m`.
+
+Tested with a MAC accumulator (`acc' = clear ? 0 : (en ? acc + a·b : acc)`) against three rewrites:
+restructured logic (admitted), hi/lo register split (admitted), registered product (rejected).

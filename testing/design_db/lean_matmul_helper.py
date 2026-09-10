@@ -173,3 +173,80 @@ def bits_components():
             self.io.y <<= (self.io.a & (self.io.b ^ self.io.c)) ^ self.io.c       # same mux, xor form
             self.io.z <<= (self.io.a | self.io.b) & ~(self.io.a & self.io.b)      # same xor, and/or form
     return BitsGolden(), BitsAlt()
+
+
+# --- sequential: a MAC accumulator and three rewrites -------------------------------------------------
+
+def mac_components():
+    """Golden accumulator and candidates. Returns dict name -> constructor of a *Netlist* (with clock+reset).
+
+    golden : acc' = clear ? 0 : (en ? acc + a*b : acc);  y = acc                (SInt24 state)
+    swap   : same state; acc' = clear ? 0 : acc + (en ? b*a : 0)                 — restructured logic
+    split  : accumulator kept as hi/lo 12-bit halves; y = hi ++ lo               — re-encoded state
+    retimed: product registered first (one cycle latency)                        — NOT equivalent
+    """
+    from spire import Bool, Component, IORecord, Input, Output, Register, SInt, UInt
+    from spire.expr import cat, mux
+
+    class _Mac(Component):
+        def __init__(self):
+            self.io = IORecord(a=Input(SInt(8)), b=Input(SInt(8)), en=Input(Bool()), clear=Input(Bool()), y=Output(SInt(24)))
+            self.elaborate()
+
+    class Golden(_Mac):
+        def elaborate(self):
+            acc = Register(SInt(24), init=0, name='acc')
+            acc <<= mux(self.io.clear, 0, mux(self.io.en, acc + self.io.a * self.io.b, acc))
+            self.io.y <<= acc
+
+    class Swap(_Mac):
+        def elaborate(self):
+            acc = Register(SInt(24), init=0, name='acc')
+            acc <<= mux(self.io.clear, 0, acc + mux(self.io.en, self.io.b * self.io.a, 0))
+            self.io.y <<= acc
+
+    class Split(_Mac):
+        def elaborate(self):
+            hi = Register(UInt(12), init=0, name='hi'); lo = Register(UInt(12), init=0, name='lo')
+            from spire.expr import fit_type
+            acc = fit_type(cat(lo, hi), SInt(24))                       # reinterpret the halves as the accumulator
+            nxt = mux(self.io.clear, 0, mux(self.io.en, acc + self.io.a * self.io.b, acc))
+            lo <<= nxt[0:12]; hi <<= nxt[12:24]
+            self.io.y <<= acc
+
+    class Retimed(_Mac):
+        def elaborate(self):
+            acc = Register(SInt(24), init=0, name='acc'); prod = Register(SInt(16), init=0, name='prod')
+            prod <<= self.io.a * self.io.b
+            acc <<= mux(self.io.clear, 0, mux(self.io.en, acc + prod, acc))
+            self.io.y <<= acc
+
+    mk = lambda cls: (lambda: cls().to_netlist(cls.__name__, with_clock=True, with_reset=True))
+    return {'golden': mk(Golden), 'swap': mk(Swap), 'split': mk(Split), 'retimed': mk(Retimed)}
+
+
+def machine_proof_lean(*, circuit_module: str, proof_module: str, relation: str, golden_module: str = 'GoldenCircuit') -> str:
+    """`implements : Spec.Correct <circuit>.machine` via a simulation relation `R (t : circuit.State) (s : golden.State)`.
+    Three local lemmas — init, step, output — each closed by SAT after unfolding, then the generic
+    `Machine.trace_eq_of_rel`. This is the recipe an agent follows; only `R` is design-specific."""
+    return f"""import {circuit_module}
+import Spec
+import Std.Tactic
+open SpireSemantics Interface
+namespace {proof_module}
+def R (t : {circuit_module}.State) (s : {golden_module}.State) : Prop := {relation}
+theorem h0 : R {circuit_module}.init {golden_module}.init := by
+  simp only [R, {circuit_module}.init, {golden_module}.init]
+  all_goals (try spire_unfold); all_goals bv_decide
+theorem hstep (t : {circuit_module}.State) (s : {golden_module}.State) (i : Inputs) (h : R t s) :
+    R ({circuit_module}.next t i) ({golden_module}.next s i) := by
+  simp only [R, {circuit_module}.next, {golden_module}.next] at h ⊢
+  try spire_unfold
+  bv_decide
+theorem hout (t : {circuit_module}.State) (s : {golden_module}.State) (i : Inputs) (h : R t s) :
+    {circuit_module}.out t i = {golden_module}.out s i := by
+  apply Outputs.ext <;> (simp only [R, {circuit_module}.out, {golden_module}.out] at h ⊢; (try spire_unfold); bv_decide)
+theorem implements : Spec.Correct {circuit_module}.machine :=
+  Machine.trace_eq_of_rel {circuit_module}.machine {golden_module}.machine R h0 hstep hout
+end {proof_module}
+"""

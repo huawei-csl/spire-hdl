@@ -9,7 +9,7 @@ Spec layer (`add-spec NAME Spec.lean SpecProof.lean`): a nicer formulation `NAME
 `Spec.Correct` never changes.
 
 Gate (`insert --proof`): the candidate becomes `D<hash>_Circuit.lean`; the submitted `D<hash>_Proof.lean`
-must prove `implements : Spec.Correct D<hash>_Circuit.eval`. It may import any layer and any admitted
+must prove `implements : Spec.Correct D<hash>_Circuit.eval` (`.machine` for sequential slots: trace equivalence). It may import any layer and any admitted
 design (delta proofs). The checker audits the final statement and the transitive axioms only.
 """
 from __future__ import annotations
@@ -40,6 +40,10 @@ def _sha(text: str) -> str:
 
 def _text(src: Any) -> str:
     return str(src) if "\n" in str(src) else Path(src).read_text()
+
+
+def _sequential(spec: Dict[str, Any]) -> bool:
+    return spec.get("class") == "sequential"
 
 
 def _slot(d: DesignDB, spec_key: str) -> tuple:
@@ -86,15 +90,18 @@ def _check(workdir: Path, module: str, theorem: str, expected: str, err) -> Dict
 
 # --- registration capture + freeze -------------------------------------------------------------
 
-def golden_lean_capture(netlist, ports) -> Optional[Dict[str, Any]]:
+def golden_lean_capture(netlist, ports, clock: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     """Called by register_slot: the golden's Lean circuit model, or None when the translator does not
-    cover it (the slot then cannot be Lean-gated)."""
-    from spire.design_db.lean.bridge import InterfaceMismatch, LeanExportOptions, collect_signed_arith_shapes, netlist_to_lean
+    cover it (the slot then cannot be Lean-gated). Clock/reset ports are not part of the model."""
+    from spire.design_db.lean.bridge import (InterfaceMismatch, LeanExportOptions, collect_signed_arith_shapes, data_ports,
+                                             is_sequential, netlist_to_lean)
     try:
-        circuit = netlist_to_lean(netlist, options=LeanExportOptions(namespace="GoldenCircuit", source_name="golden", ports=ports))
+        circuit = netlist_to_lean(netlist, options=LeanExportOptions(namespace="GoldenCircuit", source_name="golden",
+                                                                     ports=data_ports(ports, clock)))
     except (NotImplementedError, InterfaceMismatch, ValueError):
         return None
-    return {"circuit": circuit, "shapes": [list(s) for s in sorted(collect_signed_arith_shapes(netlist))]}
+    return {"circuit": circuit, "sequential": is_sequential(netlist),
+            "shapes": [list(s) for s in sorted(collect_signed_arith_shapes(netlist))]}
 
 
 def freeze_lean_verification(spec_key: str, *, author: Optional[str] = None,
@@ -102,16 +109,15 @@ def freeze_lean_verification(spec_key: str, *, author: Optional[str] = None,
                              keep_dir: Optional[Path] = None, db: Optional[str | Path] = None) -> Dict[str, Any]:
     """Freeze the Lean oracle: Spec = equivalence to the golden. Compiles the four frozen files once;
     writes nothing on failure or with `dry_run`; `keep_dir` keeps the project."""
-    from spire.design_db.lean.bridge import LEAN_TOOLCHAIN, SEMANTICS_FILE, default_spec_lean, interface_to_lean
+    from spire.design_db.lean.bridge import LEAN_TOOLCHAIN, SEMANTICS_FILE, data_ports, default_spec_lean, interface_to_lean
     d = DesignDB.open(db)
     slot, spec = _slot(d, spec_key)
-    if spec.get("class") != "combinational":
-        raise DesignDBError("the Lean tier is combinational-only")
     golden = d.read_json(slot / "golden_lean.json", None)
     if golden is None:
         raise DesignDBError("the golden was not translatable to Lean at registration — this slot cannot be Lean-gated")
-    files = {"SpireSemantics.lean": SEMANTICS_FILE.read_text(), "Interface.lean": interface_to_lean(spec["ports"]),
-             "GoldenCircuit.lean": golden["circuit"], "Spec.lean": default_spec_lean()}
+    files = {"SpireSemantics.lean": SEMANTICS_FILE.read_text(),
+             "Interface.lean": interface_to_lean(data_ports(spec["ports"], spec.get("clock"))),
+             "GoldenCircuit.lean": golden["circuit"], "Spec.lean": default_spec_lean(sequential=_sequential(spec))}
     with tempfile.TemporaryDirectory(prefix="spire_ddb_frz_") as td:
         work = _project(Path(keep_dir) if keep_dir is not None else Path(td) / "lean", files)
         _build(work, "Spec", lake_budget_s, DesignDBError, "frozen Lean files do not compile")
@@ -165,8 +171,9 @@ def add_spec(spec_key: str, name: str, spec_lean: Any, proof_lean: Any, *, autho
         raise DesignDBError(f"invalid spec layer name {name!r} (capitalised identifier, not reserved)")
     if name in spec_layers(d, spec_key):
         raise DesignDBError(f"spec layer {name!r} already exists (layers are append-only)")
+    from spire.design_db.lean.bridge import layer_statement
     files = {f"{name}.lean": _text(spec_lean), f"{name}Proof.lean": _text(proof_lean)}
-    expected = f"∀ e, {name}.Correct e ↔ Spec.Correct e"
+    expected = layer_statement(name, sequential=_sequential(_spec))
     with tempfile.TemporaryDirectory(prefix="spire_ddb_spec_") as td:
         work = _project(Path(keep_dir) if keep_dir is not None else Path(td) / "lean", {**ctx, **files})
         log = _build(work, f"{name}Proof", lake_budget_s, SpecRejected, f"spec layer {name}: equiv proof does not build")
@@ -186,29 +193,32 @@ def run_lean_gate(spec_key: str, netlist, proof: Any, workdir: Path, *, hash10: 
     """Prove one candidate against the frozen spec. `proof` None: write the workspace (context +
     D<hash>_Circuit.lean) and raise VerificationFailed telling the agent what to write. Returns
     {files, axioms, log, depends_on}; raises ProofFailed / ProofRejected / VerificationFailed."""
-    from spire.design_db.lean.bridge import (FINAL_THEOREM, InterfaceMismatch, LeanExportOptions, design_modules,
-                                             lean_imports, netlist_to_lean)
+    from spire.design_db.lean.bridge import (FINAL_THEOREM, InterfaceMismatch, LeanExportOptions, data_ports, design_modules,
+                                             final_statement, is_sequential, lean_imports, netlist_to_lean)
     d = DesignDB.open(db)
     _slot_dir, spec = _slot(d, spec_key)
     ctx = _context(d, spec_key)
     circuit_mod, proof_mod = design_modules(hash10)
     try:
-        circuit = netlist_to_lean(netlist, options=LeanExportOptions(namespace=circuit_mod, source_name=hash10, ports=spec["ports"]))
+        circuit = netlist_to_lean(netlist, options=LeanExportOptions(namespace=circuit_mod, source_name=hash10,
+                                                                     ports=data_ports(spec["ports"], spec.get("clock"))))
     except (NotImplementedError, InterfaceMismatch, ValueError) as exc:
         raise VerificationFailed(f"design not translatable to Lean: {exc}") from None
+    if is_sequential(netlist) != _sequential(spec):
+        raise VerificationFailed("candidate and slot differ in being sequential (registers) vs combinational")
+    statement = final_statement(circuit_mod, sequential=_sequential(spec))
     files = {f"{circuit_mod}.lean": circuit}
     if proof is None:
         _project(workdir, {**ctx, **files})
         raise VerificationFailed(f"no proof given; workspace written to {workdir} — write {proof_mod}.lean with "
-                                 f"`theorem {FINAL_THEOREM} : Spec.Correct {circuit_mod}.eval` (layers: "
-                                 f"{spec_layers(d, spec_key) or 'none'})")
+                                 f"`theorem {FINAL_THEOREM} : {statement}` (layers: {spec_layers(d, spec_key) or 'none'})")
     files[f"{proof_mod}.lean"] = _text(proof)
     work = _project(workdir, {**ctx, **files})
     log = _build(work, proof_mod, budget_s, ProofFailed, "proof does not check")
-    axioms = _check(work, proof_mod, f"{proof_mod}.{FINAL_THEOREM}", f"Spec.Correct {circuit_mod}.eval", ProofRejected)
+    axioms = _check(work, proof_mod, f"{proof_mod}.{FINAL_THEOREM}", statement, ProofRejected)
     return {"files": files, "axioms": axioms, "log": log, "depends_on": lean_imports(files[f"{proof_mod}.lean"])}
 
 
 def golden_evidence() -> Dict[str, Any]:
     """The golden satisfies Spec by definition; seeding it stores no proof."""
-    return {"files": {}, "axioms": {}, "log": "golden: Spec.Correct GoldenCircuit.eval holds by definition\n", "depends_on": []}
+    return {"files": {}, "axioms": {}, "log": "golden: Spec.Correct holds by definition\n", "depends_on": []}

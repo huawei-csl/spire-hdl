@@ -226,7 +226,7 @@ def register_slot(module_or_component: Any, db: Optional[str | Path] = None, *,
         d.atomic_write_text(slot / "golden.v", verilog)
     if not (slot / "golden_lean.json").exists():        # Lean tier input, best effort (text only)
         from spire.design_db.verify_lean import golden_lean_capture
-        capture = golden_lean_capture(module, spec["ports"])
+        capture = golden_lean_capture(module, spec["ports"], spec.get("clock"))
         if capture is not None:
             d.write_json(slot / "golden_lean.json", capture)
     if not (slot / "verification.json").exists():

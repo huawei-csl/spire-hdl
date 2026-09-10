@@ -283,3 +283,48 @@ end {proof}
     r = insert_design(key, alt_py, source='agent:rtl-lean-proof', proof=txt, db=tmp_path)
     ax = json.loads((DesignDB.open(tmp_path).slot_dir(key) / 'designs' / r.design_id / 'lean' / 'axioms.json').read_text())
     assert any('bv_decide' in a for a in ax[f'{proof}.implements']) and not r.deduped
+
+
+def test_sequential_slot_end_to_end(tmp_path):
+    """A clocked MAC accumulator as a Lean slot: freeze (trace-equivalence spec), admit two rewrites by
+    simulation-relation proofs, reject the retimed one, add a sequential spec layer."""
+    from lean_matmul_helper import mac_components, machine_proof_lean
+    from spire.design_db import add_spec
+    nets = mac_components()
+    key = register_slot(nets['golden'](), db=tmp_path, name='mac')
+    spec = json.loads((DesignDB.open(tmp_path).slot_dir(key) / 'spec.json').read_text())
+    assert spec['class'] == 'sequential' and spec['clock']['clk'] == 'clk'
+    v = freeze_lean_verification(key, db=tmp_path)
+    assert v['method'] == 'lean' and v['seed'] if 'seed' in v else True
+    assert 'm.trace tr' in (DesignDB.open(tmp_path).slot_dir(key) / 'lean' / 'Spec.lean').read_text()
+    seed_original(key, db=tmp_path)
+
+    def design(name):
+        f = tmp_path / f'{name}.py'
+        f.write_text(f'import sys\nsys.path.insert(0, {str(HERE)!r})\nfrom lean_matmul_helper import mac_components\n'
+                     f'def build():\n    return mac_components()[{name!r}]()\n')
+        return f
+
+    def ws_hash(name):
+        with pytest.raises(VerificationFailed, match=r'Spec\.Correct D[0-9a-f]{10}_Circuit\.machine') as e:
+            check_design(key, design(name), workdir=tmp_path / f'ws_{name}', db=tmp_path)
+        return re.search(r'D([0-9a-f]{10})_Proof', str(e.value)).group(1)
+
+    for name, rel in (('swap', 't.acc = s.acc'), ('split', 't.hi ++ t.lo = s.acc')):
+        c, p = design_modules(ws_hash(name))
+        r = insert_design(key, design(name), source='agent:rtl-lean-proof', db=tmp_path,
+                          proof=machine_proof_lean(circuit_module=c, proof_module=p, relation=rel))
+        assert not r.deduped
+    c, p = design_modules(ws_hash('retimed'))
+    with pytest.raises(ProofFailed):
+        insert_design(key, design('retimed'), source='x', db=tmp_path,
+                      proof=machine_proof_lean(circuit_module=c, proof_module=p, relation='t.acc = s.acc'))
+    # a (trivial) sequential spec layer: the statement is quantified over machines of any state type
+    same = ('import Spec\nopen Interface SpireSemantics\nnamespace Same\n'
+            'def Correct {σ : Type} (m : Machine Inputs Outputs σ) : Prop := Spec.Correct m\nend Same\n')
+    same_proof = ('import Same\nnamespace Same\n'
+                  'theorem equiv {σ : Type} (m : SpireSemantics.Machine Interface.Inputs Interface.Outputs σ) : '
+                  'Same.Correct m ↔ Spec.Correct m := Iff.rfl\nend Same\n')
+    rec = add_spec(key, 'Same', same, same_proof, db=tmp_path)
+    assert rec['statement'].startswith('∀ {σ : Type}')
+    assert len(list((DesignDB.open(tmp_path).slot_dir(key) / 'designs').iterdir())) == 3   # golden + swap + split

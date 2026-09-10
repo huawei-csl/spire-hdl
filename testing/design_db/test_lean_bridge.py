@@ -195,3 +195,83 @@ end {proof}
     lake_build(tmp_path, proof)
     ax = check_theorems(tmp_path, [TheoremCheck(proof, f'{proof}.implements', f'Spec.Correct {circ}.eval')])
     assert any(a.startswith(f'{proof}.implements.') and 'bv_decide' in a for a in ax[f'{proof}.implements'])
+
+
+# --- sequential ------------------------------------------------------------------------------------
+
+def _sim_trace(net, cycles, out_name, mask):
+    from spire.simulator import Simulator
+    io = net.component.io
+    sim = Simulator(net); sim.reset(True); sim.deassert_reset(); trace = []
+    for c in cycles:
+        for n, v in c.items(): sim.set(getattr(io, n), v)
+        sim.eval(); trace.append(sim.get(getattr(io, out_name)) & mask); sim.step()
+    return trace
+
+
+@pytest.fixture(scope='module')
+def seq(tmp_path_factory):
+    """MAC accumulator: golden, swap (same state), split (hi/lo halves), retimed (extra latency)."""
+    from lean_matmul_helper import mac_components, machine_proof_lean
+    from spire.design_db.lean.bridge import default_spec_lean, is_sequential
+    d = tmp_path_factory.mktemp('seq'); nets = {n: c() for n, c in mac_components().items()}
+    ports = netlist_ports(nets['golden'])
+    assert all(is_sequential(n) for n in nets.values()) and {p['name'] for p in ports} == {'a', 'b', 'en', 'clear', 'y'}
+    circ = lambda net, ns: netlist_to_lean(net, options=LeanExportOptions(namespace=ns, ports=ports))
+    files = {'Interface.lean': interface_to_lean(ports), 'GoldenCircuit.lean': circ(nets['golden'], 'GoldenCircuit'),
+             'Spec.lean': default_spec_lean(sequential=True)}
+    mods = {n: design_modules(n) for n in ('swap', 'split', 'retimed')}
+    for n, (c, _p) in mods.items(): files[f'{c}.lean'] = circ(nets[n], c)
+    files[f"{mods['swap'][1]}.lean"] = machine_proof_lean(circuit_module=mods['swap'][0], proof_module=mods['swap'][1], relation='t.acc = s.acc')
+    files[f"{mods['split'][1]}.lean"] = machine_proof_lean(circuit_module=mods['split'][0], proof_module=mods['split'][1], relation='t.hi ++ t.lo = s.acc')
+    for n, t in files.items(): (d / n).write_text(t)
+    write_lean_project(d, [n[:-5] for n in files])
+    return dict(dir=d, nets=nets, ports=ports, mods=mods, files=files)
+
+
+def test_sequential_translation_shape(seq):
+    g = seq['files']['GoldenCircuit.lean']
+    for piece in ('@[ext] structure State where', 'acc : BitVec 24', 'def init : State', 'def next (s : State) (i : Inputs) : State',
+                  'def out (s : State) (i : Inputs) : Outputs', 'def machine : Machine Inputs Outputs State'):
+        assert piece in g
+    assert 'clk' not in seq['files']['Interface.lean'] and 'rst' not in seq['files']['Interface.lean']
+    assert 'm.trace tr = GoldenCircuit.machine.trace tr' in seq['files']['Spec.lean']
+    assert 'hi : BitVec 12' in seq['files'][f"{seq['mods']['split'][0]}.lean"]
+
+
+def test_sequential_trace_matches_simulator(seq):
+    """Lean `machine.trace` equals the simulator (reset, then per cycle: inputs → outputs → edge) on random cycles."""
+    import random, re, subprocess
+    from spire.design_db.lean.bridge import find_lake
+    ins = [(p['name'], p['width']) for p in seq['ports'] if p['dir'] == 'input']
+    rng = random.Random(3); cycles = [{n: rng.randrange(1 << w) for n, w in ins} for _ in range(40)]
+    for c in cycles[:3]: c['clear'] = 0
+    lake_build(seq['dir'], 'GoldenCircuit')
+    lit = ', '.join('{ ' + ', '.join(f'{n} := BitVec.ofNat {w} {c[n]}' for n, w in ins) + ' }' for c in cycles)
+    (seq['dir'] / '_Trace.lean').write_text(f'import GoldenCircuit\nopen Interface\n#eval (GoldenCircuit.machine.trace [{lit}]).map (fun o => o.y.toNat)\n')
+    out = subprocess.run([find_lake(), 'env', 'lean', '_Trace.lean'], cwd=seq['dir'], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert [int(x) for x in re.findall(r'\d+', out.stdout)] == _sim_trace(seq['nets']['golden'], cycles, 'y', 0xFFFFFF)
+
+
+def test_sequential_relation_proofs_check(seq):
+    """swap: state equality; split: `hi ++ lo = acc`. Three SAT-closed local lemmas + Machine.trace_eq_of_rel each."""
+    assert 'Build completed successfully' in lake_build(seq['dir'])
+    checks = [TheoremCheck(p, f'{p}.implements', f'Spec.Correct {c}.machine') for n, (c, p) in seq['mods'].items() if n != 'retimed']
+    ax = check_theorems(seq['dir'], checks)
+    assert all('sorryAx' not in a and any('bv_decide' in x for x in a) for a in ax.values())
+
+
+def test_retimed_design_is_not_provable_and_differs_in_simulation(seq):
+    """Extra latency: the trace differs, and the same relation recipe yields a counterexample (not a proof)."""
+    import random, subprocess
+    from lean_matmul_helper import machine_proof_lean
+    from spire.design_db.lean.bridge import LeanBuildError, find_lake
+    ins = [(p['name'], p['width']) for p in seq['ports'] if p['dir'] == 'input']
+    rng = random.Random(5); cycles = [{n: rng.randrange(1 << w) for n, w in ins} for _ in range(20)]
+    for c in cycles: c['clear'] = 0; c['en'] = 1
+    assert _sim_trace(seq['nets']['golden'], cycles, 'y', 0xFFFFFF) != _sim_trace(seq['nets']['retimed'], cycles, 'y', 0xFFFFFF)
+    c, p = seq['mods']['retimed']
+    (seq['dir'] / f'{p}.lean').write_text(machine_proof_lean(circuit_module=c, proof_module=p, relation='t.acc = s.acc'))
+    out = subprocess.run([find_lake(), 'env', 'lean', f'{p}.lean'], cwd=seq['dir'], capture_output=True, text=True)
+    assert out.returncode != 0 and 'counterexample' in out.stdout + out.stderr
