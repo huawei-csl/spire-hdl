@@ -1,5 +1,6 @@
 """Test helpers that WRITE Lean proofs for the matmul-accumulate candidates. The package never does;
 in production this is the agent's job (a skill may carry code like this as a first attempt).
+Also `OpZoo`/`Bits*` components that exercise the wider operator set for the differential and bv_decide tests.
 
 Pieces: exact-width lemmas per arithmetic shape, a spec layer `Mmac` (Y = C + A·B over ℤ) with its
 `equiv` proof, a candidate proof through the layer, a delta proof against an admitted design, and a
@@ -13,8 +14,9 @@ from spire.design_db.lean.bridge import Port
 
 
 def exact_lemma(op, wa, wb, wo) -> str:
-    fn, sym = ('mulSS', '*') if op == '*' else ('addSS', '+')
-    ovf, api = ('smulOverflow', 'toInt_mul_of_not_smulOverflow') if op == '*' else ('saddOverflow', 'toInt_add_of_not_saddOverflow')
+    fn, sym, ovf, api = {'+': ('addSS', '+', 'saddOverflow', 'toInt_add_of_not_saddOverflow'),
+                         '-': ('subSS', '-', 'ssubOverflow', 'toInt_sub_of_not_ssubOverflow'),
+                         '*': ('mulSS', '*', 'smulOverflow', 'toInt_mul_of_not_smulOverflow')}[op]
     return f"""@[simp] theorem {fn[:3]}_{wa}_{wb}_{wo}_exact (a : BitVec {wa}) (b : BitVec {wb}) :
     ({fn} {wo} a b).toInt = a.toInt {sym} b.toInt := by
   unfold {fn}
@@ -120,3 +122,54 @@ theorem step (i : Inputs) : {circuit_module}.eval i = {base_circuit}.eval i := b
 theorem implements : Spec.Correct {circuit_module}.eval := fun i => (step i).trans ({base_proof}.implements i)
 end {proof_module}
 """
+
+
+# --- operator-coverage components (for the differential test and whole-design bv_decide proofs) ---------
+
+def opzoo_component():
+    """Every supported combinational operator, with signed / unsigned / mixed operands."""
+    from spire import Bool, Component, IORecord, Input, Output, SInt, UInt
+    from spire.expr import cat, mux
+
+    class OpZoo(Component):
+        def __init__(self):
+            self.io = IORecord(a=Input(SInt(8)), b=Input(SInt(8)), u=Input(UInt(8)), v=Input(UInt(6)), s=Input(Bool()),
+                               y_and=Output(UInt(8)), y_or=Output(UInt(8)), y_xor=Output(UInt(8)), y_not=Output(UInt(8)),
+                               y_sub=Output(SInt(9)), y_usub=Output(UInt(9)), y_uadd=Output(UInt(9)), y_umul=Output(UInt(14)),
+                               y_mixadd=Output(SInt(9)), y_mixmul=Output(SInt(16)), y_shl=Output(SInt(10)),
+                               y_shr=Output(UInt(8)), y_shlv=Output(UInt(8)), y_lt=Output(Bool()), y_eq=Output(Bool()),
+                               y_mixlt=Output(Bool()), y_ge=Output(Bool()), y_mux=Output(SInt(8)), y_mux2=Output(SInt(9)),
+                               y_cat=Output(UInt(10)), y_slice=Output(UInt(4)))
+            self.elaborate()
+
+        def elaborate(self):
+            io = self.io
+            io.y_and <<= io.a & io.b;  io.y_or <<= io.u | io.v;  io.y_xor <<= io.a ^ io.u;  io.y_not <<= ~io.a
+            io.y_sub <<= io.a - io.b;  io.y_usub <<= io.u - io.v;  io.y_uadd <<= io.u + io.v;  io.y_umul <<= io.u * io.v
+            io.y_mixadd <<= io.a + io.u;  io.y_mixmul <<= io.a * io.u
+            io.y_shl <<= io.a << 2;  io.y_shr <<= io.u >> io.v[0:3];  io.y_shlv <<= io.u << io.v[0:3]
+            io.y_lt <<= io.a < io.b;  io.y_eq <<= io.u == io.v;  io.y_mixlt <<= io.a < io.u;  io.y_ge <<= io.v >= io.u
+            io.y_mux <<= mux(io.s, io.a, io.u);  io.y_mux2 <<= mux(io.a < io.b, io.a - io.b, io.b - io.a)
+            io.y_cat <<= cat(io.v, io.s, io.u[0:3]);  io.y_slice <<= io.a[2:6]
+    return OpZoo()
+
+
+def bits_components():
+    """(golden, equivalent rewrite) over 8-bit unsigned bitwise logic; different netlists, same function."""
+    from spire import Component, IORecord, Input, Output, UInt
+
+    class _Bits(Component):
+        def __init__(self):
+            self.io = IORecord(a=Input(UInt(8)), b=Input(UInt(8)), c=Input(UInt(8)), y=Output(UInt(8)), z=Output(UInt(8)))
+            self.elaborate()
+
+    class BitsGolden(_Bits):
+        def elaborate(self):
+            self.io.y <<= (self.io.a & self.io.b) | (~self.io.a & self.io.c)     # bitwise mux
+            self.io.z <<= self.io.a ^ self.io.b
+
+    class BitsAlt(_Bits):
+        def elaborate(self):
+            self.io.y <<= (self.io.a & (self.io.b ^ self.io.c)) ^ self.io.c       # same mux, xor form
+            self.io.z <<= (self.io.a | self.io.b) & ~(self.io.a & self.io.b)      # same xor, and/or form
+    return BitsGolden(), BitsAlt()

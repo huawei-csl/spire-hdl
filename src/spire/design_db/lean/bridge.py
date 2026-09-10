@@ -94,7 +94,17 @@ class LeanExportOptions:
     ports: Optional[Sequence[Port]] = None        # if given, the netlist must match exactly
 
 
+def _sflag(e) -> bool:
+    return bool(getattr(e.typ, 'signed', False))
+
+
+_CMP = {'==': 'cmpEq', '!=': 'cmpNe', '<': 'cmpLt', '<=': 'cmpLe', '>': 'cmpGt', '>=': 'cmpGe'}
+_BIT = {'&': 'bitAnd', '|': 'bitOr', '^': 'bitXor', 'nand': 'bitNand'}
+_ARITH = {'+': 'add', '-': 'sub', '*': 'mul'}
+
+
 class _Visitor(ExprVisitor[str]):
+    """Netlist expression -> Lean term over SpireSemantics; mirrors spire.simulator node by node."""
     def __init__(self, input_names: Dict[int, str]):
         super().__init__(); self.input_names = input_names
     def visit_const(self, e: Const) -> str:
@@ -104,27 +114,43 @@ class _Visitor(ExprVisitor[str]):
         if e.kind == 'reg': raise NotImplementedError('registers not supported')
         if e._driver is None: raise ValueError(f'undriven signal {e.name}')
         return self.visit(e._driver)        # reinterpret wire: BitVec holds the pattern only
-    def visit_op1(self, e): raise NotImplementedError(f'op1 {e.op}')
+    def visit_op1(self, e: Op1) -> str:
+        if e.op == '~': return f"bitNot ({self.visit(e.a)})"
+        raise NotImplementedError(f'op1 {e.op}')
     def visit_op2(self, e: Op2) -> str:
-        a, b = self.visit(e.a), self.visit(e.b); wo = e.typ.width
-        if e.op in ('*', '+') and e.a.typ.signed and e.b.typ.signed and e.typ.signed:
-            return f"{'mulSS' if e.op == '*' else 'addSS'} {wo} ({a}) ({b})"
-        raise NotImplementedError(f"unsupported op {e.op} {e.a.typ.width}{'s' if e.a.typ.signed else 'u'} x "
-                                  f"{e.b.typ.width}{'s' if e.b.typ.signed else 'u'} -> {e.typ.width}{'s' if e.typ.signed else 'u'}")
-    def visit_ternary(self, e): raise NotImplementedError('mux')
-    def visit_concat(self, e): raise NotImplementedError('concat')
-    def visit_slice(self, e): raise NotImplementedError('slice')
+        a, b, wo = self.visit(e.a), self.visit(e.b), e.typ.width
+        sa, sb = 'S' if _sflag(e.a) else 'U', 'S' if _sflag(e.b) else 'U'
+        if e.op in _ARITH: return f"{_ARITH[e.op]}{sa}{sb} {wo} ({a}) ({b})"
+        if e.op in _BIT: return f"{_BIT[e.op]} {wo} ({a}) ({b})"
+        if e.op == '<<': return f"shl {wo} ({a}) ({b})"
+        if e.op == '>>': return f"shr {wo} ({a}) ({b})"
+        if e.op in _CMP:
+            return f"{_CMP[e.op]} {str(_sflag(e.a)).lower()} {str(_sflag(e.b)).lower()} ({a}) ({b})"
+        raise NotImplementedError(f'unsupported op {e.op}')
+    def _fit(self, e, wo: int) -> str:
+        t = self.visit(e)
+        return t if e.typ.width == wo else f"{'resizeS' if _sflag(e) else 'resizeU'} {wo} ({t})"
+    def visit_ternary(self, e: Ternary) -> str:
+        return f"mux ({self.visit(e.sel)}) ({self._fit(e.a, e.typ.width)}) ({self._fit(e.b, e.typ.width)})"
+    def visit_concat(self, e: Concat) -> str:
+        parts = [f"({self.visit(p)})" for p in e.parts]           # Spire: parts[0] is the LSB; Lean `++`: high ++ low
+        cat = ' ++ '.join(reversed(parts)) if len(parts) > 1 else parts[0]
+        total = sum(p.typ.width for p in e.parts)
+        return f"({cat})" if total == e.typ.width else f"resizeU {e.typ.width} ({cat})"
+    def visit_slice(self, e: Slice) -> str:
+        return f"BitVec.extractLsb' {e.lsb} {e.typ.width} ({self.visit(e.a)})"
     def visit_resize(self, e: Resize) -> str:
-        return f"{'resizeS' if e.a.typ.signed else 'resizeU'} {e.typ.width} ({self.visit(e.a)})"
+        return f"{'resizeS' if _sflag(e.a) else 'resizeU'} {e.typ.width} ({self.visit(e.a)})"
     def visit_array_index(self, e): raise NotImplementedError('memory')
 
 
 def collect_signed_arith_shapes(netlist) -> Set[Tuple[str, int, int, int]]:
+    """(op, wa, wb, wo) of every signed-by-signed `+ - *` node — the shapes the exact-width lemma family covers."""
     netlist.collect_signals(); seen = set(); shapes = set()
     def walk(e):
         if e is None or id(e) in seen: return
         seen.add(id(e))
-        if isinstance(e, Op2) and e.op in ('+', '*') and e.a.typ.signed and e.b.typ.signed and e.typ.signed:
+        if isinstance(e, Op2) and e.op in ('+', '-', '*') and e.a.typ.signed and e.b.typ.signed and e.typ.signed:
             shapes.add((e.op, e.a.typ.width, e.b.typ.width, e.typ.width))
         for c in expr_children(e): walk(c)
     for p in netlist._ports:
@@ -262,12 +288,9 @@ _AXIOM_REPORT = (
 
 
 def _allowed_axiom(name: str, module: str, typ: str, check: TheoremCheck) -> bool:
-    if name in BASE_AXIOMS: return True
-    # bv_decide certificate axioms, identified by statement. Policy on top: not attached to the final
-    # theorem itself (no whole-design SAT directly in `implements`; a heuristic, not a soundness rule).
-    if typ.startswith(BV_DECIDE_CERT_HEAD):
-        return not name.startswith(check.theorem + '.')
-    return False
+    """Lean's three base axioms, plus bv_decide certificates identified by their statement — wherever
+    they occur, including in the final theorem (whole-design SAT is legitimate; the lake budget bounds it)."""
+    return name in BASE_AXIOMS or typ.startswith(BV_DECIDE_CERT_HEAD)
 
 
 def check_theorems(lean_dir: Path, checks: Sequence[TheoremCheck], *, timeout: float = 300) -> Dict[str, List[str]]:

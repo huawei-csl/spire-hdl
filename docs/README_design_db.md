@@ -120,7 +120,9 @@ statement, uses `sorry`, or a disallowed axiom), `SpecRejected` (a layer's `equi
 `VerificationFailed` (not spire-native, no proof, custom Verilog, untranslatable construct). Admitted
 designs keep `lean/D<hash>_Circuit.lean`, `lean/D<hash>_Proof.lean`, `lean/axioms.json`, the build log,
 and `depends_on` (the proof's imports) in provenance. `lake` must be installed; its absence is an error,
-never a silent pass. Combinational, spire-native candidates only.
+never a silent pass. Combinational, spire-native candidates only; translated operators: `+ - *` in any
+signedness mix, bitwise, shifts, comparisons, mux, concat, slice, resize (see `README_lean_gate.md`).
+`bv_decide` is allowed anywhere in a proof, including on the whole design.
 
 Sim and Lean tiers follow the same shape — freeze an oracle, seed, verify, insert — and differ by design in
 three places: the Lean oracle needs no authored input at all; Lean candidates must be spire-native and carry

@@ -126,3 +126,72 @@ def test_forged_bv_decide_named_axiom_is_rejected(proj, tmp_path):
     lake_build(d, lp)
     with pytest.raises(ProofCheckError, match='disallowed axioms'):
         check_theorems(d, [TheoremCheck(lp, f'{lp}.implements', f'Spec.Correct {lc}.eval')])
+
+
+# --- operator coverage ---------------------------------------------------------------------------
+
+def _lean_eval(project: Path, module: str, inputs: dict, outputs: list, vectors: list) -> list:
+    """Evaluate `module.eval` on each input vector via `#eval`; returns [[toNat per output]] in order."""
+    import re, subprocess
+    from spire.design_db.lean.bridge import find_lake
+    lines = [f'import {module}', 'open Interface']
+    for vec in vectors:
+        lit = ', '.join(f'{n} := BitVec.ofNat {w} {vec[n]}' for n, w in inputs.items())
+        lines.append(f'#eval [{", ".join(f"({module}.eval {{ {lit} }}).{o}.toNat" for o in outputs)}]')
+    (project / '_Eval.lean').write_text('\n'.join(lines) + '\n')
+    out = subprocess.run([find_lake(), 'env', 'lean', '_Eval.lean'], cwd=project, capture_output=True, text=True)
+    assert out.returncode == 0, out.stdout + out.stderr
+    return [[int(x) for x in re.findall(r'\d+', l)] for l in out.stdout.splitlines() if l.startswith('[')]
+
+
+def test_operator_semantics_match_simulator(tmp_path):
+    """Differential test of SpireSemantics + translator against spire.simulator on every supported operator."""
+    import random
+    from spire.simulator import Simulator
+    from lean_matmul_helper import opzoo_component
+    core = opzoo_component(); net = core.to_netlist('zoo')
+    ports = netlist_ports(net)
+    ins = {p['name']: p['width'] for p in ports if p['dir'] == 'input'}
+    outs = [p['name'] for p in ports if p['dir'] == 'output']; outw = {p['name']: p['width'] for p in ports}
+    files = {'Interface.lean': interface_to_lean(ports),
+             'OpZooCircuit.lean': netlist_to_lean(net, options=LeanExportOptions(namespace='OpZooCircuit', ports=ports))}
+    for n, t in files.items(): (tmp_path / n).write_text(t)
+    write_lean_project(tmp_path, ['Interface', 'OpZooCircuit'])
+    lake_build(tmp_path, 'OpZooCircuit')
+    rng = random.Random(7); corners = [0, 1, 0x7F, 0x80, 0xFF]
+    vectors = [{n: rng.choice(corners + [rng.randrange(1 << w)]) & ((1 << w) - 1) for n, w in ins.items()} for _ in range(40)]
+    sim = Simulator(net); expected = []
+    for vec in vectors:
+        for n, v in vec.items(): sim.set(getattr(core.io, n), v)
+        sim.eval()
+        expected.append([sim.get(getattr(core.io, o)) & ((1 << outw[o]) - 1) for o in outs])
+    got = _lean_eval(tmp_path, 'OpZooCircuit', ins, outs, vectors)
+    assert len(got) == len(vectors)
+    for vec, e, g in zip(vectors, expected, got):
+        assert e == g, {o: (a, b) for o, a, b in zip(outs, e, g) if a != b} | {'inputs': vec}
+
+
+def test_whole_design_bv_decide_proof_is_accepted(tmp_path):
+    """A bitwise rewrite proven by SAT on the whole (small) design — allowed; the certificate hangs off `implements`."""
+    from lean_matmul_helper import bits_components
+    golden, alt = bits_components()
+    gnet, anet = golden.to_netlist('g'), alt.to_netlist('a'); ports = netlist_ports(gnet)
+    circ, proof = design_modules('alt')
+    files = {'Interface.lean': interface_to_lean(ports), 'Spec.lean': default_spec_lean(),
+             'GoldenCircuit.lean': netlist_to_lean(gnet, options=LeanExportOptions(namespace='GoldenCircuit', ports=ports)),
+             f'{circ}.lean': netlist_to_lean(anet, options=LeanExportOptions(namespace=circ, ports=ports)),
+             f'{proof}.lean': f'''import {circ}
+import Spec
+import Std.Tactic
+open SpireSemantics Interface
+namespace {proof}
+theorem implements : Spec.Correct {circ}.eval := by
+  intro i
+  apply Outputs.ext <;> (simp only [{circ}.eval, GoldenCircuit.eval, bitAnd, bitOr, bitXor, bitNot]; bv_decide)
+end {proof}
+'''}
+    for n, t in files.items(): (tmp_path / n).write_text(t)
+    write_lean_project(tmp_path, [n[:-5] for n in files])
+    lake_build(tmp_path, proof)
+    ax = check_theorems(tmp_path, [TheoremCheck(proof, f'{proof}.implements', f'Spec.Correct {circ}.eval')])
+    assert any(a.startswith(f'{proof}.implements.') and 'bv_decide' in a for a in ax[f'{proof}.implements'])

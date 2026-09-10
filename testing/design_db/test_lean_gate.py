@@ -92,12 +92,15 @@ def test_registration_captures_the_golden_lean_model(env):
 
 
 def test_untranslatable_golden_cannot_be_lean_gated(tmp_path):
-    from spire import Component, IORecord, Input, Output, UInt
-    class Unsigned(Component):
+    """A golden whose emitted RTL is not its netlist (custom Verilog) gets no Lean capture."""
+    from spire import IORecord, Input, Output, UInt
+    from spire.component import CustomVerilogComponent
+    class Odd(CustomVerilogComponent):
         def __init__(self):
-            self.io = IORecord(a=Input(UInt(8)), b=Input(UInt(8)), s=Output(UInt(9))); self.elaborate()
-        def elaborate(self): self.io.s <<= self.io.a + self.io.b
-    key = register_slot(Unsigned(), db=tmp_path, name='uadd')
+            self.io = IORecord(a=Input(UInt(8)), y=Output(UInt(8))); self.elaborate()
+        def elaborate(self): self.io.y <<= self.io.a
+        def custom_verilog(self): return 'assign y = 8\'d0;'
+    key = register_slot(Odd(), db=tmp_path, name='odd')
     with pytest.raises(DesignDBError, match='not translatable to Lean at registration'):
         freeze_lean_verification(key, db=tmp_path)
 
@@ -253,3 +256,30 @@ def test_cli_round_trip(tmp_path):
     assert cli(['db', 'insert', '--db', db, '--slot', 'mmac', str(design_file(tmp_path / 'g.py', 'CANDIDATES["CommutedMulMmac"]()'))]) == 2
     assert cli(['db', 'set-verification', '--db', db, '--slot', 'mmac', '--cec']) == 1
     assert cli(['db', 'show', '--db', db, 'mmac']) == 0
+
+
+def test_bitwise_slot_admits_whole_design_sat_proof(tmp_path):
+    """Gate-level: a Lean slot over bitwise logic; the candidate proof is bv_decide on the whole design."""
+    from lean_matmul_helper import bits_components
+    golden, alt = bits_components()
+    key = register_slot(golden, db=tmp_path, name='bits')
+    freeze_lean_verification(key, db=tmp_path)
+    alt_py = tmp_path / 'alt.py'
+    alt_py.write_text(f'import sys\nsys.path.insert(0, {str(HERE)!r})\nfrom lean_matmul_helper import bits_components\n'
+                      'def build():\n    return bits_components()[1]\n')
+    with pytest.raises(VerificationFailed, match='no proof given') as e:
+        check_design(key, alt_py, workdir=tmp_path / 'ws', db=tmp_path)
+    h = re.search(r'D([0-9a-f]{10})_Proof', str(e.value)).group(1); circ, proof = design_modules(h)
+    txt = f'''import {circ}
+import Spec
+import Std.Tactic
+open SpireSemantics Interface
+namespace {proof}
+theorem implements : Spec.Correct {circ}.eval := by
+  intro i
+  apply Outputs.ext <;> (simp only [{circ}.eval, GoldenCircuit.eval, bitAnd, bitOr, bitXor, bitNot]; bv_decide)
+end {proof}
+'''
+    r = insert_design(key, alt_py, source='agent:rtl-lean-proof', proof=txt, db=tmp_path)
+    ax = json.loads((DesignDB.open(tmp_path).slot_dir(key) / 'designs' / r.design_id / 'lean' / 'axioms.json').read_text())
+    assert any('bv_decide' in a for a in ax[f'{proof}.implements']) and not r.deduped

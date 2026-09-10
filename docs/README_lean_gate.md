@@ -71,7 +71,7 @@ key = register_slot(golden_component, name="mmac")        # Python only; the dec
 |---|---|
 | Who | Spire |
 | Generates | `spec.json` (ports, class, key), `golden.v`, default `verification.json` (cec), **`golden_lean.json`**: the golden's netlist translated to Lean plus its arithmetic shapes |
-| Checks | the golden is translatable (combinational; signed `+`, `*`, resize; no `custom_verilog`). If not, `golden_lean.json` is absent and the slot cannot be Lean-gated — everything else still works |
+| Checks | the golden is translatable: combinational; `+ - *` in any signedness mix, `& \| ^ ~ nand`, shifts, all six comparisons, mux, concat, slice, resize, constants; no registers, memories or `custom_verilog`. If not, `golden_lean.json` is absent and the slot cannot be Lean-gated — everything else still works |
 | Cost | milliseconds, no Lean |
 
 ## Phase 2 — freeze the Lean oracle
@@ -156,7 +156,15 @@ end Da_Proof
 ```
 
 Iterate with `cd ws && lake build` and read Lean's errors. Rules the checker will enforce: keep the
-statement; no `sorry`; no `axiom`; `bv_decide` only inside small lemmas about one arithmetic node.
+statement; no `sorry`; no `axiom`. `bv_decide` is allowed anywhere, including on the whole design in
+`implements` — for bitwise / mux / compare logic that is often the right tool:
+
+```lean
+-- (d) whole-design SAT, fine for small control/bitwise blocks (the lake budget bounds it)
+theorem implements : Spec.Correct D_aCircuit.eval := by
+  intro i
+  apply Outputs.ext <;> (simp only [D_aCircuit.eval, GoldenCircuit.eval, bitAnd, bitOr, bitXor, bitNot]; bv_decide)
+```
 
 ## Phase 6 — verify, then insert
 
@@ -208,3 +216,27 @@ slots/<key>/
 
 Requirements: `lake` on PATH (`elan` with `leanprover/lean4:v4.33.1`); its absence is an error, never a
 silent pass. Combinational slots only.
+
+## Supported operators and their Lean meaning
+
+`SpireSemantics.lean` mirrors `spire.simulator` node by node; a differential test
+(`test_operator_semantics_match_simulator`) checks every operator against the simulator on random and
+corner vectors.
+
+| Spire | Lean | Note |
+|---|---|---|
+| `+ - *` (any signedness mix) | `addSS/SU/US/UU`, `sub…`, `mul…` | each operand extended to the result width by its own signedness, then the operation mod 2^w |
+| `& \| ^ nand` | `bitAnd bitOr bitXor bitNand` | operands zero-extended; result unsigned |
+| `~` | `bitNot` | |
+| `<<` | `shl` | `a` widened/truncated to the result width, shifted by `b.toNat`; ≥ width gives 0 |
+| `>>` | `shr` | logical shift of the pattern, also for signed `a` (as in Verilog `>>`) |
+| `== != < <= > >=` | `cmpEq … cmpGe sa sb` | exact integer compare, each operand read by its own signedness; 1-bit result |
+| `mux(sel, a, b)` | `mux sel a b` | `sel ≠ 0 ? a : b`; branches resized to the result width by their own signedness |
+| `cat(p0, p1, …)` | `pn ++ … ++ p0` | `p0` is the LSB |
+| `a[lo:hi]` | `BitVec.extractLsb' lo (hi-lo) a` | unsigned |
+| resize | `resizeS` / `resizeU` | sign / zero extension, truncation when narrower |
+| constants | `BitVec.ofInt` / `ofNat` | |
+
+Not translated: registers, memories, `custom_verilog` (planned separately). The exact-width lemma family
+used by the layered proofs covers signed `+ - *`; other operators are proven with core `BitVec` simp
+lemmas or `bv_decide`.
