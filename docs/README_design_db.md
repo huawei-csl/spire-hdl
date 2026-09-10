@@ -91,8 +91,7 @@ the candidate's netlist by the gate. **The package never writes a proof**; agent
 Nicer, proven-equivalent formulations are added as **spec layers**, append-only:
 
 ```bash
-spire db set-verification --slot mmac --lean                       # freeze: no author, no proof needed
-spire db seed --slot mmac                                          # golden: Spec is its own definition
+spire db set-verification --slot mmac --lean                       # freeze: no author, no proof; seeds the golden
 spire db add-spec --slot mmac Mmac Mmac.lean MmacProof.lean --author agent:lean-spec-author
 #   Mmac.lean: def Mmac.Correct e := ∀ i, (e i).y.toInt = c + Σ a·b  (integers)
 #   MmacProof.lean: theorem Mmac.equiv : ∀ e, Mmac.Correct e ↔ Spec.Correct e
@@ -260,8 +259,9 @@ elaborates them and stores both the canonical Verilog and the Python source prov
 
 ### Seed the baseline
 
-`seed_original(spec_key)` or `spire db seed --slot <slot>` inserts the slot golden as a design with
-`source="original"`. This gives selection a floor: an argmin cannot pick something worse than the
+`spire db set-verification` seeds the golden automatically after freezing (any tier; `--no-seed` to
+skip). `seed_original(spec_key)` or `spire db seed --slot <slot>` does the same by hand: it inserts the
+slot golden as a design with `source="original"`. This gives selection a floor: an argmin cannot pick something worse than the
 original if the original is present and eligible.
 
 Seeding is idempotent through structural dedup. It is not automatic during registration because
@@ -614,7 +614,7 @@ The verification-related commands have distinct jobs:
 
 | Command | Scope | Writes? | Purpose |
 |---|---:|---:|---|
-| `set-verification` | slot | yes | Choose the oracle used by later checks. Sim tiers freeze a trace; `--lean` freezes golden equivalence as the spec. `--check` dry-runs either. |
+| `set-verification` | slot | yes | Choose the oracle used by later checks and seed the golden (`--no-seed` to skip). Sim tiers freeze a trace; `--lean` freezes golden equivalence as the spec. `--check` dry-runs either. |
 | `add-spec NAME SPEC PROOF` | slot | yes | Lean tier: admit a proven-equivalent spec layer (append-only). |
 | `verify <design>` | candidate | no | Run the slot oracle and report `PASS` or `FAIL`. Lean tier: `--proof FILE`; `--workspace DIR` keeps the Lean project (without `--proof`: writes the workspace and names the proof file to write). |
 | `insert <design>` | candidate | yes, on pass | Run the same check, then admit the candidate. |

@@ -236,9 +236,11 @@ def test_cli_round_trip(tmp_path):
     shapes = collect_signed_arith_shapes(c.CANDIDATES['BalancedMmac']().to_netlist('g'))
     (tmp_path / 'Mmac.lean').write_text(c.CONTRACT.spec_lean('Mmac'))
     (tmp_path / 'MmacProof.lean').write_text(layer_proof_lean('Mmac', shapes))
+    slot = DesignDB.open(db).slot_dir(register_slot(c.CANDIDATES['BalancedMmac'](), db=db, name='mmac'))
     assert cli(['db', 'set-verification', '--db', db, '--slot', 'mmac', '--lean', '--check', '--workspace', str(tmp_path / 'frz')]) == 0
-    assert (tmp_path / 'frz' / 'Spec.lean').exists()
+    assert (tmp_path / 'frz' / 'Spec.lean').exists() and not list((slot / 'designs').glob('original:*'))   # dry run: no seed
     assert cli(['db', 'set-verification', '--db', db, '--slot', 'mmac', '--lean']) == 0
+    assert list((slot / 'designs').glob('original:*'))                                                  # freeze seeded the golden
     assert cli(['db', 'add-spec', '--db', db, '--slot', 'mmac', 'Mmac', str(tmp_path / 'Mmac.lean'), str(tmp_path / 'MmacProof.lean'),
                 '--author', 'human']) == 0
     ws = tmp_path / 'ws'

@@ -234,8 +234,7 @@ def _cmd_set_verification(args: argparse.Namespace) -> int:
         verification = freeze_lean_verification(
             key, author=args.author, db=args.db, dry_run=args.check, keep_dir=_opt_path(args.workspace),
             lake_budget_s=args.budget if args.budget is not None else DEFAULT_LAKE_BUDGET_S)
-        print(json.dumps(verification, indent=2, sort_keys=True))
-        return 0
+        return _print_frozen(args, key, verification)
     if mode == "cec":
         if spec.get("class") == "sequential":
             raise DesignDBError("CEC is inapplicable to sequential slots (no register mapping) — "
@@ -252,6 +251,17 @@ def _cmd_set_verification(args: argparse.Namespace) -> int:
             key, stimulus_file=args.stimulus, n_vectors=args.vectors, seed=args.seed,
             sim_budget_s=args.budget if args.budget is not None else 300.0,
             stimulus_author=args.author, db=args.db)
+    return _print_frozen(args, key, verification)
+
+
+def _print_frozen(args: argparse.Namespace, key: str, verification: dict) -> int:
+    """Common tail of set-verification: seed the golden (all tiers, unless --no-seed or a dry run), print."""
+    if not args.check and not args.no_seed and not verification.get("dry_run"):
+        import contextlib, io
+        from spire.design_db.insert import seed_original
+        with contextlib.redirect_stdout(io.StringIO()):
+            res = seed_original(key, db=args.db)
+        verification = {**verification, "seed": {"design_id": res.design_id, "deduped": res.deduped}}
     print(json.dumps(verification, indent=2, sort_keys=True))
     return 0
 
@@ -286,8 +296,8 @@ def main(argv: Optional[list] = None) -> int:
                    help="Lean-gated slots: the candidate's D<hash>_Proof.lean")
     p.set_defaults(func=_cmd_insert)
 
-    p = sub.add_parser("seed", help="insert the slot's own golden as the baseline candidate "
-                                    "(source=original) — a selection floor + report baseline")
+    p = sub.add_parser("seed", help="insert the slot's own golden as the baseline candidate (source=original); "
+                                    "set-verification does this by default — use for slots frozen with --no-seed")
     _common(p); p.add_argument("--slot", required=True,
                                help="manifest name, spec_key, or unique key prefix")
     p.add_argument("--budget", type=float, default=None, help="CEC budget in seconds")
@@ -330,8 +340,10 @@ def main(argv: Optional[list] = None) -> int:
                    help="recorded author for --stimulus / --lean-spec freezes (unset if omitted; "
                         "agent layers pass e.g. agent:rtl-dv-prep, agent:lean-spec-author)")
     p.add_argument("--check", action="store_true",
-                   help="dry run, nothing frozen: --stimulus loads the generator and produces vectors; "
-                        "--lean-spec runs both freeze obligations")
+                   help="dry run, nothing frozen and nothing seeded: --stimulus loads the generator and produces "
+                        "vectors; --lean compiles the frozen files")
+    p.add_argument("--no-seed", action="store_true",
+                   help="do not admit the golden as the baseline design after freezing (default: seed, all tiers)")
     p.add_argument("--workspace", default=None, metavar="DIR",
                    help="--lean: keep the Lean freeze project in DIR")
     p.set_defaults(func=_cmd_set_verification)
