@@ -394,6 +394,8 @@ class TestbenchGenSimulator(SimulatorBase):
             lines.append(f"  reg  {s.typ.range_str()} {s.name};")
         for s in expected_outputs:
             lines.append(f"  reg  {s.typ.range_str()} expected_{s.name};")
+        for s in data_inputs:
+            lines.append(f"  reg  {s.typ.range_str()} din_{s.name};")
         for s in self.outputs:
             lines.append(f"  wire {s.typ.range_str()} {s.name};")
         lines.append("")
@@ -412,7 +414,8 @@ class TestbenchGenSimulator(SimulatorBase):
         lines.append("  integer pass_cnt;")
         lines.append("  integer fail_cnt;")
         lines.append("  reg mismatch;")
-        lines.append("  string line_buf;")
+        lines.append("  reg valid;")
+        lines.append("  integer ch;")
         lines.append("")
         lines.append("  initial begin")
 
@@ -435,23 +438,27 @@ class TestbenchGenSimulator(SimulatorBase):
         fmt_parts = ["%d"] * (len(data_inputs) + len(expected_outputs))
         fmt = " ".join(fmt_parts)
         expected_names = [f"expected_{s.name}" for s in expected_outputs]
-        lvalues = ", ".join([s.name for s in data_inputs] + expected_names)
-        lines.append("      line_read = $fgets(line_buf, fd);")
-        lines.append("      if (line_read == 0) begin")
-        lines.append("        continue;")
+        # Inputs are scanned into `din_*` temporaries and then driven with ordinary blocking assignments:
+        # Verilator does not register a variable written through a $fscanf output argument as changed, so
+        # combinational logic fed directly by it would stay stale until something else triggered it.
+        lvalues = ", ".join([f"din_{s.name}" for s in data_inputs] + expected_names)
+        # Portable line handling (Icarus 12 and Verilator): no `continue`/`break` (unsupported by Icarus) and no
+        # `string` targets for $fgets (Icarus requires a reg; a wide reg buffer blows up Verilator). Peek the first character: '#' comment and blank
+        # lines are consumed and skipped, anything else is pushed back and parsed with $fscanf.
+        lines.append("      valid = 0;")
+        lines.append("      ch = $fgetc(fd);")
+        lines.append("      if (ch == \"#\") begin")
+        lines.append("        while (ch != 10 && ch >= 0) ch = $fgetc(fd);   // skip the comment line")
+        lines.append("      end else if (ch >= 0 && ch != 10 && ch != 13 && ch != 32 && ch != 9) begin")
+        lines.append("        rc = $ungetc(ch, fd);")
+        lines.append("        line = line + 1;")
+        lines.append(f"        rc = $fscanf(fd, \"{fmt}\", {lvalues});")
+        lines.append("        if (rc == {n}) valid = 1;".format(n=len(data_inputs) + len(expected_outputs)))
+        lines.append("        else $display(\"Skipping line %0d (rc=%0d)\", line, rc);")
         lines.append("      end")
-        lines.append("      line = line + 1;")
-        lines.append("      if (line_buf.len() == 0) begin")
-        lines.append("        continue;")
-        lines.append("      end")
-        lines.append("      if (line_buf.substr(0, 0) == \"#\") begin")
-        lines.append("        continue;")
-        lines.append("      end")
-        lines.append(f"      rc = $sscanf(line_buf, \"{fmt}\", {lvalues});")
-        lines.append("      if (rc != {n}) begin".format(n=len(data_inputs) + len(expected_outputs)))
-        lines.append("        $display(\"Skipping line %0d (rc=%0d)\", line, rc);")
-        lines.append("        continue;")
-        lines.append("      end")
+        lines.append("      if (valid) begin")
+        for inp in data_inputs:
+            lines.append(f"      {inp.name} = din_{inp.name};")
         if with_clk and clk_sig is not None:
             lines.append("      #1;")
             lines.append(f"      {clk_sig.name} = 1'b1;")
@@ -476,6 +483,7 @@ class TestbenchGenSimulator(SimulatorBase):
         lines.append("      end else begin")
         lines.append("        pass_cnt = pass_cnt + 1;")
         lines.append("      end")
+        lines.append("      end  // valid")
         lines.append("    end")
         lines.append("    $display(\"Finished: %0d passed, %0d failed\", pass_cnt, fail_cnt);")
         lines.append("    if (fail_cnt == 0 && pass_cnt > 0) begin")
