@@ -7,7 +7,8 @@ from typing import Any, Optional
 
 _VALID_VERILOG_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 
-# IEEE 1364-2005 reserved words, plus the SystemVerilog ones tools hit when reading with -sv.
+# IEEE 1364-2005 reserved words plus the IEEE 1800-2017 (SystemVerilog) keywords: emitted modules are routinely
+# compiled as SystemVerilog (iverilog -g2012, Verilator), where e.g. a signal named `inside` is a syntax error.
 VERILOG_KEYWORDS = frozenset("""
 always and assign automatic begin buf bufif0 bufif1 case casex casez cell cmos config deassign default defparam
 design disable edge else end endcase endconfig endfunction endgenerate endmodule endprimitive endspecify endtable
@@ -19,7 +20,15 @@ scalared showcancelled signed small specify specparam strong0 strong1 supply0 su
 tranif1 tri tri0 tri1 triand trior trireg unsigned use uwire vectored wait wand weak0 weak1 while wire wor xnor xor
 logic bit byte int shortint longint always_comb always_ff always_latch enum struct union typedef unique priority
 packed interface modport var void return break continue do final
-""".split())
+accept_on alias assert assume before bind bins binsof chandle checker class clocking const constraint context cover
+covergroup coverpoint cross dist endchecker endclass endclocking endgroup endinterface endpackage endprogram
+endproperty endsequence eventually expect export extends extern first_match foreach forkjoin global iff
+ignore_bins illegal_bins implements implies import inside interconnect intersect join_any join_none let local
+matches nettype new nexttime null package program property protected pure rand randc randcase randsequence ref
+reject_on restrict s_always s_eventually s_nexttime s_until s_until_with sequence shortreal soft solve static
+string strong super sync_accept_on sync_reject_on tagged this throughout timeprecision timeunit type typedef
+union unique0 until until_with untyped virtual wait_order weak wildcard with within
+""".split())   # IEEE 1800-2017 Annex B: tools that read the emitted Verilog as SystemVerilog reject these
 
 
 def is_legal_verilog_identifier(name: str) -> bool:
