@@ -114,6 +114,11 @@ def apply_width_isolation(module) -> int:
     """
     roots: List[Expr] = []
     for s in module._signals:
+        # Suppressed drivers (`_no_emit_drive`, e.g. the simulation model of a custom-Verilog component) never emit,
+        # so isolating their operands would only mint wires that DO emit while referencing suppressed declarations
+        # (the same rule as structural CSE).
+        if getattr(s, "_no_emit_drive", False):
+            continue
         drv = getattr(s, "_driver", None)
         if isinstance(drv, Expr) and not _is_leaf(drv):
             roots.append(drv)
