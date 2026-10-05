@@ -235,6 +235,10 @@ class Netlist:
         def _maybe_collect(comp):
             if comp is None or id(comp) in seen_owners:
                 return
+            # A custom-Verilog component absorbed into an enclosing custom component's simulation model emits
+            # nothing — the enclosing block replaces it — unless it is itself the top being emitted.
+            if getattr(comp, "_absorbed_by", None) is not None and comp is not self.component:
+                return
             if hasattr(comp, "custom_verilog"):
                 seen_owners.add(id(comp))
                 custom_blocks.append(comp.custom_verilog())

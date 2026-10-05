@@ -275,9 +275,10 @@ class CustomVerilogComponent(Component):
         - tags IO outputs ``_no_emit_drive`` only — the declaration stays (parents reference it) but the
           elaborate ``assign`` is dropped, so the custom block provides the value;
         - for memory, follows store ↔ port-wire edges so state reachable only through a store is tagged too;
-        - for sub-components: a custom-Verilog sub-component is a boundary (neither tagged nor crossed;
-          its own block provides those signals), while a plain component constructed inside ``elaborate()``
-          is part of the simulation model and is absorbed like any other internal signal;
+        - for sub-components: any component constructed inside ``elaborate()`` is part of the simulation
+          model and is absorbed like any other internal signal — including custom-Verilog sub-components
+          (e.g. a memory primitive), which are additionally marked ``_absorbed_by`` so the emitter drops
+          their own block (this component's block replaces them);
         - stops at this component's own *input* leaves: external values enter only through the IO boundary
           (a signal captured directly at construction and used by ``elaborate`` would be absorbed as internal);
         - for blackboxes, sets ``self._is_blackbox`` when no output had an elaborate driver — the cue the
@@ -303,7 +304,15 @@ class CustomVerilogComponent(Component):
                 continue
             owner = getattr(node, "_owning_component", None)
             if owner is not None and owner is not self and hasattr(owner, "custom_verilog"):
-                continue   # self-tagging custom sub-component: its own block provides this signal
+                # A custom-Verilog sub-component reached inside this cone was built by our elaborate(): it is
+                # part of this component's simulation model (e.g. a RomPrimitive holding a model's contents).
+                # Our custom block replaces it, so absorb it — tag through it like any internal signal and
+                # mark it so the emitter drops its own block. Stopping here instead would leave the logic that
+                # feeds only its inputs untagged, leaking assigns that reference suppressed declarations.
+                if getattr(owner, "_absorbed_by", None) is not self:
+                    owner._absorbed_by = self
+                    # its inputs too: a child whose outputs don't depend on them (blackbox) has no back-edge
+                    stack.extend(s for s in owner.get_ios().to_list() if s.kind == "input")
             if nid not in io_ids:
                 node._no_emit_decl = True
                 node._no_emit_drive = True
