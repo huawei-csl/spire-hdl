@@ -1,7 +1,7 @@
 # FSM and State-Encoding Optimization
 
 Two opt-in context managers in
-[`spire/optimize/fsm/`](../src/spire/optimize/fsm/) add automatic optimization passes on
+[`spire/optimize/fsm/`](../optimize/fsm/) add automatic optimization passes on
 top of the basic [`State`](README_state_machines.md) API:
 
 | Wrapper | What it does | When to use it |
@@ -158,7 +158,7 @@ the design (and any subsequent uses).
 | `predefined` | `n ≤ 2` | Tries `BINARY` and `GRAY` codes (no widening). 2 cost-fn calls. |
 | `exhaustive` | `P(2^width, n) ≤ 5040` — permutations of the FULL code universe, not `n!` | All ways to pick `n` distinct codes out of `2^width`. For a width-matched binary class this is `n!`; for wider classes (e.g. ONEHOT) the space explodes, which is why the ladder gates on the real count. |
 | `swap` | otherwise | Pair-swap accept-on-improvement, 4 random restarts × 200 iters. ~800 cost-fn calls. |
-| `adjacency` | never (opt-in) | Two-stage: synthesis-free weighted-Hamming screen over every encoding (sub-second), then verify the real `cost_fn` on the top `top_k` (default 64). Falls back to `swap` when nested `optimized_fsm` groups are present or the transition table can't be extracted. Faster than `exhaustive`; more robust than `swap` for noisy objectives (e.g. `adp_proxy`). See [`_adjacency.py`](../src/spire/optimize/fsm/_adjacency.py). |
+| `adjacency` | never (opt-in) | Two-stage: synthesis-free weighted-Hamming screen over every encoding (sub-second), then verify the real `cost_fn` on the top `top_k` (default 64). Falls back to `swap` when nested `optimized_fsm` groups are present or the transition table can't be extracted. Faster than `exhaustive`; more robust than `swap` for noisy objectives (e.g. `adp_proxy`). See [`_adjacency.py`](../optimize/fsm/_adjacency.py). |
 | `anneal` | never (future work) | Reserved name; currently raises `NotImplementedError`. |
 | `auto` | — | Meta-strategy: picks one of the above based on `n` (see column above). Default. |
 
@@ -246,7 +246,7 @@ has happened.
 ## Benchmark results
 
 Two reference designs run end-to-end through the wrappers. The full
-reproducer is [`testing/fsm/bench_fsm_optimize.py`](../testing/fsm/bench_fsm_optimize.py)
+reproducer is [`testing/fsm/bench_fsm_optimize.py`](../../../testing/fsm/bench_fsm_optimize.py)
 (run via `PYTHONPATH=src python testing/fsm/bench_fsm_optimize.py`); both
 benchmarks use `search="swap"` (4 restarts × 200 iters, deterministic
 internal `random.Random(0)`) so results are reproducible.
@@ -254,7 +254,7 @@ internal `random.Random(0)`) so results are reproducible.
 ### Case 1 — 7-state sequence detector (sequential)
 
 A Moore FSM with four pairs of behaviourally-equivalent states — the
-well-known [`case10`](../testing/fsm/test_nested_wrappers.py) used throughout
+well-known [`case10`](../../../testing/fsm/test_nested_wrappers.py) used throughout
 the unit tests. Hopcroft merges the 7 states into 4 equivalence classes
 (`{S0,S3}, {S1}, {S2,S4,S6}, {S5}`); the encoding search then picks the
 best bit-assignment over the survivors. Metric: yosys `cells` /
@@ -372,7 +372,7 @@ states that Hopcroft just merged.
 
 ## Tests
 
-- [`testing/fsm/`](../testing/fsm/) — unit tests per module plus three e2e
+- [`testing/fsm/`](../../../testing/fsm/) — unit tests per module plus three e2e
   tests:
   - `test_optimized_fsm.py` — case10 (7→4 classes), already-minimal FSM,
     `minimize=False` no-op, post-wrapper simulation parity.

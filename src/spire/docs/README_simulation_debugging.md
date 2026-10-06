@@ -7,7 +7,7 @@ a Python run traces straight to a standard VCD file for any wave viewer.
 
 The two levels in detail:
 
-1. **Spire level**: [`Simulator`](../src/spire/simulator.py) executes the elaborated
+1. **Spire level**: [`Simulator`](../simulator.py) executes the elaborated
    expression graph directly. No external tools, instant turnaround, and full visibility
    into every internal signal, register and expression.
 2. **Verilog level**: emit the design as Verilog and replay the very same run as a generated,
@@ -98,7 +98,7 @@ returns the array contents (see [README_memories.md](README_memories.md)).
 ## Waveforms from a Spire run
 
 The simulator can trace every expression while it runs; the trace converts into a
-standard VCD file with [`write_vcd`](../src/spire/various/vcd_writer.py). No Verilog and no external
+standard VCD file with [`write_vcd`](../various/vcd_writer.py). No Verilog and no external
 tools are involved:
 
 ```python
@@ -131,7 +131,7 @@ gtkwave mac_python.vcd
 
 ## Replaying the run as a Verilog testbench
 
-[`TestbenchGenSimulator`](../src/spire/verilog_testbench.py) is a drop-in `Simulator`
+[`TestbenchGenSimulator`](../verilog_testbench.py) is a drop-in `Simulator`
 replacement: drive it with the same `set`/`eval`/`step`/`reset` calls (it simulates live,
 so `get()` works as usual) and it records every interaction. Afterwards it emits a
 self-checking Verilog testbench that replays the exact run against the emitted Verilog and
@@ -183,5 +183,5 @@ Verilog shows up directly in the waves.
   the emitted Verilog specifies (values vs temporal/reset behavior, power-on conventions).
 - [README_memories.md](README_memories.md): simulating RAM/ROM/FIFO primitives and
   reading their storage.
-- [`testing/low_level_arithmetic/int_adders/int_adder_tb_sim.py`](../testing/low_level_arithmetic/int_adders/int_adder_tb_sim.py):
+- [`testing/low_level_arithmetic/int_adders/int_adder_tb_sim.py`](../../../testing/low_level_arithmetic/int_adders/int_adder_tb_sim.py):
   an end-to-end script (DUT, inline and data-driven testbenches, VCD).

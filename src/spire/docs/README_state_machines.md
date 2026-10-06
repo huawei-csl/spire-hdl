@@ -5,7 +5,7 @@ Spire ships with a small `State` base class plus an `Encoding` enum
 in a way that's IDE-friendly, type-checked, and composes with the existing
 `switch_`/`case_`/`if_` control-flow context managers.
 
-The pieces live in [`spire/state.py`](../src/spire/state.py).
+The pieces live in [`spire/state.py`](../state.py).
 
 ## Quick start
 
@@ -148,11 +148,11 @@ MyFSM._width # 1
 ## See also
 
 - The full simulation-verified examples are in
-  [`testing/basic/test_fsm_examples.py`](../testing/basic/test_fsm_examples.py)
+  [`testing/basic/test_fsm_examples.py`](../../../testing/basic/test_fsm_examples.py)
   (traffic-light, sequence detector, Mealy edge-detector, encoding-equivalence
   parity).
 - The original minimal test —
-  [`testing/basic/test_state_machine.py`](../testing/basic/test_state_machine.py)
+  [`testing/basic/test_state_machine.py`](../../../testing/basic/test_state_machine.py)
   — covers the encoding-width contract and a 3-state demo.
 - For control-flow context managers, see
-  [`control_structures.py`](../src/spire/control_structures.py).
+  [`control_structures.py`](../control_structures.py).

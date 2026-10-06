@@ -6,10 +6,10 @@ the common cases:
 
 | Primitive | Use for | Shape |
 |---|---|---|
-| [`MemoryPrimitive`](../src/spire/primitives/primitive_memory.py) | scratchpad RAM, single-port BRAM | 1 write + 1 read (async or registered), optional reset arm / write mask |
-| [`RamPrimitive`](../src/spire/primitives/primitive_ram.py) | multi-port RAM, true dual-port, register files | N write + N read + N read/write (`rw`) ports over one array |
-| [`RomPrimitive`](../src/spire/primitives/primitive_rom.py) | read-only memory, lookup tables | init-backed, 1 read (async or registered), no write port |
-| [`FIFOPrimitive`](../src/spire/primitives/primitive_fifo.py) | ready-made synchronous FIFO | push / pop / full / empty / count |
+| [`MemoryPrimitive`](../primitives/primitive_memory.py) | scratchpad RAM, single-port BRAM | 1 write + 1 read (async or registered), optional reset arm / write mask |
+| [`RamPrimitive`](../primitives/primitive_ram.py) | multi-port RAM, true dual-port, register files | N write + N read + N read/write (`rw`) ports over one array |
+| [`RomPrimitive`](../primitives/primitive_rom.py) | read-only memory, lookup tables | init-backed, 1 read (async or registered), no write port |
+| [`FIFOPrimitive`](../primitives/primitive_fifo.py) | ready-made synchronous FIFO | push / pop / full / empty / count |
 
 ```python
 from spire.primitives import MemoryPrimitive, RamPrimitive, RomPrimitive, FIFOPrimitive
@@ -267,8 +267,8 @@ sim.get_mem("ram")     # → [0, 0, 0, 0xAB, …]   (length == depth, unsigned b
 
 ## See also
 
-- Tests (in [`testing/memory/`](../testing/memory/)):
-  [`test_memory.py`](../testing/memory/test_memory.py) (behaviour via primitives),
-  [`test_primitive_memory.py`](../testing/memory/test_primitive_memory.py),
-  [`test_primitive_ram.py`](../testing/memory/test_primitive_ram.py),
-  [`test_primitive_fifo.py`](../testing/memory/test_primitive_fifo.py).
+- Tests (in [`testing/memory/`](../../../testing/memory/)):
+  [`test_memory.py`](../../../testing/memory/test_memory.py) (behaviour via primitives),
+  [`test_primitive_memory.py`](../../../testing/memory/test_primitive_memory.py),
+  [`test_primitive_ram.py`](../../../testing/memory/test_primitive_ram.py),
+  [`test_primitive_fifo.py`](../../../testing/memory/test_primitive_fifo.py).

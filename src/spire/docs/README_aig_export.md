@@ -7,9 +7,9 @@ Yosys) and continue composing or simulating the result in Python. This is the
 same machinery the [`@abc_optimized`](README_optimization_decorators.md)
 decorator uses under the hood.
 
-The exporter/importer live in [`spire/aiger.py`](../src/spire/aiger.py);
+The exporter/importer live in [`spire/aiger.py`](../aiger.py);
 the import entry points are `Component.from_aag_lines` / `Component.from_aig_file`
-in [`spire/component.py`](../src/spire/component.py).
+in [`spire/component.py`](../component.py).
 
 ## Export
 
@@ -60,10 +60,10 @@ for av, bv in [(3, 5), (15, 15), (7, 9)]:
 ```
 
 For an optimize-through-AIG flow, `refactor_module_to_aig(module, optimize=True)`
-and `get_aig_stats(module)` in [`spire/helpers.py`](../src/spire/helpers.py)
+and `get_aig_stats(module)` in [`spire/helpers.py`](../helpers.py)
 export, optimize with aigverse, and re-import (regrouping IO) in one call.
 
 ## Examples
 
-- [`testing/basic_examples/load_aig.py`](../testing/basic_examples/load_aig.py) — import an external `.aig`/`.aag` into a `Component` and simulate it.
+- [`testing/basic_examples/load_aig.py`](../../../testing/basic_examples/load_aig.py) — import an external `.aig`/`.aag` into a `Component` and simulate it.
 - [`README_optimization_decorators.md`](README_optimization_decorators.md) — export, optimize via abc/aigverse, and reinsert as a `Component` (the tested decorator flow).

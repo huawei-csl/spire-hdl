@@ -85,7 +85,7 @@ commutativity).
 ## Measured
 
 All numbers from
-[`testing/examples/reduction_topology_bench.py`](../testing/examples/reduction_topology_bench.py)
+[`testing/examples/reduction_topology_bench.py`](../../../testing/examples/reduction_topology_bench.py)
 (`python testing/examples/reduction_topology_bench.py`, needs yosys on PATH for
 the syn columns). "AIG" = spire's raw AIG export (what the simulator and AIG
 metrics see); "syn" = `yosys synth` + `ltp` (cells / gate levels).
@@ -148,6 +148,6 @@ Integer/bitwise only — floating-point folds are not associative.
 
 ## Tests
 
-See [`testing/test_reduce.py`](../testing/test_reduce.py): random + exhaustive
+See [`testing/test_reduce.py`](../../../testing/test_reduce.py): random + exhaustive
 equivalence per helper, argmax tie-breaking (exhaustive with duplicates), and a
 tree-depth structure check.
