@@ -1,7 +1,7 @@
 # Verilog Testbench
 
 `TestbenchGenSimulator` is a drop-in replacement for the Python
-[`Simulator`](../src/spire/simulator.py): it has the same
+[`Simulator`](../simulator.py): it has the same
 `set` / `get` / `eval` / `step` / `reset` API, but while it runs it records the
 stimuli (and the outputs the Python simulator observed) and can then emit a
 **synthesizable Verilog testbench** that replays the exact same interactions
@@ -72,7 +72,7 @@ tb.to_testbench_file("add8_tb.v", tb_module_name="Add8_tb")
 It works on any `SimulatorBase`: pass a plain `Simulator(dut)` to just verify, or a
 `TestbenchGenSimulator(dut)` (as here) to verify *and* record. The arithmetic
 generator relies on exactly this interchangeability — see `_apply_actions` in
-[`arithmetic_generator.py`](../src/spire/arithmetic/arithmetic_generator.py),
+[`arithmetic_generator.py`](../arithmetic/arithmetic_generator.py),
 which picks `TestbenchGenSimulator(module)` when a testbench output is requested
 and `Simulator(module)` otherwise, then runs the same `run_vectors_on_simulator`
 loop through whichever it chose.
@@ -122,7 +122,7 @@ tb.to_data_driver_testbench_file("add8_tb.v", data_file="add8_vectors.dat", with
 tb.to_data_driver_testbench_file_incl_dat("add8_tb.v", vectors, "add8_vectors.dat", with_clk=False)
 ```
 
-See [`testing/low_level_arithmetic/int_adders/int_adder_tb_sim.py`](../testing/low_level_arithmetic/int_adders/int_adder_tb_sim.py)
+See [`testing/low_level_arithmetic/int_adders/int_adder_tb_sim.py`](../../../testing/low_level_arithmetic/int_adders/int_adder_tb_sim.py)
 for an end-to-end example (DUT + inline testbench + data-driven testbench + VCD).
 
 ## Running the emitted testbench

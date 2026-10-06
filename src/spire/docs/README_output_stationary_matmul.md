@@ -6,9 +6,9 @@ accumulating each output tile *in place* over the K dimension (output-stationary
 results live in on-chip RAMs; a `mode` input selects between external RAM access and internal
 compute — the two never run at once, so the top-level interface is just `mode` + the RAM ports.
 
-Lives in [`spire/cores/output_stationary_matmul.py`](../src/spire/cores/output_stationary_matmul.py)
+Lives in [`spire/cores/output_stationary_matmul.py`](../cores/output_stationary_matmul.py)
 and reuses the existing
-[`MatmulAccumulateComponent`](../src/spire/cores/matmul_accumulate/matmul_accumulate_core.py)
+[`MatmulAccumulateComponent`](../cores/matmul_accumulate/matmul_accumulate_core.py)
 (`Y = A·B + C`, combinational) as the tile engine.
 
 ```python
@@ -134,6 +134,6 @@ for ti in range(cfg.MT):
 ## See also
 
 - End-to-end tests (correctness across parametrizations + the full 64×64 sim):
-  [`testing/test_output_stationary_matmul.py`](../testing/test_output_stationary_matmul.py)
-- The tile engine: [`matmul_accumulate_core.py`](../src/spire/cores/matmul_accumulate/matmul_accumulate_core.py)
+  [`testing/test_output_stationary_matmul.py`](../../../testing/test_output_stationary_matmul.py)
+- The tile engine: [`matmul_accumulate_core.py`](../cores/matmul_accumulate/matmul_accumulate_core.py)
 - RAM primitive: [`README_memories.md`](README_memories.md)

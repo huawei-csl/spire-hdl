@@ -7,10 +7,10 @@ condition and lowered to a mux. When no branch matches, a combinational signal
 keeps its previous driver and a register holds its current value.
 
 > **Note:** this is a convenience layer. Everything here can also be written
-> directly with `mux` from Spire's core ([`spire/expr.py`](../src/spire/expr.py));
+> directly with `mux` from Spire's core ([`spire/expr.py`](../expr.py));
 > the context managers lower to exactly those muxes.
 
-The constructs live in [`spire/control_structures.py`](../src/spire/control_structures.py).
+The constructs live in [`spire/control_structures.py`](../control_structures.py).
 
 ```python
 from spire.control_structures import if_, elif_, else_, switch_, case_, default
@@ -110,7 +110,7 @@ express per-state transition and output logic.
 
 ## Tests
 
-See [`testing/basic/test_control_structures.py`](../testing/basic/test_control_structures.py)
+See [`testing/basic/test_control_structures.py`](../../../testing/basic/test_control_structures.py)
 for the full behavioural test suite (priority, grouped cases, nested switches,
 register hold, and the missing-default-driver error).
 

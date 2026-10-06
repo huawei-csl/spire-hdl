@@ -16,7 +16,7 @@ A comprehensive guide showing how to:
 
 Run the example:
 ```bash
-PYTHONPATH=src python testing/examples/component_example.py
+PYTHONPATH=src python src/spire/examples/component_example.py
 ```
 
 ### simple_component.py
@@ -29,7 +29,7 @@ A minimal example showing the essential steps for creating and using a component
 
 Run the example:
 ```bash
-PYTHONPATH=src python testing/examples/simple_component.py
+PYTHONPATH=src python src/spire/examples/simple_component.py
 ```
 
 ### composing_components.py
@@ -42,7 +42,7 @@ Component world, never touching the IR:
 
 Run the example:
 ```bash
-PYTHONPATH=src python testing/examples/composing_components.py
+PYTHONPATH=src python src/spire/examples/composing_components.py
 ```
 
 ### direct_expression_basics.py
@@ -58,7 +58,7 @@ Minimal arithmetic expression example for newcomers:
 
 Run the example:
 ```bash
-PYTHONPATH=src python testing/examples/direct_expression_basics.py
+PYTHONPATH=src python src/spire/examples/direct_expression_basics.py
 ```
 
 ## Key Concepts

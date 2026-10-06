@@ -5,16 +5,16 @@ more HDL `Expr` leaves and behave as a single, bit-packable value.  All composit
 `HDLComposite` and share a common API for flattening to bits, packed assignment (`<<=`), and
 element-wise assignment (`@=`).
 
-Source: [`src/spire/composite/`](../src/spire/composite).
+Source: [`src/spire/composite/`](../composite).
 
 | Type | Purpose | Source |
 |---|---|---|
-| `HDLComposite` | Abstract base — `to_bits`, `assign`, `<<=`, `@=` (see [Common API](#common-api)) | [`base.py`](../src/spire/composite/base.py) |
-| [`Array`](#array) | N-dimensional vector of `Expr` or nested composites | [`array.py`](../src/spire/composite/array.py) |
-| [`CompositeRecord`](#compositerecord) | Bundle of named fields — inline, subclass `__init__`, or `@dataclass` | [`record.py`](../src/spire/composite/record.py) |
-| [`FixedPoint`](#fixedpoint) | Fixed-point view of a bitvector with arithmetic + quantization | [`fixed_point.py`](../src/spire/composite/fixed_point.py) |
-| [`FloatingPoint`](#floatingpoint) | Floating-point view with `add` / `mul` helpers | [`floating_point.py`](../src/spire/composite/floating_point.py) |
-| [`CompositeRegister`](#compositeregister) | Single register holding any packed composite | [`register.py`](../src/spire/composite/register.py) |
+| `HDLComposite` | Abstract base — `to_bits`, `assign`, `<<=`, `@=` (see [Common API](#common-api)) | [`base.py`](../composite/base.py) |
+| [`Array`](#array) | N-dimensional vector of `Expr` or nested composites | [`array.py`](../composite/array.py) |
+| [`CompositeRecord`](#compositerecord) | Bundle of named fields — inline, subclass `__init__`, or `@dataclass` | [`record.py`](../composite/record.py) |
+| [`FixedPoint`](#fixedpoint) | Fixed-point view of a bitvector with arithmetic + quantization | [`fixed_point.py`](../composite/fixed_point.py) |
+| [`FloatingPoint`](#floatingpoint) | Floating-point view with `add` / `mul` helpers | [`floating_point.py`](../composite/floating_point.py) |
+| [`CompositeRegister`](#compositeregister) | Single register holding any packed composite | [`register.py`](../composite/register.py) |
 
 ## Common API
 
@@ -254,12 +254,12 @@ Each stage is a `CompositeRegister.like(value)` named `<name>_d1`, `<name>_d2`, 
 is the last stage's `.value` (leaves `pkt_d2_valid`, `vec_d2_0`, or `fp_d2_q` for one leaf) — so
 `pipeline(a)` is exactly the by-hand stage shown above. Any composite works, custom ones included.
 A `CompositeRegister` input is delayed via its `.value`.
-See [`testing/test_pipeline.py`](../testing/test_pipeline.py).
+See [`testing/test_pipeline.py`](../../../testing/test_pipeline.py).
 
 ---
 
 Working tests demonstrate the full simulation flow:
-[`testing/test_fixed_point.py`](../testing/test_fixed_point.py),
-[`testing/test_floating_point.py`](../testing/test_floating_point.py),
-[`testing/test_record.py`](../testing/test_composite_record.py),
-[`testing/test_array2.py`](../testing/test_array2.py).
+[`testing/test_fixed_point.py`](../../../testing/test_fixed_point.py),
+[`testing/test_floating_point.py`](../../../testing/test_floating_point.py),
+[`testing/test_record.py`](../../../testing/test_composite_record.py),
+[`testing/test_array2.py`](../../../testing/test_array2.py).

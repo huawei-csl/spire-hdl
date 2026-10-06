@@ -57,5 +57,8 @@ only-include = ["src/spire", "requirements.txt", "README.md", "LICENSE"]
 [tool.hatch.metadata.hooks.requirements_txt]
 files = ["requirements.txt"]
 
+[tool.pytest.ini_options]
+testpaths = ["testing"]       # not the example test that ships under src/spire/examples
+
 [tool.ruff]
 line-length = 120

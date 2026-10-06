@@ -1,7 +1,7 @@
 # Interfaces
 
 Reusable IO bundles for Component ports — handshakes, dataflow, and addressed memory ports —
-living in [`spire/interfaces`](../src/spire/interfaces). An interface is just an
+living in [`spire/interfaces`](../interfaces). An interface is just an
 [`IORecord`](README_composite_types.md) subclass, so it composes, flips, connects, and simulates
 like any other composite.
 
@@ -163,6 +163,6 @@ class AddrStream(IORecord):
 
 ## See also
 
-- Runnable versions of every example above: [`testing/test_interfaces.py`](../testing/test_interfaces.py)
+- Runnable versions of every example above: [`testing/test_interfaces.py`](../../../testing/test_interfaces.py)
 - The trait/type hierarchy these build on: [`README_type_system.md`](README_type_system.md)
 - The composite primitives (records, arrays, fixed/float): [`README_composite_types.md`](README_composite_types.md)
