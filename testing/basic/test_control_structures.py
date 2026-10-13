@@ -133,11 +133,12 @@ def test_nested_switch_without_binding():
     )
 
 
-def test_missing_default_driver_raises():
+def test_missing_default_driver_falls_back_to_zero():
     m = Netlist("MissingDriver", with_clock=False, with_reset=False)
     cond = m.input(Bool(), "cond")
     out = m.output(UInt(2), "out")
 
-    with pytest.raises(RuntimeError):
-        with if_(cond):
-            out <<= 1
+    with if_(cond):          # no prior driver: 0 when cond is false (an explicit `out <<= x` before would win)
+        out <<= 1
+
+    simulate_outputs(m, [({"cond": 1}, {"out": 1}), ({"cond": 0}, {"out": 0})])

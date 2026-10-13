@@ -18,9 +18,9 @@ from spire.control_structures import if_, elif_, else_, switch_, case_, default
 
 ## `if_` / `elif_` / `else_`
 
-The branches form a priority chain — the first true condition wins. Give the
-signal a default driver *before* the chain; a combinational signal that is only
-assigned inside conditional blocks has no fallback and raises `RuntimeError`.
+The branches form a priority chain — the first true condition wins. When no
+arm applies, a combinational signal keeps its prior driver, or 0 if it has
+none; a register holds its value.
 
 ```python
 from spire import Component, IORecord, Input, Output, Bool, UInt
@@ -32,7 +32,7 @@ class Priority(Component):
 
     def elaborate(self):
         out = self.io.out
-        out <<= 0                       # default driver (required)
+        out <<= 0                       # default driver
         with if_(self.io.sel_a):
             out <<= 1
         with elif_(self.io.sel_b):
@@ -58,7 +58,6 @@ class Decode(Component):
 
     def elaborate(self):
         y = self.io.y
-        y <<= 0xF
         with switch_(self.io.op):
             with case_(0):
                 y <<= 1

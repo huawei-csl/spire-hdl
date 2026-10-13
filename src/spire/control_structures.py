@@ -3,11 +3,12 @@
 This module introduces `if_`/`elif_`/`else_` and `switch_`/`case_` style constructs that wrap signal
 assignments with conditional muxes. When a signal assignment occurs inside one of these context
 managers, the assignment is guarded by the active condition. If the condition evaluates to false, the
-signal retains its previous driver (for combinational signals) or its current value (for registers).
+signal retains its previous driver (for combinational signals) or its current value (for registers). A
+combinational signal with no prior driver is 0 outside the covered arms; assign it before the chain to choose
+another fallback.
 
 Usage::
 
-    y <<= 0
     with if_(sel):
         y <<= 1
     with else_():
@@ -387,13 +388,9 @@ def _apply_active_conditions_to_expr(signal: Signal, rhs: ExprLike) -> ExprLike:
     rhs_expr = as_expr(rhs)
 
     if signal._driver is None:
-        if signal.kind == "reg":
-            # For registers without a prior driver, fall back to the register's current value
-            fallback: ExprLike = signal
-        else:
-            raise RuntimeError(
-                f"Conditional assignment to signal '{signal.name}' requires a prior driver to fall back to"
-            )
+        # No prior driver: a register holds its value, a combinational signal is 0 outside the covered arms (the
+        # same hardware as an explicit `y <<= 0` before the chain; an explicit prior assignment still wins).
+        fallback: ExprLike = signal if signal.kind == "reg" else Const(0, signal.typ)
     else:
         fallback = signal._driver
 
